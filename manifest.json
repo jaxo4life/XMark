@@ -32,7 +32,7 @@
     "default_title": "XMark"
   },
   "icons": {
-    "128": "128.png"
+    "128": "/public/128.png"
   },
   "web_accessible_resources": [
     {
