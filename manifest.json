@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "XMark",
+  "version": "2.0.0",
+  "description": "为推特用户添加备注功能，支持备份和恢复",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+		"downloads"
+  ],
+  "host_permissions": [
+    "https://twitter.com/*",
+    "https://x.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://twitter.com/*",
+        "https://x.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "XMark"
+  },
+  "icons": {
+    "128": "128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["lang/*.json"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
