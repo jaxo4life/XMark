@@ -1,7 +1,7 @@
 # XMark
 
 <details>
-<summary>中文说明（点击展开）</summary>
+<summary>中文说明</summary>
 
 ## 项目简介
 
@@ -43,7 +43,7 @@ git clone https://github.com/jaxo4life/XMark.git
 </details>
 
 <details>
-<summary>English Instructions (Click to expand)</summary>
+<summary>English Instructions</summary>
 
 ## Introduction
 
