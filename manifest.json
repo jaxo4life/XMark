@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "XMark",
   "version": "2.0.0",
-  "description": "XMark is a note-taking tool designed specifically for X (formerly Twitter). Lightweight and nimble, it allows you to easily add personalized notes to any user, helping you remember every special moment.",
+  "description": "XMark is a note-taking tool designed specifically for X (formerly Twitter).",
   "permissions": [
     "storage",
     "activeTab",
