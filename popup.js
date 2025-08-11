@@ -257,7 +257,7 @@ function showMessage(messageHTML) {
 
   setTimeout(() => {
     document.body.removeChild(messageDiv);
-  }, 150000);
+  }, 8000);
 }
 
 function showErrorMessage(messageHTML) {
@@ -307,5 +307,5 @@ function showErrorMessage(messageHTML) {
 
   setTimeout(() => {
     document.body.removeChild(messageDiv);
-  }, 150000);
+  }, 8000);
 }

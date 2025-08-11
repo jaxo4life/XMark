@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "XMark",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "XMark is a note-taking tool designed specifically for X (formerly Twitter).",
   "permissions": [
     "storage",

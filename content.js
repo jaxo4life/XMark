@@ -26,6 +26,7 @@ class TwitterNotes {
     this.notes = {}; // 存储备注数据，键可能是用户名或用户ID
     this.userIdCache = new Map(); // 缓存用户名到ID的映射
     this.init();
+		this._profileProcessStatus = new Map(); 
   }
 
   async init() {
@@ -62,7 +63,7 @@ class TwitterNotes {
       const scripts = document.querySelectorAll('script');
 
       for (const script of scripts) {
-        if (script.textContent.includes('"identifier":"')) {
+        if (script.textContent.includes(`"additionalName":"${username}"`)) {
           const match = script.textContent.match(/"identifier":"(\d+)"/);
           if (match) {
             return match[1];
@@ -170,39 +171,55 @@ class TwitterNotes {
     await this.saveNotes();
   }
 
-  observePageChanges() {
-    const observer = new MutationObserver((mutations) => {
-      let shouldProcess = false;
-      
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
-          mutation.addedNodes.forEach(node => {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              // 检查是否有新的推文或用户页面元素
-              if (node.querySelector && (
-                node.querySelector('[data-testid="tweet"]') ||
-                node.querySelector('[data-testid="UserName"]') ||
-                node.querySelector('img[src*="profile_banners"]') ||
-                node.matches('[data-testid="tweet"]') ||
-                node.matches('[data-testid="UserName"]')
-              )) {
-                shouldProcess = true;
-              }
-            }
-          });
-        }
-      });
-      
-      if (shouldProcess) {
-        setTimeout(() => this.processPage(), 500);
-      }
-    });
+	observePageChanges() {
+		// 路由变化检测 - 清空 profile 状态
+		let lastUrl = location.href;
+		let processTimeout = null;
+		
+		new MutationObserver(() => {
+			const url = location.href;
+			if (url !== lastUrl) {
+				lastUrl = url;
+				this._profileProcessStatus.clear();
+			}
+		}).observe(document, { subtree: true, childList: true });
 
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  }
+		// 原来的 DOM 元素变化监听
+		const observer = new MutationObserver((mutations) => {
+			let shouldProcess = false;
+
+			mutations.forEach((mutation) => {
+				if (mutation.type === "childList" && mutation.addedNodes.length > 0) {
+					mutation.addedNodes.forEach((node) => {
+						if (node.nodeType === Node.ELEMENT_NODE) {
+							// 检查是否有新的推文或用户页面元素
+							if (
+								node.querySelector &&
+								(
+									node.querySelector('[data-testid="tweet"]') ||
+									node.querySelector('[data-testid="UserName"]') ||
+									node.querySelector('img[src*="profile_banners"]') ||
+									node.matches('[data-testid="tweet"]') ||
+									node.matches('[data-testid="UserName"]')
+								)
+							) {
+								shouldProcess = true;
+							}
+						}
+					});
+				}
+			});
+
+			if (shouldProcess) {
+				setTimeout(() => this.processPage(), 500);
+			}
+		});
+
+		observer.observe(document.body, {
+			childList: true,
+			subtree: true,
+		});
+	}
 
   processPage() {
     if (this.isUserProfilePage()) {
@@ -214,38 +231,61 @@ class TwitterNotes {
     }
   }
 
-  async processUserProfile() {
-    const profileHeader = document.querySelector('[data-testid="UserName"]');
-    if (!profileHeader) return;
-    
-    const username = this.extractUsernameFromUrl(window.location.href);
-    if (!username) return;
-    
-    // 检查是否已经添加过备注按钮
-    if (document.querySelector('.twitter-notes-profile-button')) return;
-    
-    // 获取用户ID
-    const userId = await this.extractUserIdFromPage(username);
+	// 记录每个用户名的处理状态
+	// status: "processing" | "done"
+	async processUserProfile(retryCount = 0) {
+		const profileHeader = document.querySelector('[data-testid="UserName"]');
+		if (!profileHeader) return;
 
-    if (userId) {
-      // 缓存用户名到ID的映射
-      this.userIdCache.set(username, userId);
-      
-      // 添加用户页面的备注按钮
-      this.addProfileNoteButton(profileHeader, userId, username);
-      
-      // 检查是否需要迁移用户名备注到用户ID
-      await this.migrateUserNameNote(username, userId);
+		const username = this.extractUsernameFromUrl(window.location.href);
+		if (!username) return;
 
-      // 在用户页面的推文中也显示备注
-      this.displayNotesInUserTweets(userId, username);
-    } else {
-      console.log(`无法为用户 ${username} 获取到有效的用户ID，使用用户名作为标识`);
-      // 即使没有获取到ID，也要显示备注按钮
-			
-      this.addProfileNoteButton(profileHeader, null, username);
-    }
-  }
+		// 如果已经处理过这个用户名，就不再重复执行
+		if (this._profileProcessStatus.get(username) === "done") {
+			return;
+		}
+
+		// 如果当前正在处理，就不再并发执行
+		if (this._profileProcessStatus.get(username) === "processing") {
+			return;
+		}
+
+		// 标记为正在处理
+		this._profileProcessStatus.set(username, "processing");
+
+		// 获取用户ID
+		const userId = await this.extractUserIdFromPage(username);
+
+		if (!userId) {
+			// 最多重试 3 次，每次延迟 500ms
+			if (retryCount < 3) {
+				setTimeout(() => {
+					this._profileProcessStatus.delete(username); // 释放锁，允许重试
+					this.processUserProfile(retryCount + 1);
+				}, 500);
+			} else {
+				console.log(`无法为用户 ${username} 获取到有效的用户ID，使用用户名作为标识`);
+				this.addProfileNoteButton(profileHeader, null, username);
+				this._profileProcessStatus.set(username, "done");
+			}
+			return;
+		}
+
+		// 缓存用户名到ID的映射
+		this.userIdCache.set(username, userId);
+
+		// 添加用户页面的备注按钮
+		this.addProfileNoteButton(profileHeader, userId, username);
+
+		// 检查是否需要迁移用户名备注到用户ID
+		await this.migrateUserNameNote(username, userId);
+
+		// 在用户页面的推文中也显示备注
+		this.displayNotesInUserTweets(userId, username);
+
+		// 标记完成
+		this._profileProcessStatus.set(username, "done");
+	}
 
   processHomePage() {
     // 在主页等页面基于用户名显示备注
