@@ -1,64 +1,64 @@
 let langData = null;
 
 async function getCurrentLangData() {
-  if (langData) {
-    return Promise.resolve(langData); 
-  }
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.get(['lang'], (result) => {
-      const currentLang = result.lang || 'zh';
-      fetch(chrome.runtime.getURL(`lang/${currentLang}.json`))
-        .then(res => res.json())
-        .then(data => {
-          langData = data; 
-          resolve(data);
-        })
-        .catch(e => {
-          console.error('加载语言文件失败:', e);
-          reject(e);
-        });
-    });
-  });
+	if (langData) {
+		return Promise.resolve(langData);
+	}
+	return new Promise((resolve, reject) => {
+		chrome.storage.local.get(['lang'], (result) => {
+			const currentLang = result.lang || 'zh';
+			fetch(chrome.runtime.getURL(`lang/${currentLang}.json`))
+				.then(res => res.json())
+				.then(data => {
+					langData = data;
+					resolve(data);
+				})
+				.catch(e => {
+					console.error('加载语言文件失败:', e);
+					reject(e);
+				});
+		});
+	});
 }
 
 getCurrentLangData();
 
 // Twitter Notes Content Script
 class TwitterNotes {
-  constructor() {
-    this.notes = {}; // 存储备注数据，键可能是用户名或用户ID
-    this.userIdCache = new Map(); // 缓存用户名到ID的映射
-    this.init();
-		this._profileProcessStatus = new Map(); 
-  }
+	constructor() {
+		this.notes = {}; // 存储备注数据，键可能是用户名或用户ID
+		this.userIdCache = new Map(); // 缓存用户名到ID的映射
+		this.init();
+		this._profileProcessStatus = new Map();
+	}
 
-  async init() {
-    // 加载已保存的备注
-    await this.loadNotes();
-    
-    // 监听页面变化
-    this.observePageChanges();
-    
-    // 初始处理页面
-    this.processPage();
-  }
-	
-  async loadNotes() {
-    try {
-      const result = await chrome.storage.local.get(['twitterNotes']);
-      this.notes = result.twitterNotes || {};
-    } catch (error) {
-      console.error('加载备注失败:', error);
-    }
-  }
+	async init() {
+		// 加载已保存的备注
+		await this.loadNotes();
 
-  async saveNotes() {
-    try {
-      await chrome.storage.local.set({ twitterNotes: this.notes });
-    } catch (error) {
-      console.error('保存备注失败:', error);
-    }
-  }
+		// 监听页面变化
+		this.observePageChanges();
+
+		// 初始处理页面
+		this.processPage();
+	}
+
+	async loadNotes() {
+		try {
+			const result = await chrome.storage.local.get(['twitterNotes']);
+			this.notes = result.twitterNotes || {};
+		} catch (error) {
+			console.error('加载备注失败:', error);
+		}
+	}
+
+	async saveNotes() {
+		try {
+			await chrome.storage.local.set({ twitterNotes: this.notes });
+		} catch (error) {
+			console.error('保存备注失败:', error);
+		}
+	}
 
 	// 通用方法：从指定document中提取 Twitter 用户数字ID
 	async extractUserIdFromDocument(doc, username) {
@@ -90,7 +90,7 @@ class TwitterNotes {
 			const tempWindow = window.open(
 				`https://x.com/${username}`,
 				'_blank',
-				'width=1,height=1,left=-2000,top=' + window.screen.height +''
+				'width=1,height=1,left=-2000,top=' + window.screen.height + ''
 			);
 
 			const checkInterval = setInterval(async () => {
@@ -114,70 +114,70 @@ class TwitterNotes {
 		});
 	}
 
-  // 检查当前是否在用户个人页面
-  isUserProfilePage() {
-    const url = window.location.href;
-    // 匹配用户个人页面的URL模式
-    const userPagePattern = /(?:twitter\.com|x\.com)\/([^\/\?]+)(?:\/(?:with_replies|media|likes)?)?(?:\?|$)/;
-    const match = url.match(userPagePattern);
-    
-    if (match) {
-      const username = match[1];
-      // 排除一些特殊页面
-      const excludePages = ['home', 'explore', 'notifications', 'messages', 'bookmarks', 'lists', 'profile', 'settings', 'i', 'search'];
-      return !excludePages.includes(username.toLowerCase());
-    }
-    
-    return false;
-  }
+	// 检查当前是否在用户个人页面
+	isUserProfilePage() {
+		const url = window.location.href;
+		// 匹配用户个人页面的URL模式
+		const userPagePattern = /(?:twitter\.com|x\.com)\/([^\/\?]+)(?:\/(?:with_replies|media|likes)?)?(?:\?|$)/;
+		const match = url.match(userPagePattern);
 
-  // 从URL提取用户名
-  extractUsernameFromUrl(url) {
-    const match = url.match(/(?:twitter\.com|x\.com)\/([^\/\?]+)/);
-    return match ? match[1] : null;
-  }
+		if (match) {
+			const username = match[1];
+			// 排除一些特殊页面
+			const excludePages = ['home', 'explore', 'notifications', 'messages', 'bookmarks', 'lists', 'profile', 'settings', 'i', 'search'];
+			return !excludePages.includes(username.toLowerCase());
+		}
 
-  // 获取用户的备注数据，优先使用用户ID，其次使用用户名
-  getUserNote(username, userId = null) {
-    if (userId && this.notes[userId]) {
-      return this.notes[userId];
-    }
+		return false;
+	}
 
-    // ⛏️ 通过用户名查找 ID
-    for (const id in this.notes) {
-      const note = this.notes[id];
-      if (note.username === username) {
-        return this.notes[note.userId]; // ✅ 找到了 username，返回 userId 对应的数据
-      }
-    }
-	
-    return null;
-  }
+	// 从URL提取用户名
+	extractUsernameFromUrl(url) {
+		const match = url.match(/(?:twitter\.com|x\.com)\/([^\/\?]+)/);
+		return match ? match[1] : null;
+	}
 
-  // 保存用户备注，在用户页面使用ID，其他页面使用用户名
-  async saveUserNote(username, noteData, userId = null) {
-    const key = userId || username;
-    this.notes[key] = {
-      ...noteData,
-      username: username,
-      userId: userId,
-      updatedAt: new Date().toISOString()
-    };
-    await this.saveNotes();
-  }
+	// 获取用户的备注数据，优先使用用户ID，其次使用用户名
+	getUserNote(username, userId = null) {
+		if (userId && this.notes[userId]) {
+			return this.notes[userId];
+		}
 
-  // 删除用户备注
-  async deleteUserNote(username, userId = null) {
-    const key = userId || username;
-    delete this.notes[key];
-    await this.saveNotes();
-  }
+		// ⛏️ 通过用户名查找 ID
+		for (const id in this.notes) {
+			const note = this.notes[id];
+			if (note.username === username) {
+				return this.notes[note.userId]; // ✅ 找到了 username，返回 userId 对应的数据
+			}
+		}
+
+		return null;
+	}
+
+	// 保存用户备注，在用户页面使用ID，其他页面使用用户名
+	async saveUserNote(username, noteData, userId = null) {
+		const key = userId || username;
+		this.notes[key] = {
+			...noteData,
+			username: username,
+			userId: userId,
+			updatedAt: new Date().toISOString()
+		};
+		await this.saveNotes();
+	}
+
+	// 删除用户备注
+	async deleteUserNote(username, userId = null) {
+		const key = userId || username;
+		delete this.notes[key];
+		await this.saveNotes();
+	}
 
 	observePageChanges() {
 		// 路由变化检测 - 清空 profile 状态
 		let lastUrl = location.href;
 		let processTimeout = null;
-		
+
 		new MutationObserver(() => {
 			const url = location.href;
 			if (url !== lastUrl) {
@@ -223,15 +223,15 @@ class TwitterNotes {
 		});
 	}
 
-  processPage() {
-    if (this.isUserProfilePage()) {
-      // 在用户个人页面处理备注
-      this.processUserProfile();
-    } else {
-      // 在主页等其他页面，基于用户名显示备注
-      this.processHomePage();
-    }
-  }
+	processPage() {
+		if (this.isUserProfilePage()) {
+			// 在用户个人页面处理备注
+			this.processUserProfile();
+		} else {
+			// 在主页等其他页面，基于用户名显示备注
+			this.processHomePage();
+		}
+	}
 
 	// 记录每个用户名的处理状态
 	// status: "processing" | "done"
@@ -289,122 +289,122 @@ class TwitterNotes {
 		this._profileProcessStatus.set(username, "done");
 	}
 
-  processHomePage() {
-    // 在主页等页面基于用户名显示备注
-    const tweets = document.querySelectorAll('[data-testid="tweet"]');
-    
-    tweets.forEach(tweet => {
-      if (tweet.hasAttribute('data-twitter-notes-processed')) return;
-      
-      const userNameElement = tweet.querySelector('[data-testid="User-Name"] a[href*="/"]');
-      if (!userNameElement) return;
-      
-      const username = this.extractUsername(userNameElement.href);
-      if (!username) return;
-      
-      // 在主页基于用户名显示备注
-      this.addTweetNoteElements(tweet, null, username, userNameElement, true); // 主页模式
-      tweet.setAttribute('data-twitter-notes-processed', 'true');
-    });
-  }
-
-	displayNotesInUserTweets(userId, username) {
-	  const observer = new MutationObserver(() => {
+	processHomePage() {
+		// 在主页等页面基于用户名显示备注
 		const tweets = document.querySelectorAll('[data-testid="tweet"]');
+
 		tweets.forEach(tweet => {
-		  if (tweet.hasAttribute('data-twitter-notes-user-processed')) return;
+			if (tweet.hasAttribute('data-twitter-notes-processed')) return;
 
-		  const userNameElement = tweet.querySelector('[data-testid="User-Name"] a[href*="/' + username + '"]');
-		  if (userNameElement) {
-			this.addTweetNoteElements(tweet, userId, username, userNameElement, false);
-			tweet.setAttribute('data-twitter-notes-user-processed', 'true');
-		  }
+			const userNameElement = tweet.querySelector('[data-testid="User-Name"] a[href*="/"]');
+			if (!userNameElement) return;
+
+			const username = this.extractUsername(userNameElement.href);
+			if (!username) return;
+
+			// 在主页基于用户名显示备注
+			this.addTweetNoteElements(tweet, null, username, userNameElement, true); // 主页模式
+			tweet.setAttribute('data-twitter-notes-processed', 'true');
 		});
-	  });
-
-	  observer.observe(document.body, {
-		childList: true,
-		subtree: true
-	  });
 	}
 
-  extractUsername(href) {
-    const match = href.match(/\/([^\/\?]+)(?:\?|$)/);
-    return match ? match[1] : null;
-  }
+	displayNotesInUserTweets(userId, username) {
+		const observer = new MutationObserver(() => {
+			const tweets = document.querySelectorAll('[data-testid="tweet"]');
+			tweets.forEach(tweet => {
+				if (tweet.hasAttribute('data-twitter-notes-user-processed')) return;
 
-  async migrateUserNameNote(username, userId) {
-    // 如果存在用用户名保存的备注，迁移到用户ID
-    if (this.notes[username] && !this.notes[userId]) {
-      const oldNote = this.notes[username];
-      this.notes[userId] = {
-        name: oldNote.text || oldNote.name || '',
-        description: oldNote.description || '',
-        username: username,
-        userId: userId,
-        createdAt: oldNote.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      delete this.notes[username];
-      await this.saveNotes();
-      console.log(`已将用户 ${username} 的备注迁移到ID ${userId}`);
-    }
-  }
+				const userNameElement = tweet.querySelector('[data-testid="User-Name"] a[href*="/' + username + '"]');
+				if (userNameElement) {
+					this.addTweetNoteElements(tweet, userId, username, userNameElement, false);
+					tweet.setAttribute('data-twitter-notes-user-processed', 'true');
+				}
+			});
+		});
 
-  addTweetNoteElements(tweetContainer, userId, username, userNameElement, isHomePage = false) {
-    const userNameContainer = userNameElement.closest('[data-testid="User-Name"]');
-    if (!userNameContainer) return;
-    
-    // 检查是否已经添加过
-    if (userNameContainer.querySelector('.twitter-notes-inline')) return;
-    
-    const noteContainer = document.createElement('span');
-    noteContainer.className = 'twitter-notes-inline';
-    noteContainer.setAttribute('data-username', username);
-    if (userId) {
-      noteContainer.setAttribute('data-user-id', userId);
-    }
-    
-    // 创建备注显示元素（放在前面）
-    const noteDisplay = document.createElement('span');
-    noteDisplay.className = 'twitter-notes-display';
-    
-    // 创建备注按钮（放在后面）
-    const noteButton = document.createElement('button');
-    noteButton.className = 'twitter-notes-inline-button';
-    noteButton.innerHTML = '📝';
-    
-    // 创建详情按钮
-    const detailButton = document.createElement('button');
-    detailButton.className = 'twitter-notes-detail-button';
-    detailButton.innerHTML = 'ℹ️';
-    detailButton.title = '查看详情';
-    detailButton.style.display = 'none';
+		observer.observe(document.body, {
+			childList: true,
+			subtree: true
+		});
+	}
 
-    // 获取备注数据
-    const currentNote = this.getUserNote(username, userId);
-    
-    if (currentNote) {
-      const noteName = currentNote.name || '';
-      const noteDescription = currentNote.description || '';
-      
-      noteButton.classList.add('has-note');
-      noteDisplay.textContent = `[${noteName}]`;
-      noteDisplay.style.display = 'inline';
-      
-      // 如果有描述，显示详情按钮
-      if (noteDescription) {
-        detailButton.style.display = 'inline';
-        detailButton.title = `${langData.viewDetail}: ${noteDescription}`;
-      }
-      
-      noteButton.title = `${langData.editNote}: ${noteName}`;
-    } else {
-      noteDisplay.style.display = 'none';
-      noteButton.title = langData.addNote;
-    }
-    
-    // 绑定事件
+	extractUsername(href) {
+		const match = href.match(/\/([^\/\?]+)(?:\?|$)/);
+		return match ? match[1] : null;
+	}
+
+	async migrateUserNameNote(username, userId) {
+		// 如果存在用用户名保存的备注，迁移到用户ID
+		if (this.notes[username] && !this.notes[userId]) {
+			const oldNote = this.notes[username];
+			this.notes[userId] = {
+				name: oldNote.text || oldNote.name || '',
+				description: oldNote.description || '',
+				username: username,
+				userId: userId,
+				createdAt: oldNote.createdAt || new Date().toISOString(),
+				updatedAt: new Date().toISOString()
+			};
+			delete this.notes[username];
+			await this.saveNotes();
+			console.log(`已将用户 ${username} 的备注迁移到ID ${userId}`);
+		}
+	}
+
+	addTweetNoteElements(tweetContainer, userId, username, userNameElement, isHomePage = false) {
+		const userNameContainer = userNameElement.closest('[data-testid="User-Name"]');
+		if (!userNameContainer) return;
+
+		// 检查是否已经添加过
+		if (userNameContainer.querySelector('.twitter-notes-inline')) return;
+
+		const noteContainer = document.createElement('span');
+		noteContainer.className = 'twitter-notes-inline';
+		noteContainer.setAttribute('data-username', username);
+		if (userId) {
+			noteContainer.setAttribute('data-user-id', userId);
+		}
+
+		// 创建备注显示元素（放在前面）
+		const noteDisplay = document.createElement('span');
+		noteDisplay.className = 'twitter-notes-display';
+
+		// 创建备注按钮（放在后面）
+		const noteButton = document.createElement('button');
+		noteButton.className = 'twitter-notes-inline-button';
+		noteButton.innerHTML = '📝';
+
+		// 创建详情按钮
+		const detailButton = document.createElement('button');
+		detailButton.className = 'twitter-notes-detail-button';
+		detailButton.innerHTML = 'ℹ️';
+		detailButton.title = '查看详情';
+		detailButton.style.display = 'none';
+
+		// 获取备注数据
+		const currentNote = this.getUserNote(username, userId);
+
+		if (currentNote) {
+			const noteName = currentNote.name || '';
+			const noteDescription = currentNote.description || '';
+
+			noteButton.classList.add('has-note');
+			noteDisplay.textContent = `[${noteName}]`;
+			noteDisplay.style.display = 'inline';
+
+			// 如果有描述，显示详情按钮
+			if (noteDescription) {
+				detailButton.style.display = 'inline';
+				detailButton.title = `${langData.viewDetail}: ${noteDescription}`;
+			}
+
+			noteButton.title = `${langData.editNote}: ${noteName}`;
+		} else {
+			noteDisplay.style.display = 'none';
+			noteButton.title = langData.addNote;
+		}
+
+		// 绑定事件
 		noteButton.addEventListener('click', async (e) => {
 			e.preventDefault();
 			e.stopPropagation();
@@ -423,25 +423,25 @@ class TwitterNotes {
 				this.showNoteDialog(userId, username);
 			}
 		});
-    
-    detailButton.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.showNoteDetail(userId, username);
-    });
-    
-    // 按顺序添加：备注显示 -> 编辑按钮 -> 详情按钮
-    noteContainer.appendChild(noteDisplay);
-    noteContainer.appendChild(noteButton);
-    noteContainer.appendChild(detailButton);
-    userNameContainer.appendChild(noteContainer);
-  }
 
-  addProfileNoteButton(container, userId, username) {
+		detailButton.addEventListener('click', (e) => {
+			e.preventDefault();
+			e.stopPropagation();
+			this.showNoteDetail(userId, username);
+		});
+
+		// 按顺序添加：备注显示 -> 编辑按钮 -> 详情按钮
+		noteContainer.appendChild(noteDisplay);
+		noteContainer.appendChild(noteButton);
+		noteContainer.appendChild(detailButton);
+		userNameContainer.appendChild(noteContainer);
+	}
+
+	addProfileNoteButton(container, userId, username) {
 		if (container.querySelector('.twitter-notes-profile-button, .twitter-notes-profile-button-alert')) {
-      return; // 已经加过按钮就不再加
-    }
-    
+			return; // 已经加过按钮就不再加
+		}
+
 		const currentNote = this.getUserNote(username, userId);
 		const noteButton = document.createElement('button');
 		if (currentNote) {
@@ -455,31 +455,31 @@ class TwitterNotes {
 		if (userId) {
 			noteButton.setAttribute('data-user-id', userId);
 		}
-		
+
 		noteButton.addEventListener('click', (e) => {
 			e.preventDefault();
 			this.showNoteDialog(userId, username);
 		});
-		
+
 		container.appendChild(noteButton);
-  }
+	}
 
-  showNoteDetail(userId, username) {
-    const currentNote = this.getUserNote(username, userId);
-    if (!currentNote) return;
+	showNoteDetail(userId, username) {
+		const currentNote = this.getUserNote(username, userId);
+		if (!currentNote) return;
 
-    const existingDialog = document.querySelector('.twitter-notes-detail-dialog');
-    if (existingDialog) {
-      existingDialog.remove();
-    }
-		
-    getCurrentLangData().then(() => {
+		const existingDialog = document.querySelector('.twitter-notes-detail-dialog');
+		if (existingDialog) {
+			existingDialog.remove();
+		}
+
+		getCurrentLangData().then(() => {
 			const dialog = document.createElement('div');
 			dialog.className = 'twitter-notes-detail-dialog';
 
-			const noteName = currentNote.name || ''; 
+			const noteName = currentNote.name || '';
 			const noteDescription = currentNote.description || '';
-			
+
 			dialog.innerHTML = `
 				<div class="twitter-notes-detail-content">
 					<div class="twitter-notes-detail-header">
@@ -488,10 +488,10 @@ class TwitterNotes {
 						</h3>
 						<div class="user-id-info">${langData.userID} ${currentNote.userId}</div>
 						${currentNote && currentNote.username !== username ?
-							`<div class="user-id-info">${langData.oldusername} @ 
-							<span style="color: red; font-size: 16px;">${currentNote.username}</span></div>`	
-							: '' 
-						}
+					`<div class="user-id-info">${langData.oldusername} @ 
+							<span style="color: red; font-size: 16px;">${currentNote.username}</span></div>`
+					: ''
+				}
 						<button class="twitter-notes-close">×</button>
 					</div>
 					<div class="twitter-notes-detail-body">
@@ -523,47 +523,47 @@ class TwitterNotes {
 					</div>
 				</div>
 			`;
-			
+
 			document.body.appendChild(dialog);
-			
+
 			const closeBtn = dialog.querySelector('.twitter-notes-close');
 			const actionBtn = dialog.querySelector('#editNote') || dialog.querySelector('#goToProfile');
-			
+
 			const closeDialog = () => dialog.remove();
 			closeBtn.addEventListener('click', closeDialog);
 			dialog.addEventListener('click', (e) => {
 				if (e.target === dialog) closeDialog();
 			});
-			
+
 			actionBtn.addEventListener('click', () => {
 				closeDialog();
-					this.showNoteDialog(userId, username);
+				this.showNoteDialog(userId, username);
 			});
-			
+
 			document.addEventListener('keydown', function escHandler(e) {
 				if (e.key === 'Escape') {
 					closeDialog();
 					document.removeEventListener('keydown', escHandler);
 				}
 			});
-	  }).catch(e => {
+		}).catch(e => {
 			console.error('加载语言数据失败:', e);
-		}); 
+		});
 	}
 
-  showNoteDialog(userId, username) {
-    const existingDialog = document.querySelector('.twitter-notes-dialog');
-    if (existingDialog) {
-      existingDialog.remove();
-    }
-		
+	showNoteDialog(userId, username) {
+		const existingDialog = document.querySelector('.twitter-notes-dialog');
+		if (existingDialog) {
+			existingDialog.remove();
+		}
+
 		getCurrentLangData().then(() => {
-		
+
 			const dialog = document.createElement('div');
 			dialog.className = 'twitter-notes-dialog';
-			
+
 			const currentNote = this.getUserNote(username, userId);
-			const noteName = currentNote ? currentNote.name : ''; 
+			const noteName = currentNote ? currentNote.name : '';
 			const noteDescription = currentNote ? currentNote.description : '';
 
 			// 格式化日期为 "YYYY-MM-DD"
@@ -571,20 +571,20 @@ class TwitterNotes {
 				const d = new Date(date);
 				return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 			};
-			
+
 			dialog.innerHTML = `
 				<div class="twitter-notes-dialog-content">
 					<div class="twitter-notes-dialog-header">
 						<h3>${langData.addNote} @${username}</h3>
 						<div class="user-id-info">${langData.userID}  ${userId}</div>
 						${currentNote && currentNote.username !== username ?
-							`<div class="user-id-info">
+					`<div class="user-id-info">
 								${langData.oldusername}: @ 
 								<span style="color: red; font-size: 16px;">${currentNote.username}</span>
 								<button class="add-old-username-btn" title="${langData.addtoNote}">+</button>
-							 </div>`	
-							: '' 
-						}
+							 </div>`
+					: ''
+				}
 						<button class="twitter-notes-close">×</button>
 					</div>
 					<div class="twitter-notes-dialog-body">
@@ -625,9 +625,9 @@ class TwitterNotes {
 					</div>
 				</div>
 			`;
-			
+
 			document.body.appendChild(dialog);
-		
+
 			const nameInput = dialog.querySelector('#noteName');
 			const descTextarea = dialog.querySelector('#noteDescription');
 			const nameCharCount = dialog.querySelector('.current-name');
@@ -635,13 +635,13 @@ class TwitterNotes {
 			const closeBtn = dialog.querySelector('.twitter-notes-close');
 			const saveBtn = dialog.querySelector('#saveNote');
 			const deleteBtn = dialog.querySelector('#deleteNote');
-			
+
 			nameInput.focus();
-			
+
 			nameInput.addEventListener('input', () => {
 				nameCharCount.textContent = nameInput.value.length;
 			});
-			
+
 			descTextarea.addEventListener('input', () => {
 				descCharCount.textContent = descTextarea.value.length;
 			});
@@ -660,23 +660,23 @@ class TwitterNotes {
 					descTextarea.selectionEnd = 0;
 				});
 			}
-		
+
 			const closeDialog = () => dialog.remove();
 			closeBtn.addEventListener('click', closeDialog);
 			dialog.addEventListener('click', (e) => {
 				if (e.target === dialog) closeDialog();
 			});
-			
+
 			saveBtn.addEventListener('click', async () => {
 				const noteName = nameInput.value.trim();
 				const noteDescription = descTextarea.value.trim();
-				
+
 				if (!noteName) {
 					alert(langData.notePlaceholder);
 					nameInput.focus();
 					return;
 				}
-				
+
 				const noteData = {
 					name: noteName,
 					description: noteDescription,
@@ -685,12 +685,12 @@ class TwitterNotes {
 					createdAt: currentNote ? currentNote.createdAt : new Date().toISOString(),
 					updatedAt: new Date().toISOString()
 				};
-				
+
 				await this.saveUserNote(username, noteData, userId);
 				this.updateNoteElements(userId, username);
 				closeDialog();
 			});
-			
+
 			deleteBtn.addEventListener('click', async () => {
 				if (confirm(langData.deleteConfirm)) {
 					await this.deleteUserNote(username, userId);
@@ -698,64 +698,64 @@ class TwitterNotes {
 					closeDialog();
 				}
 			});
-			
+
 			document.addEventListener('keydown', function escHandler(e) {
 				if (e.key === 'Escape') {
 					closeDialog();
 					document.removeEventListener('keydown', escHandler);
 				}
 			});
-	  }).catch(e => {
+		}).catch(e => {
 			console.error('加载语言数据失败:', e);
 		});
-  }
+	}
 
-  updateNoteElements(userId, username) {
-    // 更新所有相关的备注元素
-    const selectors = [];
-    if (userId) {
-      selectors.push(`[data-user-id="${userId}"]`);
-    }
-    selectors.push(`[data-username="${username}"]`);
-    
-    const elements = document.querySelectorAll(selectors.join(', '));
-    
-    elements.forEach(element => {
-      const hasNote = this.getUserNote(username, userId);
-      
-      if (element.classList.contains('twitter-notes-profile-button')) {
-        element.innerHTML = `📝 ${hasNote ? langData.viewNote : langData.addNote}`;
-      } else if (element.classList.contains('twitter-notes-inline')) {
-					const button = element.querySelector('.twitter-notes-inline-button');
-					const display = element.querySelector('.twitter-notes-display');
-					const detailButton = element.querySelector('.twitter-notes-detail-button');
-					
-					if (button && display && detailButton) {
-						button.classList.toggle('has-note', !!hasNote);
-						
-						const isHomePage = !this.isUserProfilePage();
-						
-						if (hasNote) {
-							const noteName = hasNote.name || ''; 
-							const noteDescription = hasNote.description || '';
-							
-							button.title = `${langData.editNote}: ${noteName}`;							
-							display.textContent = `[${noteName}]`;
-							display.style.display = 'inline';
-							
-							if (noteDescription) {
-								detailButton.style.display = 'inline';
-								detailButton.title = `${langData.viewDetail}: ${noteDescription}`;
-							} else {
-								detailButton.style.display = 'none';
-							}
+	updateNoteElements(userId, username) {
+		// 更新所有相关的备注元素
+		const selectors = [];
+		if (userId) {
+			selectors.push(`[data-user-id="${userId}"]`);
+		}
+		selectors.push(`[data-username="${username}"]`);
+
+		const elements = document.querySelectorAll(selectors.join(', '));
+
+		elements.forEach(element => {
+			const hasNote = this.getUserNote(username, userId);
+
+			if (element.classList.contains('twitter-notes-profile-button')) {
+				element.innerHTML = `📝 ${hasNote ? langData.viewNote : langData.addNote}`;
+			} else if (element.classList.contains('twitter-notes-inline')) {
+				const button = element.querySelector('.twitter-notes-inline-button');
+				const display = element.querySelector('.twitter-notes-display');
+				const detailButton = element.querySelector('.twitter-notes-detail-button');
+
+				if (button && display && detailButton) {
+					button.classList.toggle('has-note', !!hasNote);
+
+					const isHomePage = !this.isUserProfilePage();
+
+					if (hasNote) {
+						const noteName = hasNote.name || '';
+						const noteDescription = hasNote.description || '';
+
+						button.title = `${langData.editNote}: ${noteName}`;
+						display.textContent = `[${noteName}]`;
+						display.style.display = 'inline';
+
+						if (noteDescription) {
+							detailButton.style.display = 'inline';
+							detailButton.title = `${langData.viewDetail}: ${noteDescription}`;
 						} else {
-								button.title = `${langData.addNote}`;
+							detailButton.style.display = 'none';
 						}
+					} else {
+						button.title = `${langData.addNote}`;
 					}
 				}
-    });
-  }
+			}
+		});
+	}
 
 	updateAllLanguageDependentElements() {
 		// 找到页面中所有已处理的备注元素（含 userId 或 username）
@@ -790,10 +790,10 @@ const twitterNotes = new TwitterNotes();
 
 // 监听语言变化
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes.lang) {
-    langData = null;  // 清缓存
-    getCurrentLangData().then(() => {
-      twitterNotes.updateAllLanguageDependentElements(); // 更新界面文本
-    });
-  }
+	if (area === 'local' && changes.lang) {
+		langData = null;  // 清缓存
+		getCurrentLangData().then(() => {
+			twitterNotes.updateAllLanguageDependentElements(); // 更新界面文本
+		});
+	}
 });
