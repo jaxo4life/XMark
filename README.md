@@ -2,8 +2,6 @@
   <img src="public/logo.png" alt="XMark Logo" width="128">
 </p>
 
-<h1 align="center">XMark</h1>
-
 <p align="center">
   <a href="#"><img src="https://img.shields.io/badge/version-2.0.1-blue.svg" alt="Version"></a>
   <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Manifest-V3-green.svg" alt="Manifest"></a>
