@@ -722,7 +722,7 @@ class TwitterNotes {
       const hasNote = this.getUserNote(username, userId);
       
       if (element.classList.contains('twitter-notes-profile-button')) {
-        element.innerHTML = '📝 ${hasNote ? langData.viewNote : langData.addNote';
+        element.innerHTML = `📝 ${hasNote ? langData.viewNote : langData.addNote}`;
       } else if (element.classList.contains('twitter-notes-inline')) {
 					const button = element.querySelector('.twitter-notes-inline-button');
 					const display = element.querySelector('.twitter-notes-display');
