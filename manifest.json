@@ -3,22 +3,11 @@
   "name": "XMark",
   "version": "2.0.2",
   "description": "XMark is a note-taking tool designed specifically for X (formerly Twitter).",
-  "permissions": [
-    "storage",
-    "activeTab",
-    "scripting",
-		"downloads"
-  ],
-  "host_permissions": [
-    "https://twitter.com/*",
-    "https://x.com/*"
-  ],
+  "permissions": ["storage", "activeTab", "scripting", "downloads"],
+  "host_permissions": ["https://twitter.com/*", "https://x.com/*"],
   "content_scripts": [
     {
-      "matches": [
-        "https://twitter.com/*",
-        "https://x.com/*"
-      ],
+      "matches": ["https://twitter.com/*", "https://x.com/*"],
       "js": ["content.js"],
       "css": ["content.css"],
       "run_at": "document_end"

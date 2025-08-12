@@ -87,7 +87,8 @@
   background-color: #1a8cd8;
 }
 
-.twitter-notes-dialog, .twitter-notes-detail-dialog {
+.twitter-notes-dialog,
+.twitter-notes-detail-dialog {
   position: fixed;
   top: 0;
   left: 0;
@@ -100,7 +101,8 @@
   z-index: 10000;
 }
 
-.twitter-notes-dialog-content, .twitter-notes-detail-content {
+.twitter-notes-dialog-content,
+.twitter-notes-detail-content {
   background: white;
   border-radius: 12px;
   width: 90%;
@@ -110,7 +112,8 @@
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
 }
 
-.twitter-notes-dialog-header, .twitter-notes-detail-header {
+.twitter-notes-dialog-header,
+.twitter-notes-detail-header {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -119,7 +122,8 @@
   position: relative;
 }
 
-.twitter-notes-dialog-header h3, .twitter-notes-detail-header h3 {
+.twitter-notes-dialog-header h3,
+.twitter-notes-detail-header h3 {
   margin: 0 0 4px 0;
   font-size: 18px;
   font-weight: bold;
@@ -154,7 +158,8 @@
   background-color: rgba(15, 20, 25, 0.1);
 }
 
-.twitter-notes-dialog-body, .twitter-notes-detail-body {
+.twitter-notes-dialog-body,
+.twitter-notes-detail-body {
   padding: 20px;
 }
 
@@ -232,7 +237,8 @@
   word-wrap: break-word;
 }
 
-.twitter-notes-dialog-footer, .twitter-notes-detail-footer {
+.twitter-notes-dialog-footer,
+.twitter-notes-detail-footer {
   display: flex;
   justify-content: space-between;
   padding: 16px 20px;
@@ -289,34 +295,39 @@
     background-color: rgba(29, 155, 240, 0.2);
     color: #1d9bf0;
   }
-  
-  .twitter-notes-dialog-content, .twitter-notes-detail-content {
+
+  .twitter-notes-dialog-content,
+  .twitter-notes-detail-content {
     background: #15202b;
     color: white;
   }
-  
-  .twitter-notes-dialog-header, .twitter-notes-detail-header {
+
+  .twitter-notes-dialog-header,
+  .twitter-notes-detail-header {
     border-bottom-color: #38444d;
   }
-  
-  .twitter-notes-dialog-footer, .twitter-notes-detail-footer {
+
+  .twitter-notes-dialog-footer,
+  .twitter-notes-detail-footer {
     border-top-color: #38444d;
   }
-  
-  .twitter-notes-input, .twitter-notes-textarea {
+
+  .twitter-notes-input,
+  .twitter-notes-textarea {
     background: #192734;
     border-color: #38444d;
     color: white;
   }
-  
-  .twitter-notes-input:focus, .twitter-notes-textarea:focus {
+
+  .twitter-notes-input:focus,
+  .twitter-notes-textarea:focus {
     border-color: #1d9bf0;
   }
-  
+
   .input-group label {
     color: #f7f9fa;
   }
-  
+
   .note-value {
     background-color: #192734;
     color: #f7f9fa;

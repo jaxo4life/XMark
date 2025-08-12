@@ -1,46 +1,54 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8">
-  <link rel="stylesheet" type="text/css" href="popup.css">
-</head>
-<body>
-  <button id="langBtn" class="btn btn-secondary" style="width:20%;right:0;">English</button>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" type="text/css" href="popup.css" />
+  </head>
+  <body>
+    <button id="langBtn" class="btn btn-secondary" style="width: 20%; right: 0">
+      English
+    </button>
 
-  <div class="header">
-    <img src="/public/logo.png" style="width:120px"/>
-  </div>
-  
-  <div class="section">
-    <div class="stats">
-      <div class="stat-item">
-        <div class="stat-number" id="totalNotes">0</div>
-        <div class="stat-label" data-key="totalNotes">总备注</div>
-      </div>
-      <div class="stat-item">
-        <div class="stat-number" id="todayNotes">0</div>
-        <div class="stat-label" data-key="todayNotes">今日新增</div>
+    <div class="header">
+      <img src="/public/logo.png" style="width: 120px" />
+    </div>
+
+    <div class="section">
+      <div class="stats">
+        <div class="stat-item">
+          <div class="stat-number" id="totalNotes">0</div>
+          <div class="stat-label" data-key="totalNotes">总备注</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number" id="todayNotes">0</div>
+          <div class="stat-label" data-key="todayNotes">今日新增</div>
+        </div>
       </div>
     </div>
-  </div>
-  
-  <div class="section">
-    <h3 data-key="dataManagement">数据管理</h3>
-    <button class="btn btn-primary" id="exportBtn">📤 导出备注</button>
-    <button class="btn btn-secondary" id="importBtn">📥 导入备注</button>
-    <input type="file" id="fileInput" accept=".json">
-    <button class="btn btn-secondary" style="background:red;color:white" id="clearBtn">🗑️ 清空所有备注</button>
-  </div>
-  
-  <div class="section">
-    <h3 data-key="recentNotes">最近备注</h3>
-    <div class="recent-notes" id="recentNotes">
-      <div style="text-align: center; color: #536471; padding: 20px;">
-        暂无备注数据
+
+    <div class="section">
+      <h3 data-key="dataManagement">数据管理</h3>
+      <button class="btn btn-primary" id="exportBtn">📤 导出备注</button>
+      <button class="btn btn-secondary" id="importBtn">📥 导入备注</button>
+      <input type="file" id="fileInput" accept=".json" />
+      <button
+        class="btn btn-secondary"
+        style="background: red; color: white"
+        id="clearBtn"
+      >
+        🗑️ 清空所有备注
+      </button>
+    </div>
+
+    <div class="section">
+      <h3 data-key="recentNotes">最近备注</h3>
+      <div class="recent-notes" id="recentNotes">
+        <div style="text-align: center; color: #536471; padding: 20px">
+          暂无备注数据
+        </div>
       </div>
     </div>
-  </div>
 
-  <script src="popup.js"></script>
-</body>
+    <script src="popup.js"></script>
+  </body>
 </html>
