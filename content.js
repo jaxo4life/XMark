@@ -1,13 +1,16 @@
-let langData = {};
+let langData = null;
 
 async function getCurrentLangData() {
+  if (langData) {
+    return Promise.resolve(langData); 
+  }
   return new Promise((resolve, reject) => {
     chrome.storage.local.get(['lang'], (result) => {
       const currentLang = result.lang || 'zh';
       fetch(chrome.runtime.getURL(`lang/${currentLang}.json`))
         .then(res => res.json())
         .then(data => {
-          langData = data;
+          langData = data; 
           resolve(data);
         })
         .catch(e => {
@@ -57,50 +60,49 @@ class TwitterNotes {
     }
   }
 
-  // 提取 Twitter 用户的数字 ID（从 head 中的 script JSON）
-  async extractUserIdFromPage(username) {
-    try {
-      const scripts = document.querySelectorAll('script');
+	// 通用方法：从指定document中提取 Twitter 用户数字ID
+	async extractUserIdFromDocument(doc, username) {
+		try {
+			const scripts = doc.querySelectorAll('script');
+			for (const script of scripts) {
+				if (script.textContent.includes(`"additionalName":"${username}"`)) {
+					const match = script.textContent.match(/"identifier":"(\d+)"/);
+					if (match) {
+						return match[1];
+					}
+				}
+			}
+		} catch (error) {
+			console.error('提取用户ID失败:', error);
+		}
+		return null;
+	}
 
-      for (const script of scripts) {
-        if (script.textContent.includes(`"additionalName":"${username}"`)) {
-          const match = script.textContent.match(/"identifier":"(\d+)"/);
-          if (match) {
-            return match[1];
-          }
-        }
-      }
-    } catch (error) {
-      console.error('提取用户ID失败:', error);
-    }
-    return null;
-  }
-  
-	// 静默打开用户页面提取用户 ID（只提取 head 中的 identifier）
+	// 从当前页面提取
+	async extractUserIdFromPage(username) {
+		const res = await this.extractUserIdFromDocument(document, username);
+		return res;
+	}
+
+	// 从用户主页（新窗口）提取
 	async fetchUserIdFromProfile(username) {
 		return new Promise((resolve, reject) => {
 			const tempWindow = window.open(
 				`https://x.com/${username}`,
 				'_blank',
-				'width=1,height=1,left=-2000,top=' + window.screen.height + ''
+				'width=1,height=1,left=-2000,top=' + window.screen.height +''
 			);
 
-			const checkInterval = setInterval(() => {
+			const checkInterval = setInterval(async () => {
 				try {
-					const scripts = tempWindow.document.querySelectorAll('script');
-					for (const script of scripts) {
-						if (script.textContent.includes('"identifier":"')) {
-							const match = script.textContent.match(/"identifier":"(\d+)"/);
-							if (match) {
-								clearInterval(checkInterval);
-								tempWindow.close();
-								resolve(match[1]);
-								return;
-							}
-						}
+					const id = await this.extractUserIdFromDocument(tempWindow.document, username);
+					if (id) {
+						clearInterval(checkInterval);
+						tempWindow.close();
+						resolve(id);
 					}
 				} catch (e) {
-					// 跨域未加载完成，继续等待
+					// 跨域或未加载完成，继续等待
 				}
 			}, 500);
 
@@ -108,7 +110,7 @@ class TwitterNotes {
 				clearInterval(checkInterval);
 				tempWindow.close();
 				reject('超时未能获取用户 ID');
-			}, 8000); // 最多等8秒
+			}, 8000);
 		});
 	}
 
@@ -748,13 +750,50 @@ class TwitterNotes {
 								detailButton.style.display = 'none';
 							}
 						} else {
-								button.title = '${langData.addNote}';
+								button.title = `${langData.addNote}`;
 						}
 					}
 				}
     });
   }
+
+	updateAllLanguageDependentElements() {
+		// 找到页面中所有已处理的备注元素（含 userId 或 username）
+		const processedElements = new Set();
+
+		// 先找所有带 userId 的元素
+		document.querySelectorAll('[data-user-id]').forEach(el => {
+			const userId = el.getAttribute('data-user-id');
+			const username = el.getAttribute('data-username') || null;
+			const key = userId + (username || '');
+			if (!processedElements.has(key)) {
+				this.updateNoteElements(userId, username);
+				processedElements.add(key);
+			}
+		});
+
+		// 再找所有没有 userId 只有 username 的元素
+		document.querySelectorAll('[data-username]').forEach(el => {
+			const userId = el.getAttribute('data-user-id');
+			if (userId) return; // 已处理过
+			const username = el.getAttribute('data-username');
+			if (username && !processedElements.has(username)) {
+				this.updateNoteElements(null, username);
+				processedElements.add(username);
+			}
+		});
+	}
 }
 
 // 初始化
 const twitterNotes = new TwitterNotes();
+
+// 监听语言变化
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.lang) {
+    langData = null;  // 清缓存
+    getCurrentLangData().then(() => {
+      twitterNotes.updateAllLanguageDependentElements(); // 更新界面文本
+    });
+  }
+});
