@@ -52,6 +52,12 @@ git clone https://github.com/jaxo4life/XMark.git
 
 ---
 
+## 🗣️ 特别提醒
+
+第一次为用户添加备注的时候，如果不是在用户主页，会弹出一个小窗用来自动打开用户主页获取用户的唯一数字ID，详细逻辑可以在 [content.js](content.js) 中查看 fetchUserIdFromProfile(username) 
+
+---
+
 ## 🤝 贡献 & 反馈
 
 欢迎提出建议与贡献代码，让 **XMark** 更加出色！
@@ -101,6 +107,13 @@ Then open Chrome:
 2. Enable **Developer mode**
 3. Click **Load unpacked** and select the project folder
 4. Enjoy **XMark**! 🎉
+
+---
+
+## 🗣️ Special Reminder
+
+When adding a note for a user for the first time, if you are not on the user’s profile page, a small popup will appear to automatically open their profile and retrieve the user’s unique numeric ID.
+For detailed logic, see `fetchUserIdFromProfile(username)` in [content.js](content.js).
 
 ---
 
