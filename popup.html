@@ -4,11 +4,12 @@
     <meta charset="utf-8" />
     <link rel="stylesheet" type="text/css" href="popup.css" />
   </head>
+
   <body>
     <button id="langBtn" class="btn btn-secondary" style="width: 20%; right: 0">
       English
     </button>
-
+    <div class="version">v3.0.0</div>
     <div class="header">
       <img src="/public/logo.png" style="width: 120px" />
     </div>
@@ -38,6 +39,122 @@
       >
         🗑️ 清空所有备注
       </button>
+
+      <!-- WebDAV 备份 -->
+      <div class="cloud-section">
+        <h4 style="margin: 0 0 10px 0; font-size: 13px; color: #536471">
+          WebDAV 备份
+        </h4>
+
+        <div id="cloudStatus" class="cloud-status hidden"></div>
+
+        <!-- WebDAV 配置 - 始终显示在上方 -->
+        <div class="webdav-config-header" id="webdavConfigHeader">
+          <h4>
+            <span>⚙️ WebDAV 服务器配置</span>
+            <span class="config-toggle" id="configToggle">▼</span>
+          </h4>
+
+          <div id="configStatus" class="config-status unconfigured">
+            <span>⚠️</span> 请配置 WebDAV 服务器以启用云备份功能
+          </div>
+        </div>
+
+        <div class="webdav-config hidden" id="webdavConfigPanel">
+          <label for="webdavUrl">服务器地址:</label>
+          <input
+            type="url"
+            id="webdavUrl"
+            placeholder="https://example.com/webdav/"
+          />
+
+          <label for="webdavUsername">用户名:</label>
+          <input type="text" id="webdavUsername" placeholder="用户名" />
+
+          <label for="webdavPassword">密码:</label>
+          <input type="password" id="webdavPassword" placeholder="密码" />
+
+          <div class="config-buttons">
+            <button
+              class="btn btn-secondary"
+              id="saveWebdavConfig"
+              style="font-size: 12px"
+            >
+              <span>💾</span> 保存配置
+            </button>
+            <button
+              class="btn btn-secondary"
+              id="testWebdavConnection"
+              style="font-size: 12px"
+            >
+              <span>🔗</span> 测试连接
+            </button>
+          </div>
+        </div>
+
+        <!-- 备份功能区域 - 只有配置完成后才显示 -->
+        <div id="backupFunctions" class="backup-section hidden">
+          <div class="backup-grid">
+            <button class="btn btn-warning" id="webdavBackup">
+              <span>🌐</span> 手动备份
+            </button>
+            <button class="btn btn-secondary" id="webdavRestore">
+              <span>📥</span> 恢复数据
+            </button>
+          </div>
+
+          <!-- 添加查看备份列表按钮 -->
+          <button
+            class="btn btn-secondary"
+            id="viewBackupList"
+            style="margin-bottom: 8px"
+          >
+            <span>📋</span> 查看备份列表
+          </button>
+
+          <!-- 自动备份设置 -->
+          <div class="auto-backup-section">
+            <div class="auto-backup-header">
+              <span class="auto-backup-title">🕒 自动备份</span>
+              <div class="toggle-switch" id="autoBackupToggle"></div>
+            </div>
+
+            <div class="auto-backup-settings hidden" id="autoBackupSettings">
+              <div class="frequency-grid">
+                <div>
+                  <label for="backupFrequency">备份频率:</label>
+                  <select id="backupFrequency">
+                    <option value="hourly">每小时</option>
+                    <option value="daily">每天</option>
+                    <option value="weekly">每周</option>
+                    <option value="monthly">每月</option>
+                  </select>
+                </div>
+                <button
+                  class="btn btn-secondary"
+                  id="testAutoBackup"
+                  style="font-size: 11px; padding: 6px 8px"
+                >
+                  <span>🧪</span> 测试
+                </button>
+              </div>
+            </div>
+
+            <div class="auto-backup-status" id="autoBackupStatus">
+              自动备份已关闭
+            </div>
+          </div>
+        </div>
+
+        <!-- 未配置时的提示 -->
+        <div id="setupNotice" class="setup-notice">
+          <span class="icon">🌐</span>
+          <div>配置 WebDAV 服务器后即可使用云备份功能</div>
+          <div style="margin-top: 8px; font-size: 11px; color: #999">
+            支持 Nextcloud、ownCloud、坚果云等 WebDAV 服务
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="section">

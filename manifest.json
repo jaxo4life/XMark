@@ -1,10 +1,15 @@
 {
   "manifest_version": 3,
   "name": "XMark",
-  "version": "2.0.2",
+  "version": "1.0.0",
   "description": "XMark is a note-taking tool designed specifically for X (formerly Twitter).",
-  "permissions": ["storage", "activeTab", "scripting", "downloads"],
-  "host_permissions": ["https://twitter.com/*", "https://x.com/*"],
+  "permissions": ["storage", "activeTab", "scripting", "downloads", "alarms"],
+  "host_permissions": [
+    "https://twitter.com/*",
+    "https://x.com/*",
+    "http://*/*",
+    "https://*/*"
+  ],
   "content_scripts": [
     {
       "matches": ["https://twitter.com/*", "https://x.com/*"],
@@ -28,5 +33,6 @@
       "resources": ["lang/*.json"],
       "matches": ["<all_urls>"]
     }
-  ]
+  ],
+  "key": "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDDxtuJ/dFsF+Fs4PtMI2l5s5yHAc1yNHtfYMnH+HiDHY0WcgflbCXjW4G2JpFKDGDmHIcLvzFgRn5sP/oMperkTxqs2qZCrkeugoLCcaGOMrLHS6yb1D8Gp8jIpI+7xxEQYHbPNgXxT5gBrMeEKIBRBai5ifkV8Kw4wwF0S4hSImn3RFOOPUF8Qjmed0aBBUs8aqtDHRukbw2O13v1uCll5mSm3n8RGTN1Vc4OVodAwp0c43QpcIaB/wV+QrWpcdOsW+bPATPIT0DUZOQjK5Ozl6gSyP33RfpiKM/vOL/BQGbt6AreI9Dm1minBtrmPo9rXgs8voc/czCJN6uoiU4DAgMBAAECggEAOYuYmUl9hp/IV4gT5Y/dH3QvdLGPcVvCzci11u0Ogz+q6mePMZzl0BvkFyXj+9eCnfDRsx66RTnDTE9L0O7uCbjEtv039I6krENZaw0adyEo0pLIRC+RbQPhbTSNuRysw9sO4R5YhdMm84sVRB/hg689pnfLOus4vCB5q3TON5G5VQ6pu9x4r/nwghs2Tkrp7zNu8wUaOGK7VdvNOzthyBmytrPKftIqk02sPJ1eVmuFf8SwEWT4TCKHtLpdvvSGC+O6TWnpjLecOngg1Yn/CalkTy5TrBI/C43W3Hmq00wW98h/Vh2edVwHuCrkk0OMJ41TR/Z6nPHM8KN/8IcZ6QKBgQDnULqKHemroydqC3AY+fx5i1gsWkWZWJaVmPg9phWSIaISg1vU7IQ2iMT8iCeWI+jpF2QyBrGbE6eXO0QjnLEo4tMqwHGdfFzNuBP1GvgnXxp3vTvSzE2NUwloCuXs7QecKtOzPnA307JcIh+IYw7tLVZ5sBtxCnnTR5mwVONoWwKBgQDYq0GKu4WQ6Wi7u5B6bt1i6qFcejUA0xsE1VTHt1gM8cKQ2JJPa+QCDd9KrfvRd4MvC0g6rDKFfJ3abw+gtds9PnhrWTzawwf1kJSIY6ds1u6Pl2zTADTOBWPGMGy/RHp28pUzgHV0sFCB6jhpME4iTCZZVo1uQbn0ndU7Nw/heQKBgQCy1pJyaHAZ+FlnvpIbbWNK4XX5TI3U4k4COTNsDnVM9t3kbFTaiUYrF5EdIXNhvD+9vw0DNHOqTwbagMLMub+qubvDqOfud5EUqAYeEYzce8Xt34taDgTDh/iUzSA5DoU8s0vboCGIuA6E9wjkHJoUu2HJUWPWAOBxfkEPuIHdUwKBgQCVLdyzq4c8DikJUQwZ8ClHyOqO5KmHxtIMkuGLnMXoK7Ddz+909YEIlQqPvZjrUREmm+sAUr16QSHiWqN08KFh2phIuSl4Kd5aClDqU0rcWmPow8auxK6Wxwk6VO8bBggXy9BEpIa6cAcOW/i5HARAAxRIYJqCNojVTrKY0cGCaQKBgGRHfSGUqSH3vXW52rFkIPb2XXTe9eDPt18ESjvZNAE9XEQJb4N9lVIyZs0Mh48my00r7FumAIEcY9tgZ19o/hKMySFPYzBAY94Ck/udgUTZSsSvKeYNvRAH+0MW+/QEd5NSfH200zE6dK0zXV4jk87wkMnExW2EPK2y6Tlzu0Lb"
 }
