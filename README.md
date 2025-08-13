@@ -11,7 +11,9 @@
 
 ---
 
-<summary>🕑 版本变动</summary>
+<summary>🕑 Changed</summary>
+## v3.0.1
+- Lang files done
 
 ## v3.0.0
 - Add Webdav backup

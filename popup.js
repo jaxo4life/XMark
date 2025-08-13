@@ -12,6 +12,7 @@ async function loadLanguage(lang) {
     currentLang = lang;
     chrome.storage.local.set({ lang: currentLang });
     langBtn.textContent = lang === "zh" ? "English" : "中文";
+    console.log(langData.status.webdavConnected);
 
     updateTexts();
   } catch (e) {
@@ -36,6 +37,73 @@ function updateTexts() {
     langData.importNotes || "Import";
   document.getElementById("clearBtn").textContent =
     langData.clearNotes || "Clear";
+
+  // WebDAV更新
+  document.querySelector(".cloud-section h4").textContent =
+    langData.webdavCloudBackup;
+  document.querySelector(
+    "#webdavConfigHeader h4 span:first-child"
+  ).textContent = `⚙️ ${langData.webdavServerConfig}`;
+
+  // 更新表单标签
+  document.querySelector(
+    'label[for="webdavUrl"]'
+  ).textContent = `${langData.serverAddress}:`;
+  document.querySelector(
+    'label[for="webdavUsername"]'
+  ).textContent = `${langData.username}:`;
+  document.querySelector(
+    'label[for="webdavPassword"]'
+  ).textContent = `${langData.password}:`;
+
+  // 更新按钮
+  document.getElementById(
+    "saveWebdavConfig"
+  ).innerHTML = `<span>💾</span> ${langData.saveConfig}`;
+  document.getElementById(
+    "testWebdavConnection"
+  ).innerHTML = `<span>🔗</span> ${langData.testConnection}`;
+  document.getElementById(
+    "webdavBackup"
+  ).innerHTML = `<span>🌐</span> ${langData.manualBackup}`;
+  document.getElementById(
+    "webdavRestore"
+  ).innerHTML = `<span>📥</span> ${langData.restoreData}`;
+  document.getElementById(
+    "viewBackupList"
+  ).innerHTML = `<span>📋</span> ${langData.viewBackupList}`;
+
+  // 更新自动备份部分
+  document.querySelector(
+    ".auto-backup-title"
+  ).textContent = `🕒 ${langData.autoBackup}`;
+  document.querySelector(
+    'label[for="backupFrequency"]'
+  ).textContent = `${langData.backupFrequency}:`;
+
+  // 更新频率选项
+  const frequencySelect = document.getElementById("backupFrequency");
+  const options = frequencySelect.querySelectorAll("option");
+  options[0].textContent = langData.frequencies.hourly;
+  options[1].textContent = langData.frequencies.daily;
+  options[2].textContent = langData.frequencies.weekly;
+  options[3].textContent = langData.frequencies.monthly;
+
+  document.getElementById(
+    "testAutoBackup"
+  ).innerHTML = `<span>🧪</span> ${langData.test}`;
+
+  // 更新设置提示
+  const setupNotice = document.getElementById("setupNotice");
+  if (setupNotice) {
+    setupNotice.innerHTML = `
+      <span class="icon">🌐</span>
+      <div>${langData.setup.configureWebdav}</div>
+      <div style="margin-top: 8px; font-size: 11px; color: #999;">
+        ${langData.setup.supportedServices}
+      </div>
+    `;
+  }
 
   // 最近备注无数据提示
   const recentNotesDiv = document.getElementById("recentNotes");
@@ -206,7 +274,7 @@ function showUpdateNotification(newVersion, releaseUrl) {
     const updateButton = document.createElement("button");
     updateButton.className = "update-button";
     updateButton.innerHTML = `🔄 v${newVersion}`;
-    updateButton.title = `发现新版本 v${newVersion}，点击前往 GitHub 下载`;
+    updateButton.title = `${langData.updateAvailable} v${newVersion}`;
     updateButton.onclick = () => {
       window.open(
         releaseUrl || "https://github.com/jaxo4life/XMark/releases",
@@ -224,11 +292,18 @@ function showUpdateNotification(newVersion, releaseUrl) {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "autoBackupComplete") {
     if (message.success) {
-      showMessage(`自动备份成功: ${message.fileName}`, "success");
+      showMessage(
+        `${langData.messages.autoBackupSuccess} ${message.fileName}`,
+        "success"
+      );
     } else {
-      showMessage(`自动备份失败: ${message.error}`, "error");
+      showMessage(
+        `${langData.messages.autoBackupFailed} ${message.error}`,
+        "error"
+      );
     }
     // 重新加载自动备份状态
+
     loadAutoBackupSettings();
   }
 });
@@ -266,24 +341,23 @@ async function updateConfigurationStatusOnly() {
 
     if (connectionStatus === "connected") {
       configStatus.className = "config-status connected";
-      configStatus.innerHTML = "<span>✅</span> WebDAV 服务器已连接";
+      configStatus.innerHTML = `<span>✅</span> ${langData.status.webdavConnected}`;
       backupFunctions.classList.remove("hidden");
       setupNotice.classList.add("hidden");
     } else if (connectionStatus === "failed") {
       configStatus.className = "config-status disconnected";
-      configStatus.innerHTML = "<span>❌</span> WebDAV 连接失败，请检查配置";
+      configStatus.innerHTML = `<span>❌</span> ${langData.status.webdavConnectionFailed}`;
       backupFunctions.classList.add("hidden");
       setupNotice.classList.add("hidden");
     } else {
       configStatus.className = "config-status disconnected";
-      configStatus.innerHTML = "<span>⚠️</span> 配置已填写，请点击测试连接";
+      configStatus.innerHTML = `<span>⚠️</span> ${langData.status.webdavConfigFilled}`;
       backupFunctions.classList.add("hidden");
       setupNotice.classList.add("hidden");
     }
   } else {
     configStatus.className = "config-status unconfigured";
-    configStatus.innerHTML =
-      "<span>⚠️</span> 请配置 WebDAV 服务器以启用云备份功能";
+    configStatus.innerHTML = `<span>⚠️</span> ${langData.status.webdavConfigRequired}`;
     backupFunctions.classList.add("hidden");
     setupNotice.classList.remove("hidden");
   }
@@ -310,7 +384,7 @@ async function updateConfigurationStatus() {
 
     if (connectionStatus === "connected") {
       configStatus.className = "config-status connected";
-      configStatus.innerHTML = "<span>✅</span> WebDAV 服务器已连接";
+      configStatus.innerHTML = `<span>✅</span> ${langData.status.webdavConnected}`;
       backupFunctions.classList.remove("hidden");
       setupNotice.classList.add("hidden");
 
@@ -320,7 +394,7 @@ async function updateConfigurationStatus() {
       configToggle.classList.remove("expanded");
     } else if (connectionStatus === "failed") {
       configStatus.className = "config-status disconnected";
-      configStatus.innerHTML = "<span>❌</span> WebDAV 连接失败，请检查配置";
+      configStatus.innerHTML = `<span>❌</span> ${langData.status.webdavConnectionFailed}`;
       backupFunctions.classList.add("hidden");
       setupNotice.classList.add("hidden");
 
@@ -329,7 +403,7 @@ async function updateConfigurationStatus() {
       configToggle.classList.remove("expanded");
     } else {
       configStatus.className = "config-status disconnected";
-      configStatus.innerHTML = "<span>⚠️</span> 配置已填写，请点击测试连接";
+      configStatus.innerHTML = `<span>⚠️</span> ${langData.status.webdavConfigFilled}`;
       backupFunctions.classList.add("hidden");
       setupNotice.classList.add("hidden");
 
@@ -339,8 +413,7 @@ async function updateConfigurationStatus() {
     }
   } else {
     configStatus.className = "config-status unconfigured";
-    configStatus.innerHTML =
-      "<span>⚠️</span> 请配置 WebDAV 服务器以启用云备份功能";
+    configStatus.innerHTML = `<span>⚠️</span> ${langData.status.webdavConfigRequired}`;
     backupFunctions.classList.add("hidden");
     setupNotice.classList.remove("hidden");
 
@@ -392,42 +465,35 @@ function updateAutoBackupStatus(settings) {
   if (settings.enabled) {
     statusDiv.classList.add("enabled");
 
-    let frequencyText = "";
-    switch (settings.frequency) {
-      case "daily":
-        frequencyText = "每天";
-        break;
-      case "weekly":
-        frequencyText = "每周";
-        break;
-      case "monthly":
-        frequencyText = "每月";
-        break;
-    }
-
-    let statusText = `✅ 自动备份已启用 (${frequencyText})`;
+    const frequencyText = langData.frequencies[settings.frequency];
+    let statusText = `✅ ${langData.status.autoBackupEnabled} (${frequencyText})`;
 
     if (settings.lastBackup) {
       const lastBackupDate = new Date(settings.lastBackup);
       const now = new Date();
-      const diffHours = Math.floor((now - lastBackupDate) / (1000 * 60 * 60));
+      const diffMinutes = Math.floor((now - lastBackupDate) / (1000 * 60));
 
-      if (diffHours < 1) {
-        statusText += "\n最后备份: 刚刚";
-      } else if (diffHours < 24) {
-        statusText += `\n最后备份: ${diffHours} 小时前`;
+      if (diffMinutes < 1) {
+        statusText += `\n${langData.status.lastBackup}: ${langData.status.justNow}`;
+      } else if (diffMinutes < 60) {
+        statusText += `\n${langData.status.lastBackup}: ${diffMinutes} ${langData.status.minutesAgo} `;
       } else {
-        const diffDays = Math.floor(diffHours / 24);
-        statusText += `\n最后备份: ${diffDays} 天前`;
+        const diffHours = Math.floor(diffMinutes / 60);
+        if (diffHours < 24) {
+          statusText += `\n${langData.status.lastBackup}: ${diffHours} ${langData.status.hoursAgo}`;
+        } else {
+          const diffDays = Math.floor(diffHours / 24);
+          statusText += `\n${langData.status.lastBackup}: ${diffDays} ${langData.status.daysAgo}`;
+        }
       }
     } else {
-      statusText += "\n尚未执行过自动备份";
+      statusText += "\n${langData.status.noAutoBackup}";
     }
 
     statusDiv.textContent = statusText;
   } else {
     statusDiv.classList.remove("enabled");
-    statusDiv.textContent = "自动备份已关闭";
+    statusDiv.textContent = langData.status.autoBackupDisabled;
   }
 }
 
@@ -447,13 +513,13 @@ async function toggleAutoBackup() {
     await loadAutoBackupSettings();
 
     if (settings.enabled) {
-      showMessage("自动备份已启用", "success");
+      showMessage(langData.messages.autoBackupEnabled, "success");
     } else {
-      showMessage("自动备份已关闭", "info");
+      showMessage(langData.messages.autoBackupDisabled, "info");
     }
   } catch (error) {
     console.error("切换自动备份失败:", error);
-    showMessage("设置失败，请重试", "error");
+    showMessage(langData.messages.settingsFailed, "error");
   }
 }
 
@@ -469,17 +535,13 @@ async function updateAutoBackupFrequency() {
     await chrome.storage.local.set({ autoBackupSettings: settings });
     await loadAutoBackupSettings();
 
-    const frequencyNames = {
-      hourly: "每小时",
-      daily: "每天",
-      weekly: "每周",
-      monthly: "每月",
-    };
-
-    showMessage(`备份频率已更新为${frequencyNames[frequency]}`, "success");
+    const frequencyText = langData.frequencies[frequency];
+    showMessage(
+      `${langData.messages.frequencyUpdated} ${frequencyText}`,
+      "success"
+    );
   } catch (error) {
-    console.error("更新备份频率失败:", error);
-    showMessage("更新失败，请重试", "error");
+    showMessage(langData.messages.updateFailed, "error");
   }
 }
 
@@ -488,7 +550,7 @@ async function testAutoBackup() {
   const button = document.getElementById("testAutoBackup");
   const originalText = button.innerHTML;
   button.disabled = true;
-  button.innerHTML = "<span>⏳</span> 测试中...";
+  button.innerHTML = `<span>⏳</span> ${langData.buttons.testing}`;
 
   try {
     // 检查 WebDAV 配置
@@ -496,7 +558,7 @@ async function testAutoBackup() {
     const config = configResult.webdavConfig;
 
     if (!config || !config.url) {
-      throw new Error("请先配置 WebDAV 服务器");
+      throw new Error(langData.messages.configureWebdavFirst);
     }
 
     // 触发自动备份
@@ -504,10 +566,9 @@ async function testAutoBackup() {
       chrome.runtime.sendMessage({ action: "triggerAutoBackup" }, resolve);
     });
 
-    showMessage("自动备份测试已触发，请稍候...", "info");
+    showMessage(langData.messages.autoBackupTriggered, "info");
   } catch (error) {
-    console.error("测试自动备份失败:", error);
-    showMessage("测试失败: " + error.message, "error");
+    showMessage(`${langData.messages.testFailed} + error.message`, "error");
   } finally {
     button.disabled = false;
     button.innerHTML = originalText;
@@ -644,12 +705,12 @@ async function saveWebdavConfig() {
   const password = document.getElementById("webdavPassword").value.trim();
 
   if (!url) {
-    showMessage("请输入 WebDAV 服务器地址", "error");
+    showMessage(langData.messages.enterServerAddress, "error");
     return;
   }
 
   if (!username || !password) {
-    showMessage("请输入用户名和密码", "error");
+    showMessage(langData.messages.enterCredentials, "error");
     return;
   }
 
@@ -661,11 +722,10 @@ async function saveWebdavConfig() {
     // 清除之前的连接状态
     await chrome.storage.local.remove(["webdavConnectionStatus"]);
 
-    showMessage("WebDAV 配置已保存，请测试连接", "success");
+    showMessage(langData.messages.webdavConfigSaved, "success");
     await updateConfigurationStatusOnly(); // 只更新状态，不改变折叠状态
   } catch (error) {
-    console.error("保存 WebDAV 配置失败:", error);
-    showMessage("保存配置失败", "error");
+    showMessage(langData.messages.webdavConfigSaveFailed, "error");
   }
 }
 
@@ -673,14 +733,14 @@ async function testWebdavConnection() {
   const button = document.getElementById("testWebdavConnection");
   const originalText = button.innerHTML;
   button.disabled = true;
-  button.innerHTML = "<span>⏳</span> 测试中...";
+  button.innerHTML = `<span>⏳</span> ${langData.buttons.testing}`;
 
   try {
     const configResult = await chrome.storage.local.get(["webdavConfig"]);
     const config = configResult.webdavConfig;
 
     if (!config || !config.url) {
-      throw new Error("请先配置 WebDAV 服务器");
+      throw new Error(langData.messages.configureWebdavFirst);
     }
 
     // 准备认证头
@@ -716,20 +776,22 @@ async function testWebdavConnection() {
       await chrome.storage.local.set({
         webdavConnectionStatus: "connected",
       });
-      showMessage("WebDAV 连接测试成功！", "success");
+      showMessage(langData.messages.webdavTestSuccess, "success");
     } else {
       // 保存连接失败状态
       await chrome.storage.local.set({
         webdavConnectionStatus: "failed",
       });
       throw new Error(
-        `连接失败: ${testResult.response.status} ${testResult.response.statusText}`
+        `${langData.messages.connectionFailed} ${testResult.response.status} ${testResult.response.statusText}`
       );
     }
   } catch (error) {
-    console.error("WebDAV 连接测试失败:", error);
     await chrome.storage.local.set({ webdavConnectionStatus: "failed" });
-    showMessage("WebDAV 连接测试失败: " + error.message, "error");
+    showMessage(
+      `${langData.messages.webdavTestFailed} + error.message`,
+      "error"
+    );
   } finally {
     button.disabled = false;
     button.innerHTML = originalText;
@@ -760,9 +822,9 @@ async function exportNotes() {
     a.click();
 
     URL.revokeObjectURL(url);
-    showMessage(langData.exportSuccess);
+    showMessage(langData.exportSuccess, "success");
   } catch (error) {
-    showErrorMessage(langData.exportFail);
+    showErrorMessage(langData.exportFail, "error");
   }
 }
 
@@ -814,14 +876,14 @@ async function importNotes(event) {
 async function backupToWebDAV() {
   const button = document.getElementById("webdavBackup");
   button.disabled = true;
-  button.innerHTML = "<span>⏳</span> 备份中...";
+  button.innerHTML = `<span>⏳</span> ${langData.buttons.backing}`;
 
   try {
     const configResult = await chrome.storage.local.get(["webdavConfig"]);
     const config = configResult.webdavConfig;
 
     if (!config || !config.url) {
-      throw new Error("请先配置 WebDAV 服务器");
+      throw new Error(langData.messages.configureWebdavFirst);
     }
 
     // 获取备注数据
@@ -879,13 +941,15 @@ async function backupToWebDAV() {
       );
     }
 
-    showMessage("成功备份到 WebDAV 服务器！", "success");
+    showMessage(langData.messages.webdavBackupSuccess, "success");
   } catch (error) {
-    console.error("WebDAV 备份失败:", error);
-    showMessage("WebDAV 备份失败: " + error.message, "error");
+    showMessage(
+      `${langData.messages.webdavBackupFailed} + error.message`,
+      "error"
+    );
   } finally {
     button.disabled = false;
-    button.innerHTML = "<span>🌐</span> 备份到 WebDAV";
+    button.innerHTML = `<span>🌐</span> ${langData.manualBackup}`;
   }
 }
 
@@ -893,14 +957,14 @@ async function backupToWebDAV() {
 async function restoreFromWebDAV() {
   const button = document.getElementById("webdavRestore");
   button.disabled = true;
-  button.innerHTML = "<span>⏳</span> 恢复中...";
+  button.innerHTML = `<span>⏳</span> ${langData.buttons.restoring}`;
 
   try {
     const configResult = await chrome.storage.local.get(["webdavConfig"]);
     const config = configResult.webdavConfig;
 
     if (!config || !config.url) {
-      throw new Error("请先配置 WebDAV 服务器");
+      throw new Error(langData.messages.configureWebdavFirst);
     }
 
     // 尝试获取最新的备份文件
@@ -935,8 +999,11 @@ async function restoreFromWebDAV() {
     }
 
     if (!downloadResult.response.ok) {
+      if (downloadResult.response.status === 404) {
+        throw new Error(langData.messages.noBackupToday);
+      }
       throw new Error(
-        `WebDAV 下载失败: ${downloadResult.response.status} ${downloadResult.response.statusText}`
+        `WebDAV download failed: ${downloadResult.response.status} ${downloadResult.response.statusText}`
       );
     }
 
@@ -944,20 +1011,24 @@ async function restoreFromWebDAV() {
     const importData = JSON.parse(fileContent);
 
     if (!importData.notes) {
-      throw new Error("备份文件格式无效");
+      throw new Error(langData.messages.missingNotesData);
     }
 
     await processImportedNotes(importData.notes);
     showMessage(
-      `成功从 WebDAV 恢复 ${Object.keys(importData.notes).length} 条备注！`,
+      `${langData.messages.webdavRestoreSuccess} ${
+        Object.keys(importData.notes).length
+      } ${langData.messages.webdavRestoreNum}`,
       "success"
     );
   } catch (error) {
-    console.error("WebDAV 恢复失败:", error);
-    showMessage("WebDAV 恢复失败: " + error.message, "error");
+    showMessage(
+      `${langData.messages.webdavRestoreFailed} + error.message`,
+      "error"
+    );
   } finally {
     button.disabled = false;
-    button.innerHTML = "<span>📥</span> 恢复数据";
+    button.innerHTML = `<span>📥</span> ${langData.restoreData}`;
   }
 }
 
@@ -1087,14 +1158,14 @@ async function showBackupList() {
   const button = document.getElementById("viewBackupList");
   const originalText = button.innerHTML;
   button.disabled = true;
-  button.innerHTML = "<span>⏳</span> 加载中...";
+  button.innerHTML = `<span>⏳</span> ${langData.buttons.loading}`;
 
   try {
     const configResult = await chrome.storage.local.get(["webdavConfig"]);
     const config = configResult.webdavConfig;
 
     if (!config || !config.url) {
-      throw new Error("请先配置 WebDAV 服务器");
+      throw new Error(langData.messages.configureWebdavFirst);
     }
 
     // 创建备份列表对话框
@@ -1103,12 +1174,12 @@ async function showBackupList() {
     dialog.innerHTML = `
       <div class="backup-list-content">
         <div class="backup-list-header">
-          <h3>📋 WebDAV 备份列表</h3>
+          <h3>📋 ${langData.dialog.webdavBackupList}</h3>
           <button class="twitter-notes-close">×</button>
         </div>
         <div class="backup-list-body">
           <div class="backup-loading">
-            <span>⏳</span> 正在加载备份列表...
+            <span>⏳</span> ${langData.dialog.loading}
           </div>
         </div>
       </div>
@@ -1132,9 +1203,9 @@ async function showBackupList() {
       bodyDiv.innerHTML = `
         <div class="backup-empty">
           <span>📁</span><br>
-          服务器上没有找到备份文件<br>
+          ${langData.dialog.noBackupFiles}<br>
           <small style="color: #999; margin-top: 8px; display: block;">
-            查找模式: 包含 "twitter-notes" 的 .json 文件
+            ${langData.dialog.searchPattern}
           </small>
         </div>
       `;
@@ -1146,20 +1217,26 @@ async function showBackupList() {
           <div class="backup-info">
             <div class="backup-name">${file.name}</div>
             <div class="backup-details">
-              大小: ${file.size} | 修改时间: ${file.lastModified}
-              ${file.notesCount ? ` | 备注数量: ${file.notesCount}` : ""}
+              ${langData.dialog.size}: ${file.size} | ${
+            langData.dialog.modifiedTime
+          }: ${file.lastModified}
+              ${
+                file.notesCount
+                  ? ` | ${langData.dialog.notesCount}: ${file.notesCount}`
+                  : ""
+              }
             </div>
           </div>
           <div class="backup-actions">
             <button class="backup-btn backup-btn-restore" data-filename="${
               file.name
             }">
-              恢复
+              ${langData.dialog.restore}
             </button>
             <button class="backup-btn backup-btn-delete" data-filename="${
               file.name
             }">
-              删除
+              ${langData.dialog.delete}
             </button>
           </div>
         </div>
@@ -1183,7 +1260,7 @@ async function showBackupList() {
         button.addEventListener("click", async (e) => {
           const fileName = e.target.getAttribute("data-filename");
           if (
-            confirm(`确定要删除备份文件 "${fileName}" 吗？此操作不可恢复！`)
+            confirm(`${langData.messages.confirmDeleteBackup} : ${fileName}`)
           ) {
             closeDialog();
             await deleteBackupFile(fileName);
@@ -1192,8 +1269,10 @@ async function showBackupList() {
       });
     }
   } catch (error) {
-    console.error("显示备份列表失败:", error);
-    showMessage("加载备份列表失败: " + error.message, "error");
+    showMessage(
+      `${langData.messages.loadBackupListFailed} + error.message`,
+      "error"
+    );
   } finally {
     button.disabled = false;
     button.innerHTML = originalText;
@@ -1643,14 +1722,14 @@ async function restoreFromSpecificBackup(fileName) {
   const button = document.getElementById("viewBackupList");
   const originalText = button.innerHTML;
   button.disabled = true;
-  button.innerHTML = "<span>⏳</span> 恢复中...";
+  button.innerHTML = `<span>⏳</span> ${langData.buttons.restoring}`;
 
   try {
     const configResult = await chrome.storage.local.get(["webdavConfig"]);
     const config = configResult.webdavConfig;
 
     if (!config || !config.url) {
-      throw new Error("请先配置 WebDAV 服务器");
+      throw new Error(langData.messages.configureWebdavFirst);
     }
 
     const webdavUrl = config.url.endsWith("/")
@@ -1688,42 +1767,41 @@ async function restoreFromSpecificBackup(fileName) {
     const fileContent = downloadResult.response.text;
 
     if (!fileContent) {
-      throw new Error("备份文件为空");
+      throw new Error(langData.messages.emptyBackupFile);
     }
 
     let importData;
     try {
       importData = JSON.parse(fileContent);
     } catch (parseError) {
-      throw new Error("备份文件格式无效，无法解析 JSON");
+      throw new Error(langData.messages.invalidBackupFormat);
     }
 
     if (!importData.notes) {
-      throw new Error("备份文件格式无效，缺少 notes 数据");
+      throw new Error(langData.messages.missingNotesData);
     }
 
     // 询问用户是否要覆盖现有数据
     const shouldMerge = confirm(
-      `即将从备份 "${fileName}" 恢复 ${
+      `${langData.messages.restoreFromBackup} ${
         Object.keys(importData.notes).length
-      } 条备注。\n\n` + `点击"确定"将与现有备注合并\n点击"取消"将取消恢复操作`
+      } ${langData.messages.restoreFromBackup2}`
     );
 
     if (!shouldMerge) {
-      showMessage("恢复操作已取消", "info");
+      showMessage(langData.messages.restoreCancelled, "info");
       return;
     }
 
     await processImportedNotes(importData.notes);
     showMessage(
-      `成功从备份 "${fileName}" 恢复 ${
+      `${langData.messages.restoreSuccess} ${
         Object.keys(importData.notes).length
-      } 条备注！`,
+      } ${langData.messages.webdavRestoreNum}`,
       "success"
     );
   } catch (error) {
-    console.error("从特定备份恢复失败:", error);
-    showMessage("恢复失败: " + error.message, "error");
+    showMessage(`${langData.messages.restoreFailed} + error.message`, "error");
   } finally {
     button.disabled = false;
     button.innerHTML = originalText;
@@ -1737,7 +1815,7 @@ async function deleteBackupFile(fileName) {
     const config = configResult.webdavConfig;
 
     if (!config || !config.url) {
-      throw new Error("请先配置 WebDAV 服务器");
+      throw new Error(langData.messages.configureWebdavFirst);
     }
 
     const webdavUrl = config.url.endsWith("/")
@@ -1772,9 +1850,8 @@ async function deleteBackupFile(fileName) {
       );
     }
 
-    showMessage(`备份文件 "${fileName}" 已删除`, "success");
+    showMessage(`${langData.messages.backupDeleted} : ${fileName}`, "success");
   } catch (error) {
-    console.error("删除备份文件失败:", error);
-    showMessage("删除失败: " + error.message, "error");
+    showMessage(`${langData.messages.deleteFailed} + error.message`, "error");
   }
 }
