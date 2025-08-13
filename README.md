@@ -11,12 +11,13 @@
 
 ---
 
-<summary>版本变动</summary>
+<summary>🕑版本变动</summary>
 
 ## v3.0.0
 - Add Webdav backup
 - Add autobackup by hourly/daily/weekly/monthly
 - Add new version check (manually update needed)
+- Lang files preparing...
 
 ## v2.0.2
 - Simple & Stable
