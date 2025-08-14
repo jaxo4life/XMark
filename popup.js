@@ -124,6 +124,8 @@ langBtn.addEventListener("click", () => {
 });
 
 document.addEventListener("DOMContentLoaded", async function () {
+  const cryptoUtilsInstance = null;
+
   // 先加载语言
   await loadLanguage(currentLang);
 
@@ -207,6 +209,22 @@ document.addEventListener("DOMContentLoaded", async function () {
     .addEventListener("click", toggleWebdavConfigPanel);
 });
 
+// 简单的密码编码/解码函数
+function encodePassword(password) {
+  if (!password) return "";
+  return btoa(unescape(encodeURIComponent(password)));
+}
+
+function decodePassword(encodedPassword) {
+  if (!encodedPassword) return "";
+  try {
+    return decodeURIComponent(escape(atob(encodedPassword)));
+  } catch (error) {
+    console.error("密码解码失败:", error);
+    return "";
+  }
+}
+
 // 检查版本更新
 async function checkForUpdates(currentVersion) {
   try {
@@ -223,7 +241,7 @@ async function checkForUpdates(currentVersion) {
         Pragma: "no-cache",
         Expires: Expires, // Use the declared Expires variable
         Accept: "application/vnd.github.v3+json",
-        "User-Agent": "Twitter-Notes-Extension",
+        "User-Agent": "XMark-Extension",
       },
     });
 
@@ -518,7 +536,6 @@ async function toggleAutoBackup() {
       showMessage(langData.messages.autoBackupDisabled, "info");
     }
   } catch (error) {
-    console.error("切换自动备份失败:", error);
     showMessage(langData.messages.settingsFailed, "error");
   }
 }
@@ -568,7 +585,10 @@ async function testAutoBackup() {
 
     showMessage(langData.messages.autoBackupTriggered, "info");
   } catch (error) {
-    showMessage(`${langData.messages.testFailed} + error.message`, "error");
+    showErrorMessage(
+      `${langData.messages.testFailed} + ${error.message}`,
+      "error"
+    );
   } finally {
     button.disabled = false;
     button.innerHTML = originalText;
@@ -692,8 +712,13 @@ async function loadWebdavConfig() {
     if (config.url) document.getElementById("webdavUrl").value = config.url;
     if (config.username)
       document.getElementById("webdavUsername").value = config.username;
-    if (config.password)
-      document.getElementById("webdavPassword").value = config.password;
+    if (config.password) {
+      // 如果密码已编码，先解码
+      const password = config.encoded
+        ? decodePassword(config.password)
+        : config.password;
+      document.getElementById("webdavPassword").value = password;
+    }
   } catch (error) {
     console.error("加载 WebDAV 配置失败:", error);
   }
@@ -715,9 +740,15 @@ async function saveWebdavConfig() {
   }
 
   try {
-    await chrome.storage.local.set({
-      webdavConfig: { url, username, password },
-    });
+    // 简单编码密码
+    const config = {
+      url,
+      username,
+      password: encodePassword(password), // 编码密码
+      encoded: true, // 标记密码已编码
+    };
+
+    await chrome.storage.local.set({ webdavConfig: config });
 
     // 清除之前的连接状态
     await chrome.storage.local.remove(["webdavConnectionStatus"]);
@@ -741,6 +772,11 @@ async function testWebdavConnection() {
 
     if (!config || !config.url) {
       throw new Error(langData.messages.configureWebdavFirst);
+    }
+
+    // 解码密码
+    if (config.encoded && config.password) {
+      config.password = decodePassword(config.password);
     }
 
     // 准备认证头
@@ -788,8 +824,8 @@ async function testWebdavConnection() {
     }
   } catch (error) {
     await chrome.storage.local.set({ webdavConnectionStatus: "failed" });
-    showMessage(
-      `${langData.messages.webdavTestFailed} + error.message`,
+    showErrorMessage(
+      `${langData.messages.webdavTestFailed} + ${error.message}`,
       "error"
     );
   } finally {
@@ -818,7 +854,7 @@ async function exportNotes() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `twitter-notes-${new Date().toISOString().split("T")[0]}.json`;
+    a.download = `XMark-${new Date().toISOString().split("T")[0]}.json`;
     a.click();
 
     URL.revokeObjectURL(url);
@@ -886,6 +922,11 @@ async function backupToWebDAV() {
       throw new Error(langData.messages.configureWebdavFirst);
     }
 
+    // 在每个需要使用密码的函数中添加解码
+    if (config.encoded && config.password) {
+      config.password = decodePassword(config.password);
+    }
+
     // 获取备注数据
     const notesResult = await chrome.storage.local.get(["twitterNotes"]);
     const notes = notesResult.twitterNotes || {};
@@ -897,7 +938,7 @@ async function backupToWebDAV() {
       notes: notes,
     };
 
-    const fileName = `twitter-notes-backup-${
+    const fileName = `XMark-backup-${
       new Date().toISOString().split("T")[0]
     }.json`;
     const fileContent = JSON.stringify(exportData, null, 2);
@@ -943,8 +984,8 @@ async function backupToWebDAV() {
 
     showMessage(langData.messages.webdavBackupSuccess, "success");
   } catch (error) {
-    showMessage(
-      `${langData.messages.webdavBackupFailed} + error.message`,
+    showErrorMessage(
+      `${langData.messages.webdavBackupFailed} + ${error.message}`,
       "error"
     );
   } finally {
@@ -967,9 +1008,14 @@ async function restoreFromWebDAV() {
       throw new Error(langData.messages.configureWebdavFirst);
     }
 
+    // 在每个需要使用密码的函数中添加解码
+    if (config.encoded && config.password) {
+      config.password = decodePassword(config.password);
+    }
+
     // 尝试获取最新的备份文件
     const today = new Date().toISOString().split("T")[0];
-    const fileName = `twitter-notes-backup-${today}.json`;
+    const fileName = `XMark-backup-${today}.json`;
     const webdavUrl = config.url.endsWith("/")
       ? config.url + fileName
       : config.url + "/" + fileName;
@@ -1022,8 +1068,8 @@ async function restoreFromWebDAV() {
       "success"
     );
   } catch (error) {
-    showMessage(
-      `${langData.messages.webdavRestoreFailed} + error.message`,
+    showErrorMessage(
+      `${langData.messages.webdavRestoreFailed} + ${error.message}`,
       "error"
     );
   } finally {
@@ -1052,105 +1098,6 @@ async function clearAllNotes() {
   } catch (error) {
     showErrorMessage(langData.clearFail);
   }
-}
-
-function showMessage(messageHTML) {
-  const messageDiv = document.createElement("div");
-
-  // 创建临时消息提示
-
-  messageDiv.innerHTML = messageHTML;
-  messageDiv.style.cssText = `
-    position: fixed;
-    bottom: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: mediumseagreen;
-    color: white;
-    padding: 8px 16px;
-    border-radius: 4px;
-    font-size: 12px;
-    z-index: 1000;
-    white-space: pre-wrap;
-  `;
-
-  // 创建关闭按钮元素
-  const closeBtn = document.createElement("button");
-  closeBtn.textContent = "×";
-  closeBtn.style.cssText = `
-		position: absolute;
-		top: 2px;
-		right: 2px;
-		background: transparent;
-		border: none;
-		color: rebeccapurple;
-		font-size: 16px;
-		font-weight: bold;
-		cursor: pointer;
-		line-height: 1;
-	`;
-
-  // 关闭按钮点击时隐藏或移除消息弹窗
-  closeBtn.onclick = () => {
-    messageDiv.style.display = "none";
-  };
-  messageDiv.appendChild(closeBtn);
-
-  document.body.appendChild(messageDiv);
-
-  setTimeout(() => {
-    document.body.removeChild(messageDiv);
-  }, 8000);
-}
-
-function showErrorMessage(messageHTML) {
-  const messageDiv = document.createElement("div");
-
-  // 创建临时消息提示
-
-  messageDiv.innerHTML = messageHTML;
-  messageDiv.style.cssText = `
-    position: fixed;
-    bottom: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: red;
-    color: white;
-    padding: 8px 16px;
-    border-radius: 4px;
-    font-size: 12px;
-		font-weight: bold;
-    z-index: 1000;
-    white-space: pre-wrap;
-  `;
-
-  // 创建关闭按钮元素
-  const closeBtn = document.createElement("button");
-  closeBtn.textContent = "×";
-  closeBtn.style.cssText = `
-		position: absolute;
-		top: 2px;
-		right: 2px;
-		background: transparent;
-		border: none;
-		color: darkblue;
-		font-size: 16px;
-		font-weight: bold;
-		cursor: pointer;
-		line-height: 1;
-	`;
-
-  // 关闭按钮点击时隐藏或移除消息弹窗
-  closeBtn.onclick = () => {
-    messageDiv.style.display = "none";
-  };
-  messageDiv.appendChild(closeBtn);
-
-  document.body.appendChild(messageDiv);
-
-  setTimeout(() => {
-    document.body.removeChild(messageDiv);
-  }, 8000);
 }
 
 // 显示备份列表
@@ -1269,8 +1216,8 @@ async function showBackupList() {
       });
     }
   } catch (error) {
-    showMessage(
-      `${langData.messages.loadBackupListFailed} + error.message`,
+    showErrorMessage(
+      `${langData.messages.loadBackupListFailed} + ${error.message}`,
       "error"
     );
   } finally {
@@ -1284,8 +1231,13 @@ async function getWebDAVBackupList(config) {
   console.log("开始获取 WebDAV 备份列表...");
   const headers = {};
   if (config.username && config.password) {
+    // 如果密码已编码，先解码
+    const password = config.encoded
+      ? decodePassword(config.password)
+      : config.password;
+
     headers["Authorization"] =
-      "Basic " + btoa(config.username + ":" + config.password);
+      "Basic " + btoa(config.username + ":" + password);
   }
 
   // 添加缓存控制头，确保获取最新数据
@@ -1572,14 +1524,14 @@ async function tryCommonFilePatterns(config, headers) {
     date.setDate(date.getDate() - i);
     const dateStr = date.toISOString().split("T")[0];
 
-    patterns.push(`twitter-notes-backup-${dateStr}.json`);
-    patterns.push(`twitter-notes-auto-backup-${dateStr}.json`);
-    patterns.push(`twitter-notes-${dateStr}.json`);
+    patterns.push(`XMark-backup-${dateStr}.json`);
+    patterns.push(`XMark-auto-backup-${dateStr}.json`);
+    patterns.push(`XMark-${dateStr}.json`);
   }
 
   // 添加一些其他可能的模式
-  patterns.push("twitter-notes.json");
-  patterns.push("twitter-notes-backup.json");
+  patterns.push("XMark.json");
+  patterns.push("XMark-backup.json");
   patterns.push("notes.json");
 
   // 小时备份模式 - 扩展到最近7天，每天24小时
@@ -1590,7 +1542,7 @@ async function tryCommonFilePatterns(config, headers) {
 
     for (let hour = 0; hour < 24; hour++) {
       const hourStr = hour.toString().padStart(2, "0");
-      patterns.push(`twitter-notes-hourly-${dateStr}-${hourStr}.json`);
+      patterns.push(`XMark-hourly-${dateStr}-${hourStr}.json`);
     }
   }
 
@@ -1801,7 +1753,10 @@ async function restoreFromSpecificBackup(fileName) {
       "success"
     );
   } catch (error) {
-    showMessage(`${langData.messages.restoreFailed} + error.message`, "error");
+    showErrorMessage(
+      `${langData.messages.restoreFailed} + ${error.message}`,
+      "error"
+    );
   } finally {
     button.disabled = false;
     button.innerHTML = originalText;
@@ -1852,6 +1807,108 @@ async function deleteBackupFile(fileName) {
 
     showMessage(`${langData.messages.backupDeleted} : ${fileName}`, "success");
   } catch (error) {
-    showMessage(`${langData.messages.deleteFailed} + error.message`, "error");
+    showErrorMessage(
+      `${langData.messages.deleteFailed} + ${error.message}`,
+      "error"
+    );
   }
+}
+
+function showMessage(messageHTML) {
+  const messageDiv = document.createElement("div");
+
+  // 创建临时消息提示
+
+  messageDiv.innerHTML = messageHTML;
+  messageDiv.style.cssText = `
+    position: fixed;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: mediumseagreen;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 12px;
+    z-index: 1000;
+    white-space: pre-wrap;
+  `;
+
+  // 创建关闭按钮元素
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "×";
+  closeBtn.style.cssText = `
+		position: absolute;
+		top: 2px;
+		right: 2px;
+		background: transparent;
+		border: none;
+		color: rebeccapurple;
+		font-size: 16px;
+		font-weight: bold;
+		cursor: pointer;
+		line-height: 1;
+	`;
+
+  // 关闭按钮点击时隐藏或移除消息弹窗
+  closeBtn.onclick = () => {
+    messageDiv.style.display = "none";
+  };
+  messageDiv.appendChild(closeBtn);
+
+  document.body.appendChild(messageDiv);
+
+  setTimeout(() => {
+    document.body.removeChild(messageDiv);
+  }, 3000);
+}
+
+function showErrorMessage(messageHTML) {
+  const messageDiv = document.createElement("div");
+
+  // 创建临时消息提示
+
+  messageDiv.innerHTML = messageHTML;
+  messageDiv.style.cssText = `
+    position: fixed;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: red;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 12px;
+		font-weight: bold;
+    z-index: 1000;
+    white-space: pre-wrap;
+  `;
+
+  // 创建关闭按钮元素
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "×";
+  closeBtn.style.cssText = `
+		position: absolute;
+		top: 2px;
+		right: 2px;
+		background: transparent;
+		border: none;
+		color: darkblue;
+		font-size: 16px;
+		font-weight: bold;
+		cursor: pointer;
+		line-height: 1;
+	`;
+
+  // 关闭按钮点击时隐藏或移除消息弹窗
+  closeBtn.onclick = () => {
+    messageDiv.style.display = "none";
+  };
+  messageDiv.appendChild(closeBtn);
+
+  document.body.appendChild(messageDiv);
+
+  setTimeout(() => {
+    document.body.removeChild(messageDiv);
+  }, 3000);
 }

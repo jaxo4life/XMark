@@ -72,7 +72,7 @@
   "messages": {
     "exportSuccess": "Notes exported successfully!",
     "exportFailed": "Export failed, please try again:",
-    "importSuccess": "Successfully imported {count} notes!",
+    "importSuccess": "Successfully imported notes!",
     "importFailed": "Import failed, please check file format",
     "invalidFileFormat": "Invalid notes file format",
     "webdavConfigSaved": "WebDAV configuration saved, please test connection",
@@ -115,7 +115,7 @@
     "webdavBackupList": "WebDAV Backup List",
     "loading": "Loading backup list...",
     "noBackupFiles": "No backup files found on server",
-    "searchPattern": "Search pattern: .json files containing \"twitter-notes\"",
+    "searchPattern": "Search pattern: .json files containing \"XMark\"",
     "size": "Size",
     "modifiedTime": "Modified Time",
     "notesCount": "Notes Count",

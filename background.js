@@ -1,5 +1,16 @@
 // Twitter Notes Background Script
 
+// 简单的密码解码函数
+function decodePassword(encodedPassword) {
+  if (!encodedPassword) return "";
+  try {
+    return decodeURIComponent(escape(atob(encodedPassword)));
+  } catch (error) {
+    console.error("密码解码失败:", error);
+    return "";
+  }
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   console.log("Twitter Notes 扩展已安装");
 
@@ -95,6 +106,11 @@ async function performAutoBackup() {
       return;
     }
 
+    // 解码密码（如果需要）
+    if (config.encoded && config.password) {
+      config.password = decodePassword(config.password);
+    }
+
     // 获取备注数据
     const notesResult = await chrome.storage.local.get(["twitterNotes"]);
     const notes = notesResult.twitterNotes || {};
@@ -128,10 +144,10 @@ async function performAutoBackup() {
         .getHours()
         .toString()
         .padStart(2, "0")}`;
-      fileName = `twitter-notes-hourly-${dateHour}.json`;
+      fileName = `XMark-hourly-${dateHour}.json`;
     } else {
       // 其他频率使用日期
-      fileName = `twitter-notes-auto-backup-${
+      fileName = `XMark-auto-backup-${
         new Date().toISOString().split("T")[0]
       }.json`;
     }

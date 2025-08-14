@@ -72,7 +72,7 @@
   "messages": {
     "exportSuccess": "备注导出成功！",
     "exportFailed": "导出失败，请重试:",
-    "importSuccess": "成功导入 {count} 条备注！",
+    "importSuccess": "成功导入备注！",
     "importFailed": "导入失败，请检查文件格式",
     "invalidFileFormat": "无效的备注文件格式",
     "webdavConfigSaved": "WebDAV 配置已保存，请测试连接",
@@ -115,7 +115,7 @@
     "webdavBackupList": "WebDAV 备份列表",
     "loading": "正在加载备份列表...",
     "noBackupFiles": "服务器上没有找到备份文件",
-    "searchPattern": "查找模式: 包含 \"twitter-notes\" 的 .json 文件",
+    "searchPattern": "查找模式: 包含 \"XMark\" 的 .json 文件",
     "size": "大小",
     "modifiedTime": "修改时间",
     "notesCount": "备注数量",
