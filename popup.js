@@ -315,7 +315,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         "success"
       );
     } else {
-      showMessage(
+      showErrorMessage(
         `${langData.messages.autoBackupFailed} ${message.error}`,
         "error"
       );
@@ -536,7 +536,7 @@ async function toggleAutoBackup() {
       showMessage(langData.messages.autoBackupDisabled, "info");
     }
   } catch (error) {
-    showMessage(langData.messages.settingsFailed, "error");
+    showErrorMessage(langData.messages.settingsFailed, "error");
   }
 }
 
@@ -558,7 +558,7 @@ async function updateAutoBackupFrequency() {
       "success"
     );
   } catch (error) {
-    showMessage(langData.messages.updateFailed, "error");
+    showErrorMessage(langData.messages.updateFailed, "error");
   }
 }
 
@@ -730,12 +730,12 @@ async function saveWebdavConfig() {
   const password = document.getElementById("webdavPassword").value.trim();
 
   if (!url) {
-    showMessage(langData.messages.enterServerAddress, "error");
+    showErrorMessage(langData.messages.enterServerAddress, "error");
     return;
   }
 
   if (!username || !password) {
-    showMessage(langData.messages.enterCredentials, "error");
+    showErrorMessage(langData.messages.enterCredentials, "error");
     return;
   }
 
@@ -756,7 +756,7 @@ async function saveWebdavConfig() {
     showMessage(langData.messages.webdavConfigSaved, "success");
     await updateConfigurationStatusOnly(); // 只更新状态，不改变折叠状态
   } catch (error) {
-    showMessage(langData.messages.webdavConfigSaveFailed, "error");
+    showErrorMessage(langData.messages.webdavConfigSaveFailed, "error");
   }
 }
 
@@ -1741,7 +1741,7 @@ async function restoreFromSpecificBackup(fileName) {
     );
 
     if (!shouldMerge) {
-      showMessage(langData.messages.restoreCancelled, "info");
+      showErrorMessage(langData.messages.restoreCancelled, "info");
       return;
     }
 

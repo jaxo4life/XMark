@@ -28,18 +28,28 @@ chrome.runtime.onInstalled.addListener(() => {
   });
 });
 
+let lastFrequency;
+
 // 监听存储变化，可以用于同步等功能
 chrome.storage.onChanged.addListener((changes, namespace) => {
   if (namespace === "local" && changes.twitterNotes) {
     console.log("备注数据已更新");
   }
 
-  // 监听自动备份设置变化
   if (namespace === "local" && changes.autoBackupSettings) {
     const newSettings = changes.autoBackupSettings.newValue;
-    if (newSettings && newSettings.enabled) {
+    const oldSettings = changes.autoBackupSettings.oldValue;
+
+    // 只有当频率或 enabled 状态真的变了，才重置定时器
+    if (
+      newSettings &&
+      newSettings.enabled &&
+      (!oldSettings ||
+        newSettings.frequency !== oldSettings.frequency ||
+        newSettings.enabled !== oldSettings.enabled)
+    ) {
       setupAutoBackup(newSettings.frequency);
-    } else {
+    } else if (!newSettings.enabled) {
       clearAutoBackup();
     }
   }
@@ -57,32 +67,32 @@ function setupAutoBackup(frequency) {
   // 清除现有的定时器
   chrome.alarms.clear("autoBackup");
 
-  let delayInMinutes;
+  let periodInMinutes;
   switch (frequency) {
     case "hourly":
-      delayInMinutes = 60; // 1小时
+      periodInMinutes = 60; // 1小时
       break;
     case "daily":
-      delayInMinutes = 24 * 60; // 24小时
+      periodInMinutes = 24 * 60; // 24小时
       break;
     case "weekly":
-      delayInMinutes = 7 * 24 * 60; // 7天
+      periodInMinutes = 7 * 24 * 60; // 7天
       break;
     case "monthly":
-      delayInMinutes = 30 * 24 * 60; // 30天
+      periodInMinutes = 30 * 24 * 60; // 30天
       break;
     default:
-      delayInMinutes = 24 * 60;
+      periodInMinutes = 24 * 60;
   }
 
   // 创建新的定时器
   chrome.alarms.create("autoBackup", {
-    delayInMinutes: delayInMinutes,
-    periodInMinutes: delayInMinutes,
+    delayInMinutes: 0.1,
+    periodInMinutes: periodInMinutes,
   });
 
   console.log(
-    `自动备份已设置，频率: ${frequency}，间隔: ${delayInMinutes} 分钟`
+    `自动备份已设置，频率: ${frequency}，间隔: ${periodInMinutes} 分钟`
   );
 }
 
