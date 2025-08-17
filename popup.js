@@ -782,8 +782,13 @@ async function testWebdavConnection() {
     // 准备认证头
     const headers = {};
     if (config.username && config.password) {
+      // 如果密码已编码，先解码
+      const password = config.encoded
+        ? decodePassword(config.password)
+        : config.password;
+
       headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + config.password);
+        "Basic " + btoa(config.username + ":" + password);
     }
 
     // 测试连接 - 使用 OPTIONS 方法
@@ -1008,23 +1013,35 @@ async function restoreFromWebDAV() {
       throw new Error(langData.messages.configureWebdavFirst);
     }
 
-    // 在每个需要使用密码的函数中添加解码
-    if (config.encoded && config.password) {
-      config.password = decodePassword(config.password);
+    // 获取所有备份文件列表
+    console.log("正在查找最新的备份文件...");
+    const backupFiles = await getWebDAVBackupList(config);
+
+    if (backupFiles.length === 0) {
+      throw new Error("服务器上没有找到任何备份文件");
     }
 
-    // 尝试获取最新的备份文件
-    const today = new Date().toISOString().split("T")[0];
-    const fileName = `XMark-backup-${today}.json`;
+    // 按修改时间排序，获取最新的备份文件
+    const latestBackup = backupFiles.sort((a, b) => {
+      const dateA = new Date(a.lastModified);
+      const dateB = new Date(b.lastModified);
+      return dateB - dateA;
+    })[0];
+
     const webdavUrl = config.url.endsWith("/")
-      ? config.url + fileName
-      : config.url + "/" + fileName;
+      ? config.url + latestBackup.name
+      : config.url + "/" + latestBackup.name;
 
     // 准备认证头
     const headers = {};
     if (config.username && config.password) {
+      // 如果密码已编码，先解码
+      const password = config.encoded
+        ? decodePassword(config.password)
+        : config.password;
+
       headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + config.password);
+        "Basic " + btoa(config.username + ":" + password);
     }
 
     // 通过 background script 发送请求以绕过 CORS
@@ -1690,8 +1707,13 @@ async function restoreFromSpecificBackup(fileName) {
 
     const headers = {};
     if (config.username && config.password) {
+      // 如果密码已编码，先解码
+      const password = config.encoded
+        ? decodePassword(config.password)
+        : config.password;
+
       headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + config.password);
+        "Basic " + btoa(config.username + ":" + password);
     }
 
     const downloadResult = await new Promise((resolve) => {
@@ -1779,8 +1801,13 @@ async function deleteBackupFile(fileName) {
 
     const headers = {};
     if (config.username && config.password) {
+      // 如果密码已编码，先解码
+      const password = config.encoded
+        ? decodePassword(config.password)
+        : config.password;
+
       headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + config.password);
+        "Basic " + btoa(config.username + ":" + password);
     }
 
     const deleteResult = await new Promise((resolve) => {

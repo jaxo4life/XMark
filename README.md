@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/version-3.0.0-blue.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-3.0.2-blue.svg" alt="Version"></a>
   <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Manifest-V3-green.svg" alt="Manifest"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Chrome%20Extension-orange.svg" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
@@ -13,16 +13,24 @@
 
 <summary>🕑 Changed</summary>
 
+## v3.0.2
+
+- Fix some bugs
+- It's now a stable one
+
 ## v3.0.1
+
 - Lang files done
 
 ## v3.0.0
+
 - Add Webdav backup
 - Add autobackup by hourly/daily/weekly/monthly
 - Add new version check (manually update needed)
 - Lang files preparing...
 
 ## v2.0.2
+
 - Simple & Stable
 - Local and hand backup only
 
