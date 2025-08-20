@@ -55,6 +55,19 @@
   "editNote": "编辑备注",
   "viewDetail": "查看详情",
   "noteDetail": "备注详情",
+  "tagManagement": "标签管理",
+  "addTag": "添加标签",
+  "editTag": "编辑标签",
+  "tagName": "标签名称:",
+  "tagColor": "标签颜色:",
+  "saveTag": "保存标签",
+  "deleteTag": "删除标签",
+  "selectTag": "选择标签",
+  "noTag": "无标签",
+  "tagNamePlaceholder": "输入标签名称...",
+  "confirmDeleteTag": "确定要删除这个标签吗？",
+  "tagExists": "标签名称已存在",
+  "tagNameRequired": "请输入标签名称",
   "status": {
     "webdavConnected": "WebDAV 服务器已连接",
     "webdavConnectionFailed": "WebDAV 连接失败，请检查配置",
@@ -109,7 +122,11 @@
     "restoreFailed": "恢复失败:",
     "confirmDeleteBackup": "确定要删除这个备份文件吗？此操作不可恢复！",
     "backupDeleted": "备份文件已删除",
-    "deleteFailed": "删除失败:"
+    "deleteFailed": "删除失败:",
+    "tagCreated": "已创建",
+    "tagUpdated": "已更新",
+    "tagDeleted": "已删除",
+    "tagDeletedFailed": "标签删除失败"
   },
   "dialog": {
     "webdavBackupList": "WebDAV 备份列表",

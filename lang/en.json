@@ -55,6 +55,19 @@
   "editNote": "Edit Note",
   "viewDetail": "View Details",
   "noteDetail": "Note Details",
+  "tagManagement": "Tag Management",
+  "addTag": "Add Tag",
+  "editTag": "Edit Tag",
+  "tagName": "Tag Name:",
+  "tagColor": "Tag Color:",
+  "saveTag": "Save Tag",
+  "deleteTag": "Delete Tag",
+  "selectTag": "Select Tag",
+  "noTag": "No Tag",
+  "tagNamePlaceholder": "Enter tag name...",
+  "confirmDeleteTag": "Are you sure you want to delete this tag?",
+  "tagExists": "Tag name already exists",
+  "tagNameRequired": "Please enter tag name",
   "status": {
     "webdavConnected": "WebDAV server connected",
     "webdavConnectionFailed": "WebDAV connection failed, please check configuration",
@@ -109,7 +122,11 @@
     "restoreFailed": "Restore failed:",
     "confirmDeleteBackup": "Are you sure you want to delete this backup file? This action cannot be undone!",
     "backupDeleted": "Backup file deleted",
-    "deleteFailed": "Delete failed:"
+    "deleteFailed": "Delete failed:",
+    "tagCreated": "Created",
+    "tagUpdated": "Updated",
+    "tagDeleted": "Deleted",
+    "tagDeletedFailed": "Tag delete failed"
   },
   "dialog": {
     "webdavBackupList": "WebDAV Backup List",

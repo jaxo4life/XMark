@@ -121,9 +121,10 @@ async function performAutoBackup() {
       config.password = decodePassword(config.password);
     }
 
-    // 获取备注数据
-    const notesResult = await chrome.storage.local.get(["twitterNotes"]);
-    const notes = notesResult.twitterNotes || {};
+    // 获取备注和标签数据
+    const result = await chrome.storage.local.get(["twitterNotes", "noteTags"]);
+    const notes = result.twitterNotes || {};
+    const tags = result.noteTags || {};
 
     if (Object.keys(notes).length === 0) {
       console.log("没有备注数据，跳过自动备份");
@@ -142,6 +143,7 @@ async function performAutoBackup() {
       version: manifest.version,
       exportTime: new Date().toISOString(),
       notes: notes,
+      tags: tags,
       autoBackup: true,
       frequency: frequency,
     };

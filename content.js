@@ -422,8 +422,20 @@ class TwitterNotes {
       const noteDescription = currentNote.description || "";
 
       noteButton.classList.add("has-note");
-      noteDisplay.textContent = `[${noteName}]`;
+      noteDisplay.textContent = `${noteName}`;
       noteDisplay.style.display = "inline";
+
+      // 添加标签颜色显示
+      if (currentNote.tagId) {
+        chrome.storage.local.get(["noteTags"]).then((result) => {
+          const tags = result.noteTags || {};
+          const tag = tags[currentNote.tagId];
+          if (tag) {
+            noteDisplay.style.backgroundColor = tag.color;
+            noteDisplay.style.color = "white";
+          }
+        });
+      }
 
       // 如果有描述，显示详情按钮
       if (noteDescription) {
@@ -518,12 +530,16 @@ class TwitterNotes {
     }
 
     getCurrentLangData()
-      .then(() => {
+      .then(async () => {
         const dialog = document.createElement("div");
         dialog.className = "twitter-notes-detail-dialog";
 
         const noteName = currentNote.name || "";
         const noteDescription = currentNote.description || "";
+
+        // 加载标签选项
+        const tagResult = await chrome.storage.local.get(["noteTags"]);
+        const availableTags = tagResult.noteTags || {};
 
         dialog.innerHTML = `
 				<div class="twitter-notes-detail-content">
@@ -553,6 +569,18 @@ class TwitterNotes {
 								<div class="note-value">${noteDescription}</div>
 							</div>
 						`
+                : ""
+            }
+            ${
+              currentNote.tagId && availableTags[currentNote.tagId]
+                ? `
+              <div class="note-field">
+                <label>${langData.tagName}</label>
+                <div class="note-value">${
+                  availableTags[currentNote.tagId].name
+                }</div>
+              </div>
+            `
                 : ""
             }
 						<div class="note-field">
@@ -619,7 +647,7 @@ class TwitterNotes {
     }
 
     getCurrentLangData()
-      .then(() => {
+      .then(async () => {
         const dialog = document.createElement("div");
         dialog.className = "twitter-notes-dialog";
 
@@ -635,6 +663,10 @@ class TwitterNotes {
             "0"
           )}-${String(d.getDate()).padStart(2, "0")}`;
         };
+
+        // 加载标签选项
+        const tagResult = await chrome.storage.local.get(["noteTags"]);
+        const availableTags = tagResult.noteTags || {};
 
         dialog.innerHTML = `
 				<div class="twitter-notes-dialog-content">
@@ -667,6 +699,23 @@ class TwitterNotes {
 								<span class="current-name">${noteName.length}</span>/50
 							</div>
 						</div>
+            <div class="input-group">
+              <label for="noteTag">${langData.selectTag}</label>
+              <select id="noteTag" class="tag-select">
+                <option value="">${langData.noTag}</option>
+                ${Object.entries(availableTags)
+                  .map(([tagId, tag]) => {
+                    // 判断是否选中
+                    const selected =
+                      currentNote && currentNote.tagId == tagId
+                        ? "selected"
+                        : "";
+                    // 注意 style 内要用双引号包围属性值
+                    return `<option value="${tagId}" ${selected} style="color:${tag.color}; font-weight:bold;">${tag.name}</option>`;
+                  })
+                  .join("")}
+              </select>
+            </div>
 						<div class="input-group">
 							<label for="noteDescription">${langData.noteContent}</label>
 							<textarea 
@@ -702,6 +751,7 @@ class TwitterNotes {
         const closeBtn = dialog.querySelector(".twitter-notes-close");
         const saveBtn = dialog.querySelector("#saveNote");
         const deleteBtn = dialog.querySelector("#deleteNote");
+        const tagSelectElement = dialog.querySelector("#noteTag");
 
         nameInput.focus();
 
@@ -739,6 +789,7 @@ class TwitterNotes {
         saveBtn.addEventListener("click", async () => {
           const noteName = nameInput.value.trim();
           const noteDescription = descTextarea.value.trim();
+          const tagId = tagSelectElement.value || null;
 
           if (!noteName) {
             alert(langData.notePlaceholder);
@@ -749,6 +800,7 @@ class TwitterNotes {
           const noteData = {
             name: noteName,
             description: noteDescription,
+            tagId: tagId,
             username: username,
             userId: userId,
             createdAt: currentNote
@@ -816,8 +868,20 @@ class TwitterNotes {
             const noteDescription = hasNote.description || "";
 
             button.title = `${langData.editNote}: ${noteName}`;
-            display.textContent = `[${noteName}]`;
+            display.textContent = `${noteName}`;
             display.style.display = "inline";
+
+            // 添加标签颜色显示
+            if (hasNote.tagId) {
+              chrome.storage.local.get(["noteTags"]).then((result) => {
+                const tags = result.noteTags || {};
+                const tag = tags[hasNote.tagId];
+                if (tag) {
+                  display.style.backgroundColor = tag.color;
+                  display.style.color = "white";
+                }
+              });
+            }
 
             if (noteDescription) {
               detailButton.style.display = "inline";

@@ -38,6 +38,13 @@ function updateTexts() {
   document.getElementById("clearBtn").textContent =
     langData.clearNotes || "Clear";
 
+  // 标签更新
+  document.querySelector(".tag-section h4").textContent =
+    langData.tagManagement;
+  document.getElementById(
+    "addTagBtn"
+  ).innerHTML = `<span>➕</span> ${langData.addTag}`;
+
   // WebDAV更新
   document.querySelector(".cloud-section h4").textContent =
     langData.webdavCloudBackup;
@@ -151,6 +158,9 @@ document.addEventListener("DOMContentLoaded", async function () {
   // 加载自动备份设置
   await loadAutoBackupSettings();
 
+  // 加载标签
+  await loadTags();
+
   // 检查配置状态并更新界面
   await updateConfigurationStatus();
 
@@ -191,6 +201,19 @@ document.addEventListener("DOMContentLoaded", async function () {
   document
     .getElementById("testAutoBackup")
     .addEventListener("click", testAutoBackup);
+
+  // 标签管理事件
+  document
+    .getElementById("addTagBtn")
+    .addEventListener("click", showAddTagDialog);
+
+  const tagList = document.getElementById("tagList");
+  tagList.addEventListener("click", (event) => {
+    if (event.target.classList.contains("tag-edit")) {
+      const tagId = event.target.dataset.id;
+      showEditTagDialog(tagId);
+    }
+  });
 
   // 监听配置输入变化 - 只更新状态，不改变折叠状态
   document
@@ -842,14 +865,16 @@ async function testWebdavConnection() {
 
 async function exportNotes() {
   try {
-    const result = await chrome.storage.local.get(["twitterNotes"]);
+    const result = await chrome.storage.local.get(["twitterNotes", "noteTags"]);
     const notes = result.twitterNotes || {};
+    const tags = result.noteTags || {};
 
     const manifest = chrome.runtime.getManifest();
     const exportData = {
       version: manifest.version,
       exportTime: new Date().toISOString(),
       notes: notes,
+      tags: tags,
     };
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], {
@@ -882,8 +907,9 @@ async function importNotes(event) {
     }
 
     // 获取现有备注
-    const result = await chrome.storage.local.get(["twitterNotes"]);
+    const result = await chrome.storage.local.get(["twitterNotes", "noteTags"]);
     const existingNotes = result.twitterNotes || {};
+    const existingTags = result.noteTags || {};
 
     // 处理导入的备注，确保格式正确
     const processedNotes = {};
@@ -891,18 +917,33 @@ async function importNotes(event) {
       processedNotes[userId] = note;
     });
 
-    // 合并备注（导入的备注会覆盖现有的同用户备注）
-    const mergedNotes = { ...existingNotes, ...processedNotes };
+    // 处理导入的标签
+    const processedTags = {};
+    if (importData.tags) {
+      Object.entries(importData.tags).forEach(([tagId, tag]) => {
+        processedTags[tagId] = tag;
+      });
+    }
 
-    await chrome.storage.local.set({ twitterNotes: mergedNotes });
+    // 合并数据
+    const mergedNotes = { ...existingNotes, ...processedNotes };
+    const mergedTags = { ...existingTags, ...processedTags };
+
+    await chrome.storage.local.set({
+      twitterNotes: mergedNotes,
+      noteTags: mergedTags,
+    });
 
     // 重新加载数据
     await loadStats();
     await loadRecentNotes();
+    await loadTags();
 
+    const noteCount = Object.keys(processedNotes).length;
+    const tagCount = Object.keys(processedTags).length;
     showMessage(
-      `${langData.importSuccess} ${Object.keys(processedNotes).length} ${
-        langData.notes
+      `${langData.importSuccess} ${noteCount} ${langData.notes}${
+        tagCount > 0 ? ` 和 ${tagCount} 个标签` : ""
       }`
     );
   } catch (error) {
@@ -932,15 +973,17 @@ async function backupToWebDAV() {
       config.password = decodePassword(config.password);
     }
 
-    // 获取备注数据
-    const notesResult = await chrome.storage.local.get(["twitterNotes"]);
-    const notes = notesResult.twitterNotes || {};
+    // 获取备注和标签数据
+    const result = await chrome.storage.local.get(["twitterNotes", "noteTags"]);
+    const notes = result.twitterNotes || {};
+    const tags = result.noteTags || {};
 
     const manifest = chrome.runtime.getManifest();
     const exportData = {
       version: manifest.version,
       exportTime: new Date().toISOString(),
       notes: notes,
+      tags: tags,
     };
 
     const fileName = `XMark-backup-${
@@ -1078,6 +1121,16 @@ async function restoreFromWebDAV() {
     }
 
     await processImportedNotes(importData.notes);
+
+    // 处理标签数据
+    if (importData.tags) {
+      const result = await chrome.storage.local.get(["noteTags"]);
+      const existingTags = result.noteTags || {};
+      const mergedTags = { ...existingTags, ...importData.tags };
+      await chrome.storage.local.set({ noteTags: mergedTags });
+      await loadTags();
+    }
+
     showMessage(
       `${langData.messages.webdavRestoreSuccess} ${
         Object.keys(importData.notes).length
@@ -1102,9 +1155,10 @@ async function clearAllNotes() {
 
   try {
     await exportNotes();
-    await chrome.storage.local.remove(["twitterNotes"]);
+    await chrome.storage.local.remove(["twitterNotes", "noteTags"]);
     await loadStats();
     await loadRecentNotes();
+    await loadTags();
 
     showMessage(
       '<span style="font-weight:bold; font-size:16px;color:#FFD700;">' +
@@ -1768,6 +1822,16 @@ async function restoreFromSpecificBackup(fileName) {
     }
 
     await processImportedNotes(importData.notes);
+
+    // 恢复标签数据
+    if (importData.tags) {
+      const result = await chrome.storage.local.get(["noteTags"]);
+      const existingTags = result.noteTags || {};
+      const mergedTags = { ...existingTags, ...importData.tags };
+      await chrome.storage.local.set({ noteTags: mergedTags });
+      await loadTags();
+    }
+
     showMessage(
       `${langData.messages.restoreSuccess} ${
         Object.keys(importData.notes).length
@@ -1938,4 +2002,368 @@ function showErrorMessage(messageHTML) {
   setTimeout(() => {
     document.body.removeChild(messageDiv);
   }, 3000);
+}
+
+function showAddTagDialog() {
+  const existingDialog = document.querySelector(".tag-dialog");
+  if (existingDialog) {
+    existingDialog.remove();
+  }
+
+  getCurrentLangData()
+    .then(() => {
+      const dialog = document.createElement("div");
+      dialog.className = "tag-dialog";
+
+      const colors = [
+        "#1d9bf0",
+        "#00ba7c",
+        "#ff6b35",
+        "#f91880",
+        "#7856ff",
+        "#ffad1f",
+        "#20bf6b",
+        "#eb4d4b",
+        "#6c5ce7",
+        "#a29bfe",
+        "#fd79a8",
+        "#fdcb6e",
+      ];
+
+      dialog.innerHTML = `
+        <div class="tag-dialog-content">
+          <div class="tag-dialog-header">
+            <h3>🏷️ ${langData.addTag}</h3>
+            <button class="twitter-notes-close">×</button>
+          </div>
+          <div class="tag-dialog-body">
+            <div class="input-group">
+              <label for="tagName">${langData.tagName}</label>
+              <input 
+                type="text"
+                id="tagName"
+                class="twitter-notes-input" 
+                placeholder="${langData.tagNamePlaceholder}"
+                maxlength="20"
+              />
+            </div>
+            <div class="input-group">
+              <label>${langData.tagColor}</label>
+              <div class="color-picker-grid">
+                ${colors
+                  .map(
+                    (color, index) => `
+                  <div class="color-option ${index === 0 ? "selected" : ""}" 
+                       style="background-color: ${color}" 
+                       data-color="${color}"></div>
+                `
+                  )
+                  .join("")}
+              </div>
+            </div>
+          </div>
+          <div class="tag-dialog-footer">
+            <button class="saveTagBtn" id="saveTag">
+              ${langData.saveTag}
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(dialog);
+
+      const nameInput = dialog.querySelector("#tagName");
+      const colorOptions = dialog.querySelectorAll(".color-option");
+      const closeBtn = dialog.querySelector(".twitter-notes-close");
+      const saveBtn = dialog.querySelector("#saveTag");
+
+      let selectedColor = colors[0];
+
+      nameInput.focus();
+
+      // 颜色选择
+      colorOptions.forEach((option) => {
+        option.addEventListener("click", () => {
+          colorOptions.forEach((opt) => opt.classList.remove("selected"));
+          option.classList.add("selected");
+          selectedColor = option.getAttribute("data-color");
+        });
+      });
+
+      const closeDialog = () => dialog.remove();
+      closeBtn.addEventListener("click", closeDialog);
+      dialog.addEventListener("click", (e) => {
+        if (e.target === dialog) closeDialog();
+      });
+
+      saveBtn.addEventListener("click", async () => {
+        const tagName = nameInput.value.trim();
+
+        if (!tagName) {
+          alert(langData.tagNameRequired);
+          nameInput.focus();
+          return;
+        }
+
+        // 检查标签名是否已存在
+        const result = await chrome.storage.local.get(["noteTags"]);
+        const existingTags = result.noteTags || {};
+
+        const tagExists = Object.values(existingTags).some(
+          (tag) => tag.name === tagName
+        );
+        if (tagExists) {
+          alert(langData.tagExists);
+          nameInput.focus();
+          return;
+        }
+
+        const tagId = Date.now().toString();
+        const newTag = {
+          id: tagId,
+          name: tagName,
+          color: selectedColor,
+          createdAt: new Date().toISOString(),
+        };
+
+        existingTags[tagId] = newTag;
+        await chrome.storage.local.set({ noteTags: existingTags });
+
+        await loadTags();
+        closeDialog();
+        showMessage(`${tagName} ${langData.messages.tagCreated}`, "success");
+      });
+
+      document.addEventListener("keydown", function escHandler(e) {
+        if (e.key === "Escape") {
+          closeDialog();
+          document.removeEventListener("keydown", escHandler);
+        }
+      });
+    })
+    .catch((e) => {
+      console.error("加载语言数据失败:", e);
+    });
+}
+
+// 在 showAddTagDialog 函数后添加编辑标签功能
+function showEditTagDialog(tagId) {
+  const existingDialog = document.querySelector(".tag-dialog");
+  if (existingDialog) {
+    existingDialog.remove();
+  }
+
+  getCurrentLangData()
+    .then(async () => {
+      // 获取标签数据
+      const result = await chrome.storage.local.get(["noteTags"]);
+      const tags = result.noteTags || {};
+      const tag = tags[tagId];
+
+      if (!tag) {
+        showErrorMessage("标签不存在", "error");
+        return;
+      }
+
+      const dialog = document.createElement("div");
+      dialog.className = "tag-dialog";
+
+      const colors = [
+        "#1d9bf0",
+        "#00ba7c",
+        "#ff6b35",
+        "#f91880",
+        "#7856ff",
+        "#ffad1f",
+        "#20bf6b",
+        "#eb4d4b",
+        "#6c5ce7",
+        "#a29bfe",
+        "#fd79a8",
+        "#fdcb6e",
+      ];
+
+      dialog.innerHTML = `
+        <div class="tag-dialog-content">
+          <div class="tag-dialog-header">
+            <h3>🏷️ ${langData.editTag}</h3>
+            <button class="twitter-notes-close">×</button>
+          </div>
+          <div class="tag-dialog-body">
+            <div class="input-group">
+              <label for="tagName">${langData.tagName}</label>
+              <input 
+                type="text"
+                id="tagName"
+                class="twitter-notes-input" 
+                placeholder="${langData.tagNamePlaceholder}"
+                maxlength="20"
+                value="${tag.name}"
+              />
+            </div>
+            <div class="input-group">
+              <label>${langData.tagColor}</label>
+              <div class="color-picker-grid">
+                ${colors
+                  .map(
+                    (color) => `
+                  <div class="color-option ${
+                    color === tag.color ? "selected" : ""
+                  }" 
+                       style="background-color: ${color}" 
+                       data-color="${color}"></div>
+                `
+                  )
+                  .join("")}
+              </div>
+            </div>
+          </div>
+          <div class="tag-dialog-footer">
+            <button class="deleteTagBtn" id="deleteTag">
+              ${langData.deleteTag}
+            </button>
+            <button class="saveTagBtn" id="saveTag">
+              ${langData.saveTag}
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(dialog);
+
+      const nameInput = dialog.querySelector("#tagName");
+      const colorOptions = dialog.querySelectorAll(".color-option");
+      const closeBtn = dialog.querySelector(".twitter-notes-close");
+      const saveBtn = dialog.querySelector("#saveTag");
+      const deleteBtn = dialog.querySelector("#deleteTag");
+
+      let selectedColor = tag.color;
+
+      nameInput.focus();
+
+      // 颜色选择
+      colorOptions.forEach((option) => {
+        option.addEventListener("click", () => {
+          colorOptions.forEach((opt) => opt.classList.remove("selected"));
+          option.classList.add("selected");
+          selectedColor = option.getAttribute("data-color");
+        });
+      });
+
+      const closeDialog = () => dialog.remove();
+      closeBtn.addEventListener("click", closeDialog);
+      dialog.addEventListener("click", (e) => {
+        if (e.target === dialog) closeDialog();
+      });
+
+      // 保存标签
+      saveBtn.addEventListener("click", async () => {
+        const tagName = nameInput.value.trim();
+
+        if (!tagName) {
+          alert(langData.tagNameRequired);
+          nameInput.focus();
+          return;
+        }
+
+        // 检查标签名是否已存在（排除当前标签）
+        const result = await chrome.storage.local.get(["noteTags"]);
+        const existingTags = result.noteTags || {};
+
+        const tagExists = Object.entries(existingTags).some(
+          ([id, existingTag]) => id !== tagId && existingTag.name === tagName
+        );
+        if (tagExists) {
+          alert(langData.tagExists);
+          nameInput.focus();
+          return;
+        }
+
+        // 更新标签
+        existingTags[tagId] = {
+          ...tag,
+          name: tagName,
+          color: selectedColor,
+          updatedAt: new Date().toISOString(),
+        };
+
+        await chrome.storage.local.set({ noteTags: existingTags });
+        await loadTags();
+        closeDialog();
+        showMessage(`${tagName} ${langData.messages.tagUpdated}`, "success");
+      });
+
+      // 删除标签
+      deleteBtn.addEventListener("click", async () => {
+        if (!confirm(langData.confirmDeleteTag)) {
+          return;
+        }
+
+        try {
+          const result = await chrome.storage.local.get(["noteTags"]);
+          const tags = result.noteTags || {};
+
+          const tagName = tags[tagId]?.name;
+          delete tags[tagId];
+
+          await chrome.storage.local.set({ noteTags: tags });
+          await loadTags();
+          closeDialog();
+
+          showMessage(`${tagName} ${langData.messages.tagDeleted}`, "success");
+        } catch (error) {
+          showErrorMessage(`${langData.messages.tagDeletedFailed}`, "error");
+        }
+      });
+
+      document.addEventListener("keydown", function escHandler(e) {
+        if (e.key === "Escape") {
+          closeDialog();
+          document.removeEventListener("keydown", escHandler);
+        }
+      });
+    })
+    .catch((e) => {
+      console.error("加载语言数据失败:", e);
+    });
+}
+
+// loadTags 函数，添加编辑功能
+async function loadTags() {
+  try {
+    const result = await chrome.storage.local.get(["noteTags"]);
+    const tags = result.noteTags || {};
+
+    const tagList = document.getElementById("tagList");
+
+    if (Object.keys(tags).length === 0) {
+      tagList.innerHTML = `<div style="color: #536471; font-size: 12px; text-align: center; padding: 10px;">暂无标签</div>`;
+      return;
+    }
+
+    tagList.innerHTML = Object.entries(tags)
+      .map(
+        ([tagId, tag]) => `
+        <div class="tag-item" style="background-color: ${tag.color}">
+          <span>${tag.name}</span>
+          <button class="tag-edit" data-id="${tagId}">✏️</button>
+        </div>
+      `
+      )
+      .join("");
+  } catch (error) {
+    console.error("加载标签失败:", error);
+  }
+}
+
+async function getCurrentLangData() {
+  return new Promise((resolve, reject) => {
+    if (langData && Object.keys(langData).length > 0) {
+      resolve();
+    } else {
+      loadLanguage(currentLang)
+        .then(() => resolve())
+        .catch((error) => reject(error));
+    }
+  });
 }
