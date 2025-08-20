@@ -1,3 +1,5 @@
+import { cryptoUtils } from "./crypto-utils.js";
+
 const langBtn = document.getElementById("langBtn");
 let currentLang = localStorage.getItem("lang") || "zh";
 let langData = {};
@@ -15,6 +17,9 @@ async function loadLanguage(lang) {
     console.log(langData.status.webdavConnected);
 
     updateTexts();
+    updateConfigurationStatus();
+    loadAutoBackupSettings();
+    loadRecentNotes();
   } catch (e) {
     console.error("加载语言文件失败:", e);
   }
@@ -131,8 +136,6 @@ langBtn.addEventListener("click", () => {
 });
 
 document.addEventListener("DOMContentLoaded", async function () {
-  const cryptoUtilsInstance = null;
-
   // 先加载语言
   await loadLanguage(currentLang);
 
@@ -231,22 +234,6 @@ document.addEventListener("DOMContentLoaded", async function () {
     .getElementById("webdavConfigHeader")
     .addEventListener("click", toggleWebdavConfigPanel);
 });
-
-// 简单的密码编码/解码函数
-function encodePassword(password) {
-  if (!password) return "";
-  return btoa(unescape(encodeURIComponent(password)));
-}
-
-function decodePassword(encodedPassword) {
-  if (!encodedPassword) return "";
-  try {
-    return decodeURIComponent(escape(atob(encodedPassword)));
-  } catch (error) {
-    console.error("密码解码失败:", error);
-    return "";
-  }
-}
 
 // 检查版本更新
 async function checkForUpdates(currentVersion) {
@@ -475,8 +462,7 @@ async function loadAutoBackupSettings() {
     };
 
     const toggle = document.getElementById("autoBackupToggle");
-    const settingsDiv = document.getElementById("autoBackupSettings");
-    const statusDiv = document.getElementById("autoBackupStatus");
+    const settingsDiv = document.getElementById("autoBackupSettings"); 
     const frequencySelect = document.getElementById("backupFrequency");
 
     // 更新开关状态
@@ -595,7 +581,7 @@ async function testAutoBackup() {
   try {
     // 检查 WebDAV 配置
     const configResult = await chrome.storage.local.get(["webdavConfig"]);
-    const config = configResult.webdavConfig;
+    let config = configResult.webdavConfig;
 
     if (!config || !config.url) {
       throw new Error(langData.messages.configureWebdavFirst);
@@ -684,8 +670,9 @@ async function loadStats() {
 
 async function loadRecentNotes() {
   try {
-    const result = await chrome.storage.local.get(["twitterNotes"]);
+    const result = await chrome.storage.local.get(["twitterNotes", "noteTags"]);
     const notes = result.twitterNotes || {};
+    const tags = result.noteTags || {};
 
     const recentNotesContainer = document.getElementById("recentNotes");
 
@@ -706,16 +693,16 @@ async function loadRecentNotes() {
     recentNotesContainer.innerHTML = sortedNotes
       .map(([userId, note]) => {
         const noteName = note.name || "";
-        const noteDescription = note.description || "";
+        const noteTag = note.tagId || "";
 
         return `
         <div class="note-item">
           <div class="note-user">@${note.username || "unknown"}</div>
           <div class="note-id">ID: ${userId}</div>
-          <div class="note-name">${noteName}</div>
+          <div class="note-name">${langData.noteName}: ${noteName}</div>
           ${
-            noteDescription
-              ? `<div class="note-desc">${noteDescription}</div>`
+            noteTag && tags[noteTag]
+              ? `<div class="note-desc">${langData.tagName}: ${tags[noteTag].name}</div>`
               : ""
           }
         </div>
@@ -730,18 +717,18 @@ async function loadRecentNotes() {
 async function loadWebdavConfig() {
   try {
     const result = await chrome.storage.local.get(["webdavConfig"]);
-    const config = result.webdavConfig || {};
+    let config = result.webdavConfig || {};
+
+    // 如果配置是加密的，先解密
+    if (config.encrypted) {
+      config = await cryptoUtils.decryptWebDAVConfig(config);
+    }
 
     if (config.url) document.getElementById("webdavUrl").value = config.url;
     if (config.username)
       document.getElementById("webdavUsername").value = config.username;
-    if (config.password) {
-      // 如果密码已编码，先解码
-      const password = config.encoded
-        ? decodePassword(config.password)
-        : config.password;
-      document.getElementById("webdavPassword").value = password;
-    }
+    if (config.password)
+      document.getElementById("webdavPassword").value = config.password;
   } catch (error) {
     console.error("加载 WebDAV 配置失败:", error);
   }
@@ -763,15 +750,14 @@ async function saveWebdavConfig() {
   }
 
   try {
-    // 简单编码密码
-    const config = {
+    // 加密配置
+    const encryptedConfig = await cryptoUtils.encryptWebDAVConfig({
       url,
       username,
-      password: encodePassword(password), // 编码密码
-      encoded: true, // 标记密码已编码
-    };
-
-    await chrome.storage.local.set({ webdavConfig: config });
+      password,
+    });
+    console.log(encryptedConfig);
+    await chrome.storage.local.set({ webdavConfig: encryptedConfig });
 
     // 清除之前的连接状态
     await chrome.storage.local.remove(["webdavConnectionStatus"]);
@@ -779,7 +765,10 @@ async function saveWebdavConfig() {
     showMessage(langData.messages.webdavConfigSaved, "success");
     await updateConfigurationStatusOnly(); // 只更新状态，不改变折叠状态
   } catch (error) {
-    showErrorMessage(langData.messages.webdavConfigSaveFailed, "error");
+    showErrorMessage(
+      `langData.messages.webdavConfigSaveFailed + ${error.message}`,
+      "error"
+    );
   }
 }
 
@@ -791,27 +780,22 @@ async function testWebdavConnection() {
 
   try {
     const configResult = await chrome.storage.local.get(["webdavConfig"]);
-    const config = configResult.webdavConfig;
+    let config = configResult.webdavConfig;
 
     if (!config || !config.url) {
       throw new Error(langData.messages.configureWebdavFirst);
     }
 
-    // 解码密码
-    if (config.encoded && config.password) {
-      config.password = decodePassword(config.password);
+    // 解密配置
+    if (config.encrypted) {
+      config = await cryptoUtils.decryptWebDAVConfig(config);
     }
 
     // 准备认证头
     const headers = {};
     if (config.username && config.password) {
-      // 如果密码已编码，先解码
-      const password = config.encoded
-        ? decodePassword(config.password)
-        : config.password;
-
       headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + password);
+        "Basic " + btoa(config.username + ":" + config.password);
     }
 
     // 测试连接 - 使用 OPTIONS 方法
@@ -962,15 +946,15 @@ async function backupToWebDAV() {
 
   try {
     const configResult = await chrome.storage.local.get(["webdavConfig"]);
-    const config = configResult.webdavConfig;
+    let config = configResult.webdavConfig;
 
     if (!config || !config.url) {
       throw new Error(langData.messages.configureWebdavFirst);
     }
 
-    // 在每个需要使用密码的函数中添加解码
-    if (config.encoded && config.password) {
-      config.password = decodePassword(config.password);
+    // 解密配置
+    if (config.encrypted) {
+      config = await cryptoUtils.decryptWebDAVConfig(config);
     }
 
     // 获取备注和标签数据
@@ -1050,10 +1034,15 @@ async function restoreFromWebDAV() {
 
   try {
     const configResult = await chrome.storage.local.get(["webdavConfig"]);
-    const config = configResult.webdavConfig;
+    let config = configResult.webdavConfig;
 
     if (!config || !config.url) {
       throw new Error(langData.messages.configureWebdavFirst);
+    }
+
+    // 解密配置
+    if (config.encrypted) {
+      config = await cryptoUtils.decryptWebDAVConfig(config);
     }
 
     // 获取所有备份文件列表
@@ -1078,13 +1067,8 @@ async function restoreFromWebDAV() {
     // 准备认证头
     const headers = {};
     if (config.username && config.password) {
-      // 如果密码已编码，先解码
-      const password = config.encoded
-        ? decodePassword(config.password)
-        : config.password;
-
       headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + password);
+        "Basic " + btoa(config.username + ":" + config.password);
     }
 
     // 通过 background script 发送请求以绕过 CORS
@@ -1180,10 +1164,15 @@ async function showBackupList() {
 
   try {
     const configResult = await chrome.storage.local.get(["webdavConfig"]);
-    const config = configResult.webdavConfig;
+    let config = configResult.webdavConfig;
 
     if (!config || !config.url) {
       throw new Error(langData.messages.configureWebdavFirst);
+    }
+
+    // 解密配置
+    if (config.encrypted) {
+      config = await cryptoUtils.decryptWebDAVConfig(config);
     }
 
     // 创建备份列表对话框
@@ -1302,13 +1291,8 @@ async function getWebDAVBackupList(config) {
   console.log("开始获取 WebDAV 备份列表...");
   const headers = {};
   if (config.username && config.password) {
-    // 如果密码已编码，先解码
-    const password = config.encoded
-      ? decodePassword(config.password)
-      : config.password;
-
     headers["Authorization"] =
-      "Basic " + btoa(config.username + ":" + password);
+      "Basic " + btoa(config.username + ":" + config.password);
   }
 
   // 添加缓存控制头，确保获取最新数据
@@ -1749,10 +1733,15 @@ async function restoreFromSpecificBackup(fileName) {
 
   try {
     const configResult = await chrome.storage.local.get(["webdavConfig"]);
-    const config = configResult.webdavConfig;
+    let config = configResult.webdavConfig;
 
     if (!config || !config.url) {
       throw new Error(langData.messages.configureWebdavFirst);
+    }
+
+    // 解密配置
+    if (config.encrypted) {
+      config = await cryptoUtils.decryptWebDAVConfig(config);
     }
 
     const webdavUrl = config.url.endsWith("/")
@@ -1761,13 +1750,8 @@ async function restoreFromSpecificBackup(fileName) {
 
     const headers = {};
     if (config.username && config.password) {
-      // 如果密码已编码，先解码
-      const password = config.encoded
-        ? decodePassword(config.password)
-        : config.password;
-
       headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + password);
+        "Basic " + btoa(config.username + ":" + config.password);
     }
 
     const downloadResult = await new Promise((resolve) => {
@@ -1853,10 +1837,15 @@ async function restoreFromSpecificBackup(fileName) {
 async function deleteBackupFile(fileName) {
   try {
     const configResult = await chrome.storage.local.get(["webdavConfig"]);
-    const config = configResult.webdavConfig;
+    let config = configResult.webdavConfig;
 
     if (!config || !config.url) {
       throw new Error(langData.messages.configureWebdavFirst);
+    }
+
+    // 解密配置
+    if (config.encrypted) {
+      config = await cryptoUtils.decryptWebDAVConfig(config);
     }
 
     const webdavUrl = config.url.endsWith("/")
@@ -1865,13 +1854,8 @@ async function deleteBackupFile(fileName) {
 
     const headers = {};
     if (config.username && config.password) {
-      // 如果密码已编码，先解码
-      const password = config.encoded
-        ? decodePassword(config.password)
-        : config.password;
-
       headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + password);
+        "Basic " + btoa(config.username + ":" + config.password);
     }
 
     const deleteResult = await new Promise((resolve) => {

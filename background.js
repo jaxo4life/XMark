@@ -1,15 +1,6 @@
 // Twitter Notes Background Script
 
-// 简单的密码解码函数
-function decodePassword(encodedPassword) {
-  if (!encodedPassword) return "";
-  try {
-    return decodeURIComponent(escape(atob(encodedPassword)));
-  } catch (error) {
-    console.error("密码解码失败:", error);
-    return "";
-  }
-}
+import { cryptoUtils } from './crypto-utils.js';
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log("Twitter Notes 扩展已安装");
@@ -109,16 +100,16 @@ async function performAutoBackup() {
 
     // 获取 WebDAV 配置
     const configResult = await chrome.storage.local.get(["webdavConfig"]);
-    const config = configResult.webdavConfig;
+    let config = configResult.webdavConfig;
 
     if (!config || !config.url) {
       console.error("自动备份失败: WebDAV 未配置");
       return;
     }
 
-    // 解码密码（如果需要）
-    if (config.encoded && config.password) {
-      config.password = decodePassword(config.password);
+    // 解密配置
+    if (config.encrypted) {
+      config = await cryptoUtils.decryptWebDAVConfig(config);
     }
 
     // 获取备注和标签数据
