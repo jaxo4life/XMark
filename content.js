@@ -625,7 +625,7 @@ class TwitterNotes {
 
         actionBtn.addEventListener("click", () => {
           closeDialog();
-          this.showNoteDialog(userId, username);
+          this.showNoteDialog(currentNote.userId, username);
         });
 
         document.addEventListener("keydown", function escHandler(e) {
@@ -861,8 +861,6 @@ class TwitterNotes {
         if (button && display && detailButton) {
           button.classList.toggle("has-note", !!hasNote);
 
-          const isHomePage = !this.isUserProfilePage();
-
           if (hasNote) {
             const noteName = hasNote.name || "";
             const noteDescription = hasNote.description || "";
@@ -891,6 +889,11 @@ class TwitterNotes {
             }
           } else {
             button.title = `${langData.addNote}`;
+            display.textContent = "";
+            display.style.display = "none";
+            display.style.backgroundColor = "";
+            display.style.color = "";
+            detailButton.style.display = "none";
           }
         }
       }
