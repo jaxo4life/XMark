@@ -5,6 +5,46 @@ let currentLang = localStorage.getItem("lang") || "zh";
 let langData = {};
 const Expires = "0";
 
+// 标签颜色库
+const colors = [
+  // 蓝色系
+  "#1565C0",
+  "#64B5F6",
+  // 青绿系
+  "#00695C",
+  "#1DE9B6",
+  // 橙色系
+  "#BF360C",
+  "#FF8A65",
+  // 红色系
+  "#B71C1C",
+  "#EF5350",
+  // 紫色系
+  "#4527A0",
+  "#B388FF",
+  // 粉色系
+  "#880E4F",
+  "#F48FB1",
+  // 金黄色系
+  "#FF6F00",
+  "#FFD54F",
+  // 草绿色系
+  "#33691E",
+  "#AED581",
+  // 湖蓝系
+  "#01579B",
+  "#4DD0E1",
+  // 桃/珊瑚系
+  "#AD1457",
+  "#F06292",
+  // 中性灰系
+  "#263238",
+  "#90A4AE",
+  // 补充色
+  "#283593",
+  "#00ACC1",
+];
+
 // 载入语言文件并更新文本
 async function loadLanguage(lang) {
   try {
@@ -2559,33 +2599,6 @@ function showAddTagDialog() {
       const dialog = document.createElement("div");
       dialog.className = "tag-dialog";
 
-      const colors = [
-        "#1d9bf0", // 蓝
-        "#00ba7c", // 绿
-        "#ff6b35", // 橙
-        "#f91880", // 粉红
-        "#7856ff", // 紫
-        "#ffad1f", // 金黄
-        "#20bf6b", // 草绿
-        "#eb4d4b", // 红
-        "#6c5ce7", // 靛蓝
-        "#a29bfe", // 浅紫
-        "#fd79a8", // 粉
-        "#fdcb6e", // 浅橙
-        "#0984e3", // 深蓝
-        "#00cec9", // 青绿
-        "#e17055", // 红橙
-        "#d63031", // 暗红
-        "#6ab04c", // 柔绿
-        "#e84393", // 桃粉
-        "#2d3436", // 深灰黑
-        "#636e72", // 灰蓝
-        "#fab1a0", // 浅橙粉
-        "#55efc4", // 薄荷绿
-        "#ffeaa7", // 浅黄
-        "#81ecec", // 湖蓝
-      ];
-
       dialog.innerHTML = `
         <div class="tag-dialog-content">
           <div class="tag-dialog-header">
@@ -2724,33 +2737,6 @@ function showEditTagDialog(tagId) {
 
       const dialog = document.createElement("div");
       dialog.className = "tag-dialog";
-
-      const colors = [
-        "#1d9bf0", // 蓝
-        "#00ba7c", // 绿
-        "#ff6b35", // 橙
-        "#f91880", // 粉红
-        "#7856ff", // 紫
-        "#ffad1f", // 金黄
-        "#20bf6b", // 草绿
-        "#eb4d4b", // 红
-        "#6c5ce7", // 靛蓝
-        "#a29bfe", // 浅紫
-        "#fd79a8", // 粉
-        "#fdcb6e", // 浅橙
-        "#0984e3", // 深蓝
-        "#00cec9", // 青绿
-        "#e17055", // 红橙
-        "#d63031", // 暗红
-        "#6ab04c", // 柔绿
-        "#e84393", // 桃粉
-        "#2d3436", // 深灰黑
-        "#636e72", // 灰蓝
-        "#fab1a0", // 浅橙粉
-        "#55efc4", // 薄荷绿
-        "#ffeaa7", // 浅黄
-        "#81ecec", // 湖蓝
-      ];
 
       dialog.innerHTML = `
         <div class="tag-dialog-content">
