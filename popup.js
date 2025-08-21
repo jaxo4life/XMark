@@ -72,63 +72,9 @@ function updateTexts() {
     const key = el.getAttribute("data-key");
     if (langData[key]) {
       el.textContent = langData[key];
+      el.placeholder = langData[key];
     }
   });
-
-  // 按钮和提示特殊更新
-  document.getElementById("exportBtn").textContent =
-    langData.exportNotes || "Export";
-  document.getElementById("importBtn").textContent =
-    langData.importNotes || "Import";
-  document.getElementById("clearBtn").textContent =
-    langData.clearNotes || "Clear";
-
-  // 标签更新
-  document.querySelector(".tag-section h4").textContent =
-    langData.tagManagement;
-  document.getElementById(
-    "addTagBtn"
-  ).innerHTML = `<span>➕</span> ${langData.addTag}`;
-
-  // WebDAV更新
-  document.querySelector(".cloud-section h4").textContent =
-    langData.webdavCloudBackup;
-  document.querySelector(
-    "#webdavConfigHeader h4 span:first-child"
-  ).textContent = `⚙️ ${langData.webdavServerConfig}`;
-
-  // 更新表单标签
-  document.querySelector(
-    'label[for="webdavUrl"]'
-  ).textContent = `${langData.serverAddress}:`;
-  document.querySelector(
-    'label[for="webdavUsername"]'
-  ).textContent = `${langData.username}:`;
-  document.querySelector(
-    'label[for="webdavPassword"]'
-  ).textContent = `${langData.password}:`;
-
-  // 更新按钮
-  document.getElementById(
-    "saveWebdavConfig"
-  ).innerHTML = `<span>💾</span> ${langData.saveConfig}`;
-  document.getElementById(
-    "testWebdavConnection"
-  ).innerHTML = `<span>🔗</span> ${langData.testConnection}`;
-  document.getElementById(
-    "webdavBackup"
-  ).innerHTML = `<span>🌐</span> ${langData.manualBackup}`;
-  document.getElementById(
-    "webdavRestore"
-  ).innerHTML = `<span>📥</span> ${langData.restoreData}`;
-  document.getElementById(
-    "viewBackupList"
-  ).innerHTML = `<span>📋</span> ${langData.viewBackupList}`;
-
-  // 更新自动备份部分
-  document.querySelector(
-    'label[for="backupFrequency"]'
-  ).textContent = `${langData.backupFrequency}:`;
 
   // 更新频率选项
   const frequencySelect = document.getElementById("backupFrequency");
@@ -137,10 +83,6 @@ function updateTexts() {
   options[1].textContent = langData.frequencies.daily;
   options[2].textContent = langData.frequencies.weekly;
   options[3].textContent = langData.frequencies.monthly;
-
-  document.getElementById(
-    "testAutoBackup"
-  ).innerHTML = `<span>🧪</span> ${langData.test}`;
 
   // 更新设置提示
   const setupNotice = document.getElementById("setupNotice");

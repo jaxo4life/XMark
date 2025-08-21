@@ -29,20 +29,21 @@
 
     <div class="section">
       <h3 data-key="dataManagement">数据管理</h3>
-      <button class="btn btn-primary" id="exportBtn">📤 导出备注</button>
-      <button class="btn btn-secondary" id="importBtn">📥 导入备注</button>
+      <button class="btn btn-primary" id="exportBtn" data-key="exportNotes">📤 导出备注</button>
+      <button class="btn btn-secondary" id="importBtn" data-key="importNotes">📥 导入备注</button>
       <input type="file" id="fileInput" accept=".json" />
       <button
         class="btn btn-secondary"
         style="background: red; color: white"
         id="clearBtn"
+        data-key="clearNotes"
       >
         🗑️ 清空所有备注
       </button>
 
       <!-- 标签管理 -->
       <div class="tag-section">
-        <h4 style="margin: 0 0 10px 0; font-size: 13px; color: #536471">
+        <h4 style="margin: 0 0 10px 0; font-size: 13px; color: #536471" data-key="tagManagement">
           🏷️ 标签管理
         </h4>
 
@@ -51,13 +52,13 @@
         </div>
 
         <button class="btn btn-secondary" id="addTagBtn">
-          <span>➕</span> 添加标签
+          <span data-key="addTag">➕ 添加标签</span>
         </button>
       </div>
 
       <!-- WebDAV 备份 -->
       <div class="cloud-section">
-        <h4 style="margin: 0 0 10px 0; font-size: 13px; color: #536471">
+        <h4 style="margin: 0 0 10px 0; font-size: 13px; color: #536471" data-key="webdavCloudBackup">
           WebDAV 备份
         </h4>
 
@@ -66,7 +67,7 @@
         <!-- WebDAV 配置 - 始终显示在上方 -->
         <div class="webdav-config-header" id="webdavConfigHeader">
           <h4>
-            <span>⚙️ WebDAV 服务器配置</span>
+            <span data-key="webdavServerConfig">⚙️ WebDAV 服务器配置</span>
             <span class="config-toggle" id="configToggle">▼</span>
           </h4>
 
@@ -76,18 +77,18 @@
         </div>
 
         <div class="webdav-config hidden" id="webdavConfigPanel">
-          <label for="webdavUrl">服务器地址:</label>
+          <label for="webdavUrl" data-key="serverAddress">服务器地址:</label>
           <input
             type="url"
             id="webdavUrl"
             placeholder="https://example.com/webdav/"
           />
 
-          <label for="webdavUsername">用户名:</label>
-          <input type="text" id="webdavUsername" placeholder="用户名" />
+          <label for="webdavUsername" data-key="username">用户名:</label>
+          <input type="text" id="webdavUsername" data-key="usernamePlaceholder" />
 
-          <label for="webdavPassword">密码:</label>
-          <input type="password" id="webdavPassword" placeholder="密码" />
+          <label for="webdavPassword" data-key="password">密码:</label>
+          <input type="password" id="webdavPassword" data-key="passwordPlaceholder" />
 
           <div class="config-buttons">
             <button
@@ -95,14 +96,14 @@
               id="saveWebdavConfig"
               style="font-size: 12px"
             >
-              <span>💾</span> 保存配置
+              <span data-key="saveConfig">💾 保存配置</span>
             </button>
             <button
               class="btn btn-secondary"
               id="testWebdavConnection"
               style="font-size: 12px"
             >
-              <span>🔗</span> 测试连接
+              <span data-key="testConnection">🔗 测试连接</span> 
             </button>
           </div>
         </div>
@@ -111,10 +112,10 @@
         <div id="backupFunctions" class="backup-section hidden">
           <div class="backup-grid">
             <button class="btn btn-warning" id="webdavBackup">
-              <span>🌐</span> 手动备份
+              <span data-key="manualBackup">🌐 手动备份</span> 
             </button>
             <button class="btn btn-secondary" id="webdavRestore">
-              <span>📥</span> 恢复数据
+              <span data-key="restoreData">📥 恢复数据</span> 
             </button>
           </div>
 
@@ -124,7 +125,7 @@
             id="viewBackupList"
             style="margin-bottom: 8px"
           >
-            <span>📋</span> 查看备份列表
+            <span data-key="viewBackupList">📋 查看备份列表</span> 
           </button>
 
           <!-- 自动备份设置 -->
@@ -155,7 +156,7 @@
               
               <div class="frequency-grid">
                 <div>
-                  <label for="backupFrequency">备份频率:</label>
+                  <label for="backupFrequency" data-key="backupFrequency">备份频率:</label>
                   <select id="backupFrequency">
                     <option value="hourly">每小时</option>
                     <option value="daily">每天</option>
@@ -169,7 +170,7 @@
                   id="testAutoBackup"
                   style="font-size: 11px; padding: 3px 8px; margin: 0"
                 >
-                  <span>🧪</span> 测试
+                  <span data-key="test">🧪 测试</span>
                 </button>
               </div>
             </div>
