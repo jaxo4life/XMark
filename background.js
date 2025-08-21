@@ -2,21 +2,32 @@
 
 import { cryptoUtils } from './crypto-utils.js';
 
-chrome.runtime.onInstalled.addListener(() => {
-  console.log("Twitter Notes 扩展已安装");
+// 扩展启动时，恢复自动备份
+chrome.runtime.onStartup.addListener(async () => {
+  const result = await chrome.storage.local.get(["autoBackupSettings"]);
+  const settings = result.autoBackupSettings;
+  if (settings && settings.enabled) {
+    setupAutoBackup(settings.frequency);
+  }
+});
 
-  // 初始化自动备份设置
-  chrome.storage.local.get(["autoBackupSettings"]).then((result) => {
-    if (!result.autoBackupSettings) {
-      chrome.storage.local.set({
-        autoBackupSettings: {
-          enabled: false,
-          frequency: "hourly",
-          lastBackup: null,
-        },
-      });
-    }
-  });
+chrome.runtime.onInstalled.addListener(async () => {
+  console.log("Twitter Notes 扩展已安装/更新");
+
+  // 初始化默认设置
+  const result = await chrome.storage.local.get(["autoBackupSettings"]);
+  if (!result.autoBackupSettings) {
+    await chrome.storage.local.set({
+      autoBackupSettings: {
+        enabled: false,
+        frequency: "hourly",
+        lastBackup: null,
+      },
+    });
+  } else if (result.autoBackupSettings.enabled) {
+    // 如果启用了自动备份，重新注册 alarm
+    setupAutoBackup(result.autoBackupSettings.frequency);
+  }
 });
 
 let lastFrequency;
