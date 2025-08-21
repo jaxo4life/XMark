@@ -87,9 +87,6 @@ function updateTexts() {
 
   // 更新自动备份部分
   document.querySelector(
-    ".auto-backup-title"
-  ).textContent = `🕒 ${langData.autoBackup}`;
-  document.querySelector(
     'label[for="backupFrequency"]'
   ).textContent = `${langData.backupFrequency}:`;
 
@@ -168,7 +165,9 @@ document.addEventListener("DOMContentLoaded", async function () {
   await updateConfigurationStatus();
 
   // 绑定其他事件
-  document.getElementById("exportBtn").addEventListener("click", exportNotes);
+  document
+    .getElementById("exportBtn")
+    .addEventListener("click", showExportDialog);
   document.getElementById("importBtn").addEventListener("click", () => {
     document.getElementById("fileInput").click();
   });
@@ -178,7 +177,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   // WebDAV 备份事件
   document
     .getElementById("webdavBackup")
-    .addEventListener("click", backupToWebDAV);
+    .addEventListener("click", showBackupDialog);
   document
     .getElementById("webdavRestore")
     .addEventListener("click", restoreFromWebDAV);
@@ -204,6 +203,14 @@ document.addEventListener("DOMContentLoaded", async function () {
   document
     .getElementById("testAutoBackup")
     .addEventListener("click", testAutoBackup);
+  const autoBackupTagFilterToggle = document.getElementById(
+    "autoBackupTagFilterToggle"
+  );
+  if (autoBackupTagFilterToggle)
+    autoBackupTagFilterToggle.addEventListener(
+      "click",
+      toggleAutoBackupTagFilter
+    );
 
   // 标签管理事件
   document
@@ -459,11 +466,21 @@ async function loadAutoBackupSettings() {
       enabled: false,
       frequency: "daily",
       lastBackup: null,
+      tagFilter: {
+        enabled: false,
+        selectedTags: [],
+      },
     };
 
     const toggle = document.getElementById("autoBackupToggle");
-    const settingsDiv = document.getElementById("autoBackupSettings"); 
+    const settingsDiv = document.getElementById("autoBackupSettings");
     const frequencySelect = document.getElementById("backupFrequency");
+    const tagFilterToggle = document.getElementById(
+      "autoBackupTagFilterToggle"
+    );
+    const tagFilterSettings = document.getElementById(
+      "autoBackupTagFilterSettings"
+    );
 
     // 更新开关状态
     toggle.classList.toggle("active", settings.enabled);
@@ -478,10 +495,103 @@ async function loadAutoBackupSettings() {
     // 设置频率选择
     frequencySelect.value = settings.frequency;
 
+    // 更新标签筛选设置
+    if (settings.tagFilter) {
+      tagFilterToggle.classList.toggle("active", settings.tagFilter.enabled);
+      if (settings.tagFilter.enabled) {
+        tagFilterSettings.classList.remove("hidden");
+        await loadAutoBackupTagOptions(settings.tagFilter.selectedTags);
+      } else {
+        tagFilterSettings.classList.add("hidden");
+      }
+    }
+
     // 更新状态显示
     updateAutoBackupStatus(settings);
   } catch (error) {
     console.error("加载自动备份设置失败:", error);
+  }
+}
+
+// 加载自动备份标签选项
+async function loadAutoBackupTagOptions(selectedTags = []) {
+  try {
+    const result = await chrome.storage.local.get(["noteTags"]);
+    const tags = result.noteTags || {};
+    const container = document.getElementById("autoBackupTagOptions");
+
+    if (Object.keys(tags).length === 0) {
+      container.innerHTML = `<div style="color: #536471; font-size: 12px; text-align: center; padding: 10px;">暂无标签</div>`;
+      return;
+    }
+
+    container.innerHTML = Object.entries(tags)
+      .map(
+        ([tagId, tag]) => `
+        <div class="tag-filter-option">
+          <input type="checkbox" id="autoBackupTag_${tagId}" value="${tagId}" ${
+          selectedTags.includes(tagId) ? "checked" : ""
+        }>
+          <label for="autoBackupTag_${tagId}">
+            <span class="tag-color-indicator" style="background-color: ${
+              tag.color
+            }"></span>
+            ${tag.name}
+          </label>
+        </div>
+      `
+      )
+      .join("");
+
+    // 绑定变化事件
+    container.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+      checkbox.addEventListener("change", saveAutoBackupTagFilter);
+    });
+  } catch (error) {
+    console.error("加载自动备份标签选项失败:", error);
+  }
+}
+
+// 保存自动备份标签筛选设置
+async function saveAutoBackupTagFilter() {
+  try {
+    const result = await chrome.storage.local.get(["autoBackupSettings"]);
+    const settings = result.autoBackupSettings || {};
+
+    if (!settings.tagFilter) {
+      settings.tagFilter = { enabled: false, selectedTags: [] };
+    }
+
+    // 获取选中的标签
+    const selectedTags = [];
+    document
+      .querySelectorAll('#autoBackupTagOptions input[type="checkbox"]:checked')
+      .forEach((checkbox) => {
+        selectedTags.push(checkbox.value);
+      });
+
+    settings.tagFilter.selectedTags = selectedTags;
+    await chrome.storage.local.set({ autoBackupSettings: settings });
+  } catch (error) {
+    console.error("保存自动备份标签筛选设置失败:", error);
+  }
+}
+
+// 切换自动备份标签筛选
+async function toggleAutoBackupTagFilter() {
+  try {
+    const result = await chrome.storage.local.get(["autoBackupSettings"]);
+    const settings = result.autoBackupSettings || {};
+
+    if (!settings.tagFilter) {
+      settings.tagFilter = { enabled: false, selectedTags: [] };
+    }
+
+    settings.tagFilter.enabled = !settings.tagFilter.enabled;
+    await chrome.storage.local.set({ autoBackupSettings: settings });
+    await loadAutoBackupSettings();
+  } catch (error) {
+    console.error("切换自动备份标签筛选失败:", error);
   }
 }
 
@@ -494,6 +604,14 @@ function updateAutoBackupStatus(settings) {
 
     const frequencyText = langData.frequencies[settings.frequency];
     let statusText = `✅ ${langData.status.autoBackupEnabled} (${frequencyText})`;
+
+    // 添加标签筛选状态
+    if (settings.tagFilter && settings.tagFilter.enabled) {
+      const tagCount = settings.tagFilter.selectedTags.length;
+      statusText += `\n🏷️ ${langData.autoBackupSelectedTags} (${tagCount}个标签)`;
+    } else {
+      statusText += `\n🏷️ ${langData.autoBackupAllTags}`;
+    }
 
     if (settings.lastBackup) {
       const lastBackupDate = new Date(settings.lastBackup);
@@ -514,7 +632,7 @@ function updateAutoBackupStatus(settings) {
         }
       }
     } else {
-      statusText += "\n${langData.status.noAutoBackup}";
+      statusText += `\n${langData.status.noAutoBackup}`;
     }
 
     statusDiv.textContent = statusText;
@@ -532,6 +650,10 @@ async function toggleAutoBackup() {
       enabled: false,
       frequency: "daily",
       lastBackup: null,
+      tagFilter: {
+        enabled: false,
+        selectedTags: [],
+      },
     };
 
     settings.enabled = !settings.enabled;
@@ -601,6 +723,443 @@ async function testAutoBackup() {
   } finally {
     button.disabled = false;
     button.innerHTML = originalText;
+  }
+}
+
+// 根据标签筛选备注
+function filterNotesByTags(notes, selectedTagIds) {
+  if (!selectedTagIds || selectedTagIds.length === 0) {
+    return notes;
+  }
+
+  const filteredNotes = {};
+  Object.entries(notes).forEach(([userId, note]) => {
+    if (note.tagId && selectedTagIds.includes(note.tagId)) {
+      filteredNotes[userId] = note;
+    }
+  });
+
+  return filteredNotes;
+}
+
+// 显示导出对话框
+function showExportDialog() {
+  const existingDialog = document.querySelector(".export-dialog");
+  if (existingDialog) {
+    existingDialog.remove();
+  }
+
+  getCurrentLangData()
+    .then(async () => {
+      const dialog = document.createElement("div");
+      dialog.className = "export-dialog";
+
+      // 加载标签数据
+      const tagResult = await chrome.storage.local.get(["noteTags"]);
+      const availableTags = tagResult.noteTags || {};
+
+      dialog.innerHTML = `
+        <div class="export-dialog-content">
+          <div class="export-dialog-header">
+            <h3>📤 ${langData.exportOptions}</h3>
+            <button class="twitter-notes-close">×</button>
+          </div>
+          <div class="export-dialog-body">
+            <div class="export-options">
+              <div class="option-group">
+                <label>
+                  <input type="radio" name="exportType" value="all" checked>
+                  ${langData.exportAll}
+                </label>
+              </div>
+              <div class="option-group">
+                <label>
+                  <input type="radio" name="exportType" value="tags">
+                  ${langData.exportByTags}
+                </label>
+              </div>
+            </div>
+            <div id="exportTagSelection" class="tag-selection hidden">
+              <h4>${langData.selectTagsToExport}</h4>
+              <div class="tag-checkboxes">
+                ${Object.entries(availableTags)
+                  .map(
+                    ([tagId, tag]) => `
+                  <div class="tag-checkbox">
+                    <input type="checkbox" id="exportTag_${tagId}" value="${tagId}">
+                    <label for="exportTag_${tagId}">
+                      <span class="tag-color-indicator" style="background-color: ${tag.color}"></span>
+                      ${tag.name}
+                    </label>
+                  </div>
+                `
+                  )
+                  .join("")}
+              </div>
+            </div>
+          </div>
+          <div class="export-dialog-footer">
+            <button id="cancelExport" class="deleteTagBtn">
+              ${langData.exportCancel}
+            </button>
+            <button id="confirmExport" class="saveTagBtn">
+              ${langData.exportSelectedTags}
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(dialog);
+
+      const closeBtn = dialog.querySelector(".twitter-notes-close");
+      const cancelBtn = dialog.querySelector("#cancelExport");
+      const confirmBtn = dialog.querySelector("#confirmExport");
+      const radioButtons = dialog.querySelectorAll('input[name="exportType"]');
+      const tagSelection = dialog.querySelector("#exportTagSelection");
+
+      const closeDialog = () => dialog.remove();
+      closeBtn.addEventListener("click", closeDialog);
+      cancelBtn.addEventListener("click", closeDialog);
+      dialog.addEventListener("click", (e) => {
+        if (e.target === dialog) closeDialog();
+      });
+
+      // 切换导出类型
+      radioButtons.forEach((radio) => {
+        radio.addEventListener("change", () => {
+          if (radio.value === "tags") {
+            tagSelection.classList.remove("hidden");
+          } else {
+            tagSelection.classList.add("hidden");
+          }
+        });
+      });
+
+      // 确认导出
+      confirmBtn.addEventListener("click", async () => {
+        const exportType = dialog.querySelector(
+          'input[name="exportType"]:checked'
+        ).value;
+
+        if (exportType === "all") {
+          closeDialog();
+          await exportNotes();
+        } else {
+          // 按标签导出
+          const selectedTags = [];
+          dialog
+            .querySelectorAll(
+              '#exportTagSelection input[type="checkbox"]:checked'
+            )
+            .forEach((checkbox) => {
+              selectedTags.push(checkbox.value);
+            });
+
+          if (selectedTags.length === 0) {
+            alert(langData.noTagsSelected);
+            return;
+          }
+
+          closeDialog();
+          await exportNotesByTags(selectedTags);
+        }
+      });
+    })
+    .catch((e) => {
+      console.error("加载语言数据失败:", e);
+    });
+}
+
+// 显示备份对话框
+function showBackupDialog() {
+  const existingDialog = document.querySelector(".backup-dialog");
+  if (existingDialog) {
+    existingDialog.remove();
+  }
+
+  getCurrentLangData()
+    .then(async () => {
+      const dialog = document.createElement("div");
+      dialog.className = "backup-dialog";
+
+      // 加载标签数据
+      const tagResult = await chrome.storage.local.get(["noteTags"]);
+      const availableTags = tagResult.noteTags || {};
+
+      dialog.innerHTML = `
+        <div class="backup-dialog-content">
+          <div class="backup-dialog-header">
+            <h3>🌐 ${langData.backupOptions}</h3>
+            <button class="twitter-notes-close">×</button>
+          </div>
+          <div class="backup-dialog-body">
+            <div class="backup-options">
+              <div class="option-group">
+                <label>
+                  <input type="radio" name="backupType" value="all" checked>
+                  ${langData.backupAll}
+                </label>
+              </div>
+              <div class="option-group">
+                <label>
+                  <input type="radio" name="backupType" value="tags">
+                  ${langData.backupByTags}
+                </label>
+              </div>
+            </div>
+            <div id="backupTagSelection" class="tag-selection hidden">
+              <h4>${langData.selectTagsToBackup}</h4>
+              <div class="tag-checkboxes">
+                ${Object.entries(availableTags)
+                  .map(
+                    ([tagId, tag]) => `
+                  <div class="tag-checkbox">
+                    <input type="checkbox" id="backupTag_${tagId}" value="${tagId}">
+                    <label for="backupTag_${tagId}">
+                      <span class="tag-color-indicator" style="background-color: ${tag.color}"></span>
+                      ${tag.name}
+                    </label>
+                  </div>
+                `
+                  )
+                  .join("")}
+              </div>
+            </div>
+          </div>
+          <div class="backup-dialog-footer">
+            <button class="deleteTagBtn" id="cancelBackup">
+              ${langData.exportCancel}
+            </button>
+            <button class="saveTagBtn" id="confirmBackup">
+              ${langData.backupSelectedTags}
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(dialog);
+
+      const closeBtn = dialog.querySelector(".twitter-notes-close");
+      const cancelBtn = dialog.querySelector("#cancelBackup");
+      const confirmBtn = dialog.querySelector("#confirmBackup");
+      const radioButtons = dialog.querySelectorAll('input[name="backupType"]');
+      const tagSelection = dialog.querySelector("#backupTagSelection");
+
+      const closeDialog = () => dialog.remove();
+      closeBtn.addEventListener("click", closeDialog);
+      cancelBtn.addEventListener("click", closeDialog);
+      dialog.addEventListener("click", (e) => {
+        if (e.target === dialog) closeDialog();
+      });
+
+      // 切换备份类型
+      radioButtons.forEach((radio) => {
+        radio.addEventListener("change", () => {
+          if (radio.value === "tags") {
+            tagSelection.classList.remove("hidden");
+          } else {
+            tagSelection.classList.add("hidden");
+          }
+        });
+      });
+
+      // 确认备份
+      confirmBtn.addEventListener("click", async () => {
+        const backupType = dialog.querySelector(
+          'input[name="backupType"]:checked'
+        ).value;
+
+        if (backupType === "all") {
+          closeDialog();
+          await backupToWebDAV();
+        } else {
+          // 按标签备份
+          const selectedTags = [];
+          dialog
+            .querySelectorAll(
+              '#backupTagSelection input[type="checkbox"]:checked'
+            )
+            .forEach((checkbox) => {
+              selectedTags.push(checkbox.value);
+            });
+
+          if (selectedTags.length === 0) {
+            alert(langData.noTagsSelected);
+            return;
+          }
+
+          closeDialog();
+          await backupToWebDAVByTags(selectedTags);
+        }
+      });
+    })
+    .catch((e) => {
+      console.error("加载语言数据失败:", e);
+    });
+}
+
+// 按标签导出备注
+async function exportNotesByTags(selectedTagIds) {
+  try {
+    const result = await chrome.storage.local.get(["twitterNotes", "noteTags"]);
+    const allNotes = result.twitterNotes || {};
+    const tags = result.noteTags || {};
+
+    // 筛选指定标签的备注
+    const filteredNotes = filterNotesByTags(allNotes, selectedTagIds);
+
+    if (Object.keys(filteredNotes).length === 0) {
+      showErrorMessage(langData.messages.noNotesWithSelectedTags, "error");
+      return;
+    }
+
+    // 筛选相关的标签
+    const filteredTags = {};
+    selectedTagIds.forEach((tagId) => {
+      if (tags[tagId]) {
+        filteredTags[tagId] = tags[tagId];
+      }
+    });
+
+    const manifest = chrome.runtime.getManifest();
+    const exportData = {
+      version: manifest.version,
+      exportTime: new Date().toISOString(),
+      notes: filteredNotes,
+      tags: filteredTags,
+      exportType: "tags",
+      selectedTags: selectedTagIds,
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `XMark-tags-${new Date().toISOString().split("T")[0]}.json`;
+    a.click();
+
+    URL.revokeObjectURL(url);
+    showMessage(
+      `${langData.messages.exportTaggedNotes} ${
+        Object.keys(filteredNotes).length
+      } ${langData.notes}`,
+      "success"
+    );
+  } catch (error) {
+    showErrorMessage(langData.exportFail, "error");
+  }
+}
+
+// 按标签备份到WebDAV
+async function backupToWebDAVByTags(selectedTagIds) {
+  const button = document.getElementById("webdavBackup");
+  button.disabled = true;
+  button.innerHTML = `<span>⏳</span> ${langData.buttons.backing}`;
+
+  try {
+    const configResult = await chrome.storage.local.get(["webdavConfig"]);
+    let config = configResult.webdavConfig;
+
+    if (!config || !config.url) {
+      throw new Error(langData.messages.configureWebdavFirst);
+    }
+
+    // 如果配置是加密的，先解密
+    if (config.encrypted) {
+      config = await cryptoUtils.decryptWebDAVConfig(config);
+    }
+
+    // 获取备注和标签数据
+    const result = await chrome.storage.local.get(["twitterNotes", "noteTags"]);
+    const allNotes = result.twitterNotes || {};
+    const allTags = result.noteTags || {};
+
+    // 筛选指定标签的备注
+    const filteredNotes = filterNotesByTags(allNotes, selectedTagIds);
+
+    if (Object.keys(filteredNotes).length === 0) {
+      throw new Error(langData.messages.noNotesWithSelectedTags);
+    }
+
+    // 筛选相关的标签
+    const filteredTags = {};
+    selectedTagIds.forEach((tagId) => {
+      if (allTags[tagId]) {
+        filteredTags[tagId] = allTags[tagId];
+      }
+    });
+
+    const manifest = chrome.runtime.getManifest();
+    const exportData = {
+      version: manifest.version,
+      exportTime: new Date().toISOString(),
+      notes: filteredNotes,
+      tags: filteredTags,
+      backupType: "tags",
+      selectedTags: selectedTagIds,
+    };
+
+    const fileName = `XMark-tags-backup-${
+      new Date().toISOString().split("T")[0]
+    }.json`;
+    const fileContent = JSON.stringify(exportData, null, 2);
+
+    // 构建 WebDAV URL
+    const webdavUrl = config.url.endsWith("/")
+      ? config.url + fileName
+      : config.url + "/" + fileName;
+
+    // 准备认证头
+    const headers = {
+      "Content-Type": "application/json",
+    };
+
+    if (config.username && config.password) {
+      headers["Authorization"] =
+        "Basic " + btoa(config.username + ":" + config.password);
+    }
+
+    // 通过 background script 发送请求以绕过 CORS
+    const uploadResult = await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        {
+          action: "webdavRequest",
+          url: webdavUrl,
+          method: "PUT",
+          headers: headers,
+          body: fileContent,
+        },
+        resolve
+      );
+    });
+
+    if (!uploadResult.success) {
+      throw new Error(uploadResult.error);
+    }
+
+    if (!uploadResult.response.ok) {
+      throw new Error(
+        `WebDAV 上传失败: ${uploadResult.response.status} ${uploadResult.response.statusText}`
+      );
+    }
+
+    showMessage(
+      `${langData.messages.backupTaggedNotes} ${
+        Object.keys(filteredNotes).length
+      } ${langData.notes}`,
+      "success"
+    );
+  } catch (error) {
+    showErrorMessage(
+      `${langData.messages.webdavBackupFailed} + ${error.message}`,
+      "error"
+    );
+  } finally {
+    button.disabled = false;
+    button.innerHTML = `<span>🌐</span> ${langData.manualBackup}`;
   }
 }
 
@@ -1581,6 +2140,7 @@ async function tryCommonFilePatterns(config, headers) {
 
     patterns.push(`XMark-backup-${dateStr}.json`);
     patterns.push(`XMark-auto-backup-${dateStr}.json`);
+    patterns.push(`XMark-tags-backup-${dateStr}.json`);
     patterns.push(`XMark-${dateStr}.json`);
   }
 
@@ -1636,7 +2196,7 @@ function isBackupFile(fileName) {
 
   const lowerName = fileName.toLowerCase();
   return (
-    lowerName.includes("twitter-notes") &&
+    lowerName.includes("xmark") &&
     lowerName.endsWith(".json") &&
     !lowerName.includes("..") // 安全检查
   );
@@ -2000,18 +2560,30 @@ function showAddTagDialog() {
       dialog.className = "tag-dialog";
 
       const colors = [
-        "#1d9bf0",
-        "#00ba7c",
-        "#ff6b35",
-        "#f91880",
-        "#7856ff",
-        "#ffad1f",
-        "#20bf6b",
-        "#eb4d4b",
-        "#6c5ce7",
-        "#a29bfe",
-        "#fd79a8",
-        "#fdcb6e",
+        "#1d9bf0", // 蓝
+        "#00ba7c", // 绿
+        "#ff6b35", // 橙
+        "#f91880", // 粉红
+        "#7856ff", // 紫
+        "#ffad1f", // 金黄
+        "#20bf6b", // 草绿
+        "#eb4d4b", // 红
+        "#6c5ce7", // 靛蓝
+        "#a29bfe", // 浅紫
+        "#fd79a8", // 粉
+        "#fdcb6e", // 浅橙
+        "#0984e3", // 深蓝
+        "#00cec9", // 青绿
+        "#e17055", // 红橙
+        "#d63031", // 暗红
+        "#6ab04c", // 柔绿
+        "#e84393", // 桃粉
+        "#2d3436", // 深灰黑
+        "#636e72", // 灰蓝
+        "#fab1a0", // 浅橙粉
+        "#55efc4", // 薄荷绿
+        "#ffeaa7", // 浅黄
+        "#81ecec", // 湖蓝
       ];
 
       dialog.innerHTML = `
@@ -2114,6 +2686,7 @@ function showAddTagDialog() {
         await chrome.storage.local.set({ noteTags: existingTags });
 
         await loadTags();
+        await loadAutoBackupSettings(); // 重新加载自动备份设置以更新标签选项
         closeDialog();
         showMessage(`${tagName} ${langData.messages.tagCreated}`, "success");
       });
@@ -2153,18 +2726,30 @@ function showEditTagDialog(tagId) {
       dialog.className = "tag-dialog";
 
       const colors = [
-        "#1d9bf0",
-        "#00ba7c",
-        "#ff6b35",
-        "#f91880",
-        "#7856ff",
-        "#ffad1f",
-        "#20bf6b",
-        "#eb4d4b",
-        "#6c5ce7",
-        "#a29bfe",
-        "#fd79a8",
-        "#fdcb6e",
+        "#1d9bf0", // 蓝
+        "#00ba7c", // 绿
+        "#ff6b35", // 橙
+        "#f91880", // 粉红
+        "#7856ff", // 紫
+        "#ffad1f", // 金黄
+        "#20bf6b", // 草绿
+        "#eb4d4b", // 红
+        "#6c5ce7", // 靛蓝
+        "#a29bfe", // 浅紫
+        "#fd79a8", // 粉
+        "#fdcb6e", // 浅橙
+        "#0984e3", // 深蓝
+        "#00cec9", // 青绿
+        "#e17055", // 红橙
+        "#d63031", // 暗红
+        "#6ab04c", // 柔绿
+        "#e84393", // 桃粉
+        "#2d3436", // 深灰黑
+        "#636e72", // 灰蓝
+        "#fab1a0", // 浅橙粉
+        "#55efc4", // 薄荷绿
+        "#ffeaa7", // 浅黄
+        "#81ecec", // 湖蓝
       ];
 
       dialog.innerHTML = `
@@ -2273,6 +2858,7 @@ function showEditTagDialog(tagId) {
 
         await chrome.storage.local.set({ noteTags: existingTags });
         await loadTags();
+        await loadAutoBackupSettings(); // 重新加载自动备份设置以更新标签选项
         closeDialog();
         showMessage(`${tagName} ${langData.messages.tagUpdated}`, "success");
       });
@@ -2292,6 +2878,7 @@ function showEditTagDialog(tagId) {
 
           await chrome.storage.local.set({ noteTags: tags });
           await loadTags();
+          await loadAutoBackupSettings(); // 重新加载自动备份设置以更新标签选项
           closeDialog();
 
           showMessage(`${tagName} ${langData.messages.tagDeleted}`, "success");

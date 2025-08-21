@@ -50,10 +50,7 @@
           <!-- 标签列表将在这里动态生成 -->
         </div>
 
-        <button
-          class="btn btn-secondary"
-          id="addTagBtn"      
-        >
+        <button class="btn btn-secondary" id="addTagBtn">
           <span>➕</span> 添加标签
         </button>
       </div>
@@ -133,11 +130,29 @@
           <!-- 自动备份设置 -->
           <div class="auto-backup-section">
             <div class="auto-backup-header">
-              <span class="auto-backup-title">🕒 自动备份</span>
+              <span data-key="autoBackup">🕒 自动备份</span>
               <div class="toggle-switch" id="autoBackupToggle"></div>
             </div>
 
             <div class="auto-backup-settings hidden" id="autoBackupSettings">
+              <!-- 自动备份标签筛选 -->
+              <div class="form-group">
+                <div class="auto-backup-tag-filter">
+                  <div class="filter-header">
+                    <span data-key="autoBackupTagFilter">自动备份标签筛选</span>
+                    <div class="toggle-switch small" id="autoBackupTagFilterToggle"></div>
+                  </div>
+                  <div
+                    id="autoBackupTagFilterSettings"
+                    class="tag-filter-settings hidden"
+                  >
+                    <div class="tag-filter-options" id="autoBackupTagOptions">
+                      <!-- 标签选项将在这里动态生成 -->
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
               <div class="frequency-grid">
                 <div>
                   <label for="backupFrequency">备份频率:</label>
@@ -148,10 +163,11 @@
                     <option value="monthly">每月</option>
                   </select>
                 </div>
+
                 <button
                   class="btn btn-secondary"
                   id="testAutoBackup"
-                  style="font-size: 11px; padding: 6px 8px"
+                  style="font-size: 11px; padding: 3px 8px; margin: 0"
                 >
                   <span>🧪</span> 测试
                 </button>
@@ -183,7 +199,7 @@
         </div>
       </div>
     </div>
-    
+
     <script type="module" src="popup.js"></script>
   </body>
 </html>
