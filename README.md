@@ -15,30 +15,43 @@
 
 ## v4.0.2
 
+- 增加选定标签的导出和备份功能
+- 增加更多的标签颜色
 - Add export and backup by selected tags
 - Add more tag color
 
 ## v4.0.1
 
+- 增加WebDAV配置的加密
+- 修复了一些bug
 - Add WebDAV encrytion
 - Fix some bugs
 
 ## v4.0.0
 
+- 增加标签管理
+- 增加标签备份和恢复
 - Add Tags Management
 - Add Tags backup and restore
 
 ## v3.0.2
 
+- 修复了一些bug
+- 这是v3.x.x系列的稳定版
 - Fix some bugs
-- It's now a stable one
+- It's now a stable one of v3.x.x
 
 ## v3.0.1
 
+- 多语言文件已完善
 - Lang files done
 
 ## v3.0.0
 
+- 增加WebDAV备份
+- 增加自动备份
+- 增加新版本检查（需要手动下载更新）
+- 多语言文件完善中
 - Add WebDAV backup
 - Add autobackup by hourly/daily/weekly/monthly
 - Add new version check (manually update needed)
@@ -46,8 +59,10 @@
 
 ## v2.0.2
 
+- 简洁稳定版
+- 只支持本地备份和恢复
 - Simple & Stable
-- Local and hand backup only
+- Local and hand backup&restore only
 
 ---
 
