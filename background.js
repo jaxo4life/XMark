@@ -1,6 +1,6 @@
 // Twitter Notes Background Script
 
-import { cryptoUtils } from './crypto-utils.js';
+import { cryptoUtils } from "./crypto-utils.js";
 
 // 扩展启动时，恢复自动备份
 chrome.runtime.onStartup.addListener(async () => {
@@ -87,15 +87,42 @@ function setupAutoBackup(frequency) {
       periodInMinutes = 24 * 60;
   }
 
-  // 创建新的定时器
-  chrome.alarms.create("autoBackup", {
-    delayInMinutes: 0.1,
-    periodInMinutes: periodInMinutes,
-  });
+  // 读取上次备份时间
+  chrome.storage.local
+    .get(["autoBackupSettings"])
+    .then(({ autoBackupSettings }) => {
+      const lastBackup = autoBackupSettings?.lastBackup
+        ? new Date(autoBackupSettings.lastBackup)
+        : null;
 
-  console.log(
-    `自动备份已设置，频率: ${frequency}，间隔: ${periodInMinutes} 分钟`
-  );
+      const now = new Date();
+
+      let delayInMinutes;
+      if (!lastBackup) {
+        // 从未备份过 → 马上执行
+        delayInMinutes = 0.1;
+      } else {
+        // 距离上次备份的分钟数
+        const diffMinutes = (now - lastBackup) / 1000 / 60;
+
+        if (diffMinutes >= periodInMinutes) {
+          // 已经超时 → 马上执行
+          delayInMinutes = 0.1;
+        } else {
+          // 还没到间隔 → 等剩余时间
+          delayInMinutes = periodInMinutes - diffMinutes;
+        }
+      }
+
+      chrome.alarms.create("autoBackup", {
+        delayInMinutes,
+        periodInMinutes,
+      });
+
+      console.log(
+        `自动备份已设置：首次延迟 ${delayInMinutes} 分钟，之后每 ${periodInMinutes} 分钟一次`
+      );
+    });
 }
 
 // 清除自动备份
