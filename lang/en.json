@@ -39,6 +39,7 @@
   "exportReminder": "For safety, all previous notes have been exported automatically. You can delete the file if you don't need it.",
   "clearFail": "Clear failed, please try again",
   "notes": "notes",
+  "TagGroups": "Swith TagGroups display",
   "addNote": "Add Note",
   "userID": "Current UserID:",
   "oldusername": "Former Name:",
@@ -148,7 +149,8 @@
     "tagDeletedFailed": "Tag delete failed",
     "exportTaggedNotes": "Successfully exported tagged notes:",
     "backupTaggedNotes": "Successfully backed up tagged notes:",
-    "noNotesWithSelectedTags": "No notes found with selected tags"
+    "noNotesWithSelectedTags": "No notes found with selected tags",
+    "TagGroupsSwitch": "Display switch success"
   },
   "dialog": {
     "webdavBackupList": "WebDAV Backup List",

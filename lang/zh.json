@@ -58,6 +58,7 @@
   "viewDetail": "查看详情",
   "noteDetail": "备注详情",
   "tagManagement": "🏷️标签管理",
+  "TagGroups": "切换页面标签显示",
   "addTag": "➕添加标签",
   "editTag": "编辑标签",
   "tagName": "标签名称:",
@@ -148,7 +149,8 @@
     "tagDeletedFailed": "标签删除失败",
     "exportTaggedNotes": "成功导出标签筛选的备注：",
     "backupTaggedNotes": "成功备份标签筛选的备注：",
-    "noNotesWithSelectedTags": "选定的标签下没有备注数据"
+    "noNotesWithSelectedTags": "选定的标签下没有备注数据",
+    "TagGroupsSwitch": "显示状态切换成功"
   },
   "dialog": {
     "webdavBackupList": "WebDAV 备份列表",

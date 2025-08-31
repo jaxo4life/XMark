@@ -98,6 +98,16 @@ class TwitterNotes {
     });
 
     nav.appendChild(wrapper);
+
+    // **读取保存的显示状态**
+    chrome.storage.local.get(
+      ["twitterGroupsVisible"],
+      ({ twitterGroupsVisible }) => {
+        if (twitterGroupsVisible === false) {
+          wrapper.style.display = "none";
+        }
+      }
+    );
   }
 
   async filterUsersByTag(tagId) {
@@ -1428,6 +1438,9 @@ class TwitterNotes {
 
 // 初始化
 const twitterNotes = new TwitterNotes();
+
+// 挂到全局，供 popup 调用
+window.twitterNotesInstance = twitterNotes;
 
 // 监听语言变化
 chrome.storage.onChanged.addListener((changes, area) => {

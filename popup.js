@@ -198,6 +198,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   document
     .getElementById("addTagBtn")
     .addEventListener("click", showAddTagDialog);
+  document.getElementById("toggle-groups").addEventListener("click", TagGroups);
 
   const tagList = document.getElementById("tagList");
   tagList.addEventListener("click", (event) => {
@@ -2853,6 +2854,47 @@ async function loadTags() {
   } catch (error) {
     console.error("加载标签失败:", error);
   }
+}
+
+// 控制页面标签显示
+async function TagGroups() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (
+    !tab.url.startsWith("https://x.com") &&
+    !tab.url.startsWith("https://twitter.com")
+  ) {
+    alert("请在 Twitter/X 页面使用该功能");
+    return;
+  }
+
+  chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: async () => {
+      const wrapper = document.querySelector("[data-groups-nav]");
+      if (wrapper) {
+        const style = getComputedStyle(wrapper);
+        const newDisplay =
+          wrapper.style.display === "none" || style.display === "none"
+            ? "flex"
+            : "none";
+        wrapper.style.display = newDisplay;
+        chrome.storage.local.set({
+          twitterGroupsVisible: newDisplay === "flex",
+        });
+      } else if (window.twitterNotesInstance?.initGroups) {
+        await window.twitterNotesInstance.initGroups();
+        chrome.storage.local.get(
+          ["twitterGroupsVisible"],
+          ({ twitterGroupsVisible }) => {
+            const w = document.querySelector("[data-groups-nav]");
+            if (w && twitterGroupsVisible === false) w.style.display = "none";
+          }
+        );
+      }
+    },
+  });
+
+  showMessage(langData.messages.TagGroupsSwitch, "success");
 }
 
 async function getCurrentLangData() {
