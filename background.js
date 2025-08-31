@@ -305,6 +305,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse({ success: true });
     return true;
   }
+
+  // 按标签显示
+  if (request.action === "getGroups") {
+    chrome.storage.local.get(["twitterNotes", "noteTags"], (data) => {
+      sendResponse(data || {});
+    });
+    return true; // 异步响应
+  }
 });
 
 // 处理 WebDAV 请求

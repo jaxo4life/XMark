@@ -29,6 +29,10 @@ class TwitterNotes {
     this.notes = {}; // 存储备注数据，键可能是用户名或用户ID
     this.userIdCache = new Map(); // 缓存用户名到ID的映射
     this.init();
+    this.avatarQueue = [];
+    this.activeCount = 0;
+    this.MAX_ACTIVE = 2;
+    this.observeGroups();
     this._profileProcessStatus = new Map();
   }
 
@@ -41,6 +45,254 @@ class TwitterNotes {
 
     // 初始处理页面
     this.processPage();
+  }
+
+  async getGroups() {
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({ action: "getGroups" }, (res) => {
+        resolve(res || {}); // 确保返回一个对象，即使 storage 出错
+      });
+    });
+  }
+
+  async initGroups() {
+    const { twitterNotes = {}, noteTags = {} } = await this.getGroups();
+
+    const nav = document.querySelector("header nav");
+    if (!nav) return;
+    if (nav.querySelector("[data-groups-nav]")) return;
+
+    const wrapper = document.createElement("div");
+    wrapper.setAttribute("data-groups-nav", "true");
+
+    // 样式优化
+    wrapper.style.display = "flex"; // 水平排列
+    wrapper.style.flexWrap = "wrap"; // 多行换行
+    wrapper.style.gap = "6px"; // 标签之间间距
+    wrapper.style.maxWidth = "100%"; // 不超出父元素宽度
+    wrapper.style.padding = "4px 0"; // 上下内边距
+    wrapper.style.overflowX = "auto"; // 超出可横向滚动
+    wrapper.style.scrollBehavior = "smooth"; // 滑动平滑
+
+    Object.values(noteTags).forEach((tag) => {
+      const btn = document.createElement("span");
+      btn.textContent = tag.name;
+
+      btn.style.cursor = "pointer";
+      btn.style.fontWeight = "bold";
+      btn.style.color = "#fff";
+      btn.style.backgroundColor = tag.color || "rgb(29,155,240)";
+      btn.style.borderRadius = "12px";
+      btn.style.padding = "2px 8px";
+      btn.style.fontSize = "12px";
+      btn.style.whiteSpace = "nowrap"; // 保证文字不换行
+      btn.style.display = "inline-flex";
+      btn.style.alignItems = "center";
+      btn.style.justifyContent = "center";
+
+      btn.addEventListener("click", () => {
+        this.filterUsersByTag(tag.id);
+      });
+
+      wrapper.appendChild(btn);
+    });
+
+    nav.appendChild(wrapper);
+  }
+
+  async filterUsersByTag(tagId) {
+    const { twitterNotes = {}, noteTags = {} } = await this.getGroups();
+    const users = Object.values(twitterNotes || {}).filter(
+      (u) => u.tagId === tagId
+    );
+    const tag = noteTags[tagId];
+
+    // 创建或获取面板
+    let panel = document.querySelector("#twitterTagPanel");
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "twitterTagPanel";
+      panel.style.position = "fixed";
+      panel.style.top = "80px";
+      panel.style.right = "-340px";
+      panel.style.width = "320px";
+      panel.style.maxHeight = "80%";
+      panel.style.overflowY = "auto";
+      panel.style.borderRadius = "12px";
+      panel.style.boxShadow = "0 4px 12px rgba(0,0,0,0.1)";
+      panel.style.padding = "0"; // 标题栏自己控制padding
+      panel.style.zIndex = "9999";
+      panel.style.fontFamily =
+        'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+      panel.style.transition = "right 0.3s ease, background 0.3s ease";
+      document.body.appendChild(panel);
+
+      // 关闭按钮
+      const closeBtn = document.createElement("div");
+      closeBtn.textContent = "✕";
+      closeBtn.style.position = "absolute";
+      closeBtn.style.top = "8px";
+      closeBtn.style.right = "12px";
+      closeBtn.style.cursor = "pointer";
+      closeBtn.style.fontSize = "18px";
+      closeBtn.style.fontWeight = "bold";
+      closeBtn.addEventListener("click", () => (panel.style.right = "-340px"));
+      panel.appendChild(closeBtn);
+
+      // 点击面板外关闭
+      document.addEventListener("click", (e) => {
+        if (
+          !panel.contains(e.target) &&
+          e.target.dataset.tagButton !== "true"
+        ) {
+          panel.style.right = "-340px";
+        }
+      });
+    }
+
+    // 清空旧内容
+    panel.innerHTML = "";
+
+    // 标题栏
+    const titleBar = document.createElement("div");
+    titleBar.style.display = "flex";
+    titleBar.style.alignItems = "center";
+    titleBar.style.justifyContent = "center"; // 默认居中标题文字
+    titleBar.style.position = "sticky";
+    titleBar.style.top = "0";
+    titleBar.style.zIndex = "1";
+    titleBar.style.background = tag?.color || "#1DA1F2";
+    titleBar.style.color = "#fff";
+    titleBar.style.padding = "10px";
+    titleBar.style.fontWeight = "bold";
+    titleBar.style.fontSize = "16px";
+    titleBar.style.borderTopLeftRadius = "12px";
+    titleBar.style.borderTopRightRadius = "12px";
+
+    // 标题文字
+    const titleText = document.createElement("div");
+    titleText.textContent = tag?.name || "标签";
+    titleText.style.flex = "1"; // 占据剩余空间
+    titleText.style.textAlign = "center"; // 居中
+    titleBar.appendChild(titleText);
+
+    // 关闭按钮
+    const closeBtn = document.createElement("div");
+    closeBtn.textContent = "✕";
+    closeBtn.style.cursor = "pointer";
+    closeBtn.style.fontSize = "18px";
+    closeBtn.style.fontWeight = "bold";
+    closeBtn.style.position = "absolute";
+    closeBtn.style.right = "12px";
+    closeBtn.style.top = "50%";
+    closeBtn.style.transform = "translateY(-50%)";
+    closeBtn.addEventListener("click", () => (panel.style.right = "-340px"));
+    titleBar.appendChild(closeBtn);
+
+    panel.appendChild(titleBar);
+
+    users.forEach((user) => {
+      const link = document.createElement("a");
+      link.href = `https://x.com/${user.username}`;
+      link.target = "_blank";
+      link.className = "userItem";
+      link.style.display = "flex";
+      link.style.alignItems = "center";
+      link.style.padding = "8px";
+      link.style.borderRadius = "8px";
+      link.style.textDecoration = "none";
+      link.style.color = "#000";
+      link.style.marginBottom = "0";
+      link.style.backgroundColor = "#fff";
+      link.style.transition = "background-color 160ms ease";
+
+      link.addEventListener(
+        "mouseenter",
+        () => (link.style.backgroundColor = tag?.color || "#1DA1F2")
+      );
+      link.addEventListener(
+        "mouseleave",
+        () => (link.style.backgroundColor = "#fff")
+      );
+
+      const img = document.createElement("img");
+      img.style.width = "40px";
+      img.style.height = "40px";
+      img.style.borderRadius = "50%";
+      img.style.marginRight = "10px";
+
+      // 调用函数直接设置头像和错误处理
+      this.setUserAvatar(img, user.username);
+
+      const text = document.createElement("div");
+      text.innerHTML = `<strong>${user.name}</strong><br>@${user.username}<br>${
+        user.description || ""
+      }`;
+      text.style.fontSize = "14px";
+      text.style.lineHeight = "1.4";
+
+      link.appendChild(img);
+      link.appendChild(text);
+      panel.appendChild(link);
+    });
+
+    // 滑入面板
+    requestAnimationFrame(() => (panel.style.right = "0"));
+  }
+
+  async setUserAvatar(img, username) {
+    // 第一步：unavatar
+    img.src = `https://unavatar.io/twitter/${username}`;
+
+    // unavatar 加载失败时加入队列处理
+    img.onerror = () => {
+      this.avatarQueue.push({ img, username });
+      this.processQueue();
+    };
+  }
+
+  processQueue() {
+    if (this.activeCount >= this.MAX_ACTIVE || this.avatarQueue.length === 0)
+      return;
+
+    const { img, username } = this.avatarQueue.shift();
+    this.activeCount++;
+
+    setTimeout(() => {
+      try {
+        const iframe = document.createElement("iframe");
+        iframe.style.display = "none";
+        iframe.src = `https://x.com/${username}`;
+        document.body.appendChild(iframe);
+
+        iframe.onload = () => {
+          try {
+            const doc = iframe.contentDocument || iframe.contentWindow.document;
+            const profileImg = doc.querySelector('img[src*="profile_images"]');
+            img.src = profileImg
+              ? profileImg.src
+              : "https://via.placeholder.com/40?text=?";
+          } catch {
+            img.src = "https://via.placeholder.com/40?text=?";
+          } finally {
+            document.body.removeChild(iframe);
+            this.activeCount--;
+            this.processQueue(); // 处理队列中下一个
+          }
+        };
+      } catch {
+        img.src = "https://via.placeholder.com/40?text=?";
+        this.activeCount--;
+        this.processQueue();
+      }
+    }, 500 + Math.random() * 500);
+  }
+
+  observeGroups() {
+    const observer = new MutationObserver(() => {
+      this.initGroups().catch(() => {});
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
   }
 
   async loadNotes() {
@@ -146,6 +398,15 @@ class TwitterNotes {
     return false;
   }
 
+  // 检查当前是否在关注者/粉丝页面
+  isFollowingOrFollowersPage() {
+    const url = window.location.href;
+    // 匹配关注者/粉丝页面的URL模式
+    const followingFollowersPattern =
+      /(?:twitter\.com|x\.com)\/[^/?]+\/(following|followers|verified_followers)(?:\?|$)/;
+    return followingFollowersPattern.test(url);
+  }
+
   // 从URL提取用户名
   extractUsernameFromUrl(url) {
     const match = url.match(/(?:twitter\.com|x\.com)\/([^\/\?]+)/);
@@ -189,57 +450,142 @@ class TwitterNotes {
   }
 
   observePageChanges() {
-    // 路由变化检测 - 清空 profile 状态
-    let lastUrl = location.href;
-    let processTimeout = null;
+    const self = this;
+    const normalize = (p) => (p || "/").replace(/\/+$/, "") || "/";
+    let lastPath = normalize(location.pathname);
 
-    new MutationObserver(() => {
-      const url = location.href;
-      if (url !== lastUrl) {
-        lastUrl = url;
-        this._profileProcessStatus.clear();
-      }
-    }).observe(document, { subtree: true, childList: true });
-
-    // 原来的 DOM 元素变化监听
-    const observer = new MutationObserver((mutations) => {
-      let shouldProcess = false;
-
-      mutations.forEach((mutation) => {
-        if (mutation.type === "childList" && mutation.addedNodes.length > 0) {
-          mutation.addedNodes.forEach((node) => {
-            if (node.nodeType === Node.ELEMENT_NODE) {
-              // 检查是否有新的推文或用户页面元素
-              if (
-                node.querySelector &&
-                (node.querySelector('[data-testid="tweet"]') ||
-                  node.querySelector('[data-testid="UserName"]') ||
-                  node.querySelector('img[src*="profile_banners"]') ||
-                  node.matches('[data-testid="tweet"]') ||
-                  node.matches('[data-testid="UserName"]'))
-              ) {
-                shouldProcess = true;
-              }
-            }
-          });
+    // 防抖定时器
+    let processTimer = null;
+    const scheduleProcess = (delay = 500) => {
+      if (processTimer) clearTimeout(processTimer);
+      processTimer = setTimeout(() => {
+        try {
+          self.processPage();
+        } catch (e) {
+          console.error(e);
         }
+      }, delay);
+    };
+
+    // URL 变化处理（基于 pathname）
+    const onUrlChange = () => {
+      const path = normalize(location.pathname);
+      if (path !== lastPath) {
+        lastPath = path;
+        if (
+          self._profileProcessStatus &&
+          typeof self._profileProcessStatus.clear === "function"
+        ) {
+          self._profileProcessStatus.clear();
+        }
+        scheduleProcess(500); // 给 SPA 渲染一点时间
+      }
+    };
+
+    // Hook history.pushState/replaceState + popstate -> 发 urlchange 事件
+    (function () {
+      const origPush = history.pushState;
+      history.pushState = function () {
+        origPush.apply(this, arguments);
+        window.dispatchEvent(new Event("urlchange"));
+      };
+      const origReplace = history.replaceState;
+      history.replaceState = function () {
+        origReplace.apply(this, arguments);
+        window.dispatchEvent(new Event("urlchange"));
+      };
+      window.addEventListener("popstate", () =>
+        window.dispatchEvent(new Event("urlchange"))
+      );
+      window.addEventListener("urlchange", onUrlChange);
+    })();
+
+    // 等待某个选择器出现的简单 helper（避免过早处理）
+    const waitFor = (selector, timeout = 3000) =>
+      new Promise((resolve, reject) => {
+        const el = document.querySelector(selector);
+        if (el) return resolve(el);
+        const obs = new MutationObserver(() => {
+          const e = document.querySelector(selector);
+          if (e) {
+            obs.disconnect();
+            resolve(e);
+          }
+        });
+        obs.observe(document.body, { childList: true, subtree: true });
+        if (timeout)
+          setTimeout(() => {
+            obs.disconnect();
+            reject(new Error("timeout"));
+          }, timeout);
       });
 
-      if (shouldProcess) {
-        setTimeout(() => this.processPage(), 500);
+    // 主 MutationObserver：同时监听 childList（新增节点）和 attributes（class / aria-selected 等）
+    const observer = new MutationObserver((mutations) => {
+      let shouldProcess = false;
+      for (const m of mutations) {
+        if (m.type === "childList" && m.addedNodes.length) {
+          for (const node of m.addedNodes) {
+            if (node.nodeType !== Node.ELEMENT_NODE) continue;
+            // 常见的触发点：推文、用户姓名、profile banner、或 role="tab" / following link 出现
+            if (
+              (node.matches &&
+                (node.matches('[data-testid="tweet"]') ||
+                  node.matches('[data-testid="UserName"]'))) ||
+              (node.querySelector &&
+                (node.querySelector('[data-testid="tweet"]') ||
+                  node.querySelector('[data-testid="UserName"]') ||
+                  node.querySelector(
+                    'a[href$="/following"], a[href$="/followers"], [role="tab"]'
+                  )))
+            ) {
+              shouldProcess = true;
+              break;
+            }
+          }
+        }
+        if (m.type === "attributes") {
+          // tab 切换通常是 class/aria-selected/aria-current 的变化
+          const attr = m.attributeName;
+          if (
+            attr === "class" ||
+            attr === "aria-selected" ||
+            attr === "aria-current"
+          ) {
+            shouldProcess = true;
+          }
+        }
+        if (shouldProcess) break;
       }
+
+      if (shouldProcess) scheduleProcess(300); // 更短的延迟用于 DOM 增量更新
     });
 
     observer.observe(document.body, {
       childList: true,
       subtree: true,
+      attributes: true,
+      attributeFilter: ["class", "aria-selected", "aria-current"],
     });
+
+    // 初始时或 profile header 出现时也主动触发一次
+    waitFor(
+      'header, [data-testid="primaryColumn"], [data-testid="UserProfileHeader_Items"]',
+      4000
+    )
+      .then(() => scheduleProcess(400))
+      .catch(() => {
+        /* 忽略超时 */
+      });
   }
 
   processPage() {
     if (this.isUserProfilePage()) {
       // 在用户个人页面处理备注
       this.processUserProfile();
+    } else if (this.isFollowingOrFollowersPage()) {
+      // 在关注者/粉丝页面处理备注
+      this.processFollowingFollowersPage();
     } else {
       // 在主页等其他页面，基于用户名显示备注
       this.processHomePage();
@@ -269,7 +615,9 @@ class TwitterNotes {
     this._profileProcessStatus.set(username, "processing");
 
     // 获取用户ID
-    const userId = await this.extractUserIdFromPage(username);
+    const userId =
+      this.userIdCache.get(username) ||
+      (await this.extractUserIdFromPage(username));
 
     if (!userId) {
       // 最多重试 3 次，每次延迟 500ms
@@ -304,8 +652,8 @@ class TwitterNotes {
     this._profileProcessStatus.set(username, "done");
   }
 
+  // 在主页等页面基于用户名显示备注
   processHomePage() {
-    // 在主页等页面基于用户名显示备注
     const tweets = document.querySelectorAll('[data-testid="tweet"]');
 
     tweets.forEach((tweet) => {
@@ -325,6 +673,7 @@ class TwitterNotes {
     });
   }
 
+  // 在用户页面的推文中也显示备注
   displayNotesInUserTweets(userId, username) {
     const observer = new MutationObserver(() => {
       const tweets = document.querySelectorAll('[data-testid="tweet"]');
@@ -460,7 +809,13 @@ class TwitterNotes {
           this.showNoteDialog(currentNote.userId, username);
         } else {
           // 没有备注，通过用户名获取 userId
-          const userId = await this.fetchUserIdFromProfile(username);
+          const userId =
+            this.userIdCache.get(username) ||
+            (await this.fetchUserIdFromProfile(username));
+
+          // 缓存用户名到ID的映射
+          this.userIdCache.set(username, userId);
+
           this.showNoteDialog(userId, username);
         }
       } else {
@@ -479,6 +834,149 @@ class TwitterNotes {
     noteContainer.appendChild(noteDisplay);
     noteContainer.appendChild(noteButton);
     noteContainer.appendChild(detailButton);
+    userNameContainer.appendChild(noteContainer);
+  }
+
+  // 处理关注者/粉丝页面
+  processFollowingFollowersPage() {
+    // 处理已存在的用户卡片
+    this.processUserCards();
+
+    // 监听新加载的用户卡片
+    const observer = new MutationObserver(() => {
+      this.processUserCards();
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  // 处理用户卡片
+  processUserCards() {
+    // 查找用户卡片 - 关注者/粉丝页面的用户项
+    const userCells = document.querySelectorAll('[data-testid="UserCell"]');
+
+    userCells.forEach((userCell) => {
+      if (userCell.hasAttribute("data-twitter-notes-processed")) return;
+
+      // 查找用户名链接
+      const userNameLink = userCell.querySelector('a[href*="/"][role="link"]');
+      if (!userNameLink) return;
+
+      const username = this.extractUsername(userNameLink.href);
+      if (!username) return;
+
+      // 查找用户名显示区域
+      const userNameContainer = Array.from(
+        userCell.querySelectorAll('a[href*="/"] span.css-1jxf684')
+      ).find((span) => span.textContent.startsWith("@"));
+      if (!userNameContainer) return;
+
+      // 添加备注元素
+      this.addUserCardNoteElements(userCell, userNameContainer, username);
+      userCell.setAttribute("data-twitter-notes-processed", "true");
+    });
+  }
+
+  // 为用户卡片添加备注元素
+  addUserCardNoteElements(userCell, userNameContainer, username) {
+    // 检查是否已经添加过
+    if (userCell.querySelector(".twitter-notes-inline")) return;
+
+    const noteContainer = document.createElement("span");
+    noteContainer.className = "twitter-notes-inline";
+    noteContainer.setAttribute("data-username", username);
+
+    // 创建备注显示元素
+    const noteDisplay = document.createElement("span");
+    noteDisplay.className = "twitter-notes-display";
+
+    // 创建备注按钮
+    const noteButton = document.createElement("button");
+    noteButton.className = "twitter-notes-inline-button";
+    noteButton.innerHTML = "📝";
+
+    // 创建详情按钮
+    const detailButton = document.createElement("button");
+    detailButton.className = "twitter-notes-detail-button";
+    detailButton.innerHTML = "ℹ️";
+    detailButton.title = "查看详情";
+    detailButton.style.display = "none";
+
+    // 获取备注数据
+    const currentNote = this.getUserNote(username);
+
+    if (currentNote) {
+      const noteName = currentNote.name || "";
+      const noteDescription = currentNote.description || "";
+
+      noteButton.classList.add("has-note");
+      noteDisplay.textContent = `${noteName}`;
+      noteDisplay.style.display = "inline";
+
+      // 添加标签颜色显示
+      if (currentNote.tagId) {
+        chrome.storage.local.get(["noteTags"]).then((result) => {
+          const tags = result.noteTags || {};
+          const tag = tags[currentNote.tagId];
+          if (tag) {
+            noteDisplay.style.backgroundColor = tag.color;
+            noteDisplay.style.color = "white";
+          }
+        });
+      }
+
+      if (noteDescription) {
+        detailButton.style.display = "inline";
+        detailButton.title = `${langData.viewDetail}: ${noteDescription}`;
+      } else {
+        detailButton.style.display = "none";
+      }
+    } else {
+      noteDisplay.style.display = "none";
+      noteButton.title = langData.addNote;
+    }
+
+    // 绑定事件
+    noteButton.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (currentNote) {
+        // 已经有备注，直接编辑
+        this.showNoteDialog(currentNote.userId, username);
+      } else {
+        // 没有备注，通过用户名获取 userId
+        try {
+          const userId =
+            this.userIdCache.get(username) ||
+            (await this.fetchUserIdFromProfile(username));
+
+          // 缓存用户名到ID的映射
+          this.userIdCache.set(username, userId);
+
+          this.showNoteDialog(userId, username);
+        } catch (error) {
+          console.error("获取用户ID失败:", error);
+          // 如果获取ID失败，使用用户名作为标识
+          this.showNoteDialog(null, username);
+        }
+      }
+    });
+
+    detailButton.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.showNoteDetail(currentNote.userId, username);
+    });
+
+    // 按顺序添加：备注显示 -> 编辑按钮 -> 详情按钮
+    noteContainer.appendChild(noteDisplay);
+    noteContainer.appendChild(noteButton);
+    noteContainer.appendChild(detailButton);
+
     userNameContainer.appendChild(noteContainer);
   }
 

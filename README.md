@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/version-4.0.2-blue.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-4.1.0-blue.svg" alt="Version"></a>
   <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Manifest-V3-green.svg" alt="Manifest"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Chrome%20Extension-orange.svg" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
@@ -12,6 +12,20 @@
 ---
 
 <summary>🕑 Changed</summary>
+
+## v4.1.0
+
+- 增加标签内账户列表展示
+- Add account list display in tags
+
+## v4.0.3
+
+- 增加关注/粉丝页面的支持
+- 优化了页面刷新检测
+- 优化了ID获取逻辑，减少重复获取
+- Add display on following/followers page
+- Optimized page refresh detection
+- Optimized ID fetch
 
 ## v4.0.2
 
