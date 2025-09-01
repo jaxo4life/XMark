@@ -29,9 +29,6 @@ class TwitterNotes {
     this.notes = {}; // 存储备注数据，键可能是用户名或用户ID
     this.userIdCache = new Map(); // 缓存用户名到ID的映射
     this.init();
-    this.avatarQueue = [];
-    this.activeCount = 0;
-    this.MAX_ACTIVE = 2;
     this.observeGroups();
     this._profileProcessStatus = new Map();
   }
@@ -244,7 +241,7 @@ class TwitterNotes {
       img.style.marginRight = "10px";
 
       // 调用函数直接设置头像和错误处理
-      this.setUserAvatar(img, user.username);
+      img.src = `https://unavatar.io/twitter/${user.username}`;
 
       const text = document.createElement("div");
       text.innerHTML = `<strong>${user.name}</strong><br>@${user.username}<br>${
@@ -260,54 +257,6 @@ class TwitterNotes {
 
     // 滑入面板
     requestAnimationFrame(() => (panel.style.right = "0"));
-  }
-
-  async setUserAvatar(img, username) {
-    // 第一步：unavatar
-    img.src = `https://unavatar.io/twitter/${username}`;
-
-    // unavatar 加载失败时加入队列处理
-    img.onerror = () => {
-      this.avatarQueue.push({ img, username });
-      this.processQueue();
-    };
-  }
-
-  processQueue() {
-    if (this.activeCount >= this.MAX_ACTIVE || this.avatarQueue.length === 0)
-      return;
-
-    const { img, username } = this.avatarQueue.shift();
-    this.activeCount++;
-
-    setTimeout(() => {
-      try {
-        const iframe = document.createElement("iframe");
-        iframe.style.display = "none";
-        iframe.src = `https://x.com/${username}`;
-        document.body.appendChild(iframe);
-
-        iframe.onload = () => {
-          try {
-            const doc = iframe.contentDocument || iframe.contentWindow.document;
-            const profileImg = doc.querySelector('img[src*="profile_images"]');
-            img.src = profileImg
-              ? profileImg.src
-              : "https://via.placeholder.com/40?text=?";
-          } catch {
-            img.src = "https://via.placeholder.com/40?text=?";
-          } finally {
-            document.body.removeChild(iframe);
-            this.activeCount--;
-            this.processQueue(); // 处理队列中下一个
-          }
-        };
-      } catch {
-        img.src = "https://via.placeholder.com/40?text=?";
-        this.activeCount--;
-        this.processQueue();
-      }
-    }, 500 + Math.random() * 500);
   }
 
   observeGroups() {
