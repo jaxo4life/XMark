@@ -11,7 +11,7 @@
 
 ---
 
-<summary>🕑 Changed</summary>
+<summary>🕑 Changelog</summary>
 
 ## v4.1.2
 
