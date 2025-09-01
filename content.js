@@ -240,8 +240,7 @@ class TwitterNotes {
       img.style.borderRadius = "50%";
       img.style.marginRight = "10px";
 
-      // 调用函数直接设置头像和错误处理
-      img.src = `https://unavatar.io/twitter/${user.username}`;
+      img.src = `https://unavatar.io/x/${user.username}`;
 
       const text = document.createElement("div");
       text.innerHTML = `<strong>${user.name}</strong><br>@${user.username}<br>${
