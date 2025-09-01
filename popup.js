@@ -1593,7 +1593,7 @@ async function backupToWebDAV() {
     );
   } finally {
     button.disabled = false;
-    button.innerHTML = `<span>🌐</span> ${langData.manualBackup}`;
+    button.innerHTML = `<span>${langData.manualBackup}</span>`;
   }
 }
 
@@ -1715,7 +1715,7 @@ async function restoreFromWebDAV() {
     );
   } finally {
     button.disabled = false;
-    button.innerHTML = `<span>📥</span> ${langData.restoreData}`;
+    button.innerHTML = `<span>${langData.restoreData}</span>`;
   }
 }
 

@@ -135,14 +135,14 @@ class TwitterNotes {
       panel = document.createElement("div");
       panel.id = "twitterTagPanel";
       panel.style.position = "fixed";
-      panel.style.top = "80px";
+      panel.style.top = "100px";
       panel.style.right = "-340px";
       panel.style.width = "320px";
-      panel.style.maxHeight = "80%";
+      panel.style.maxHeight = "70%";
       panel.style.overflowY = "auto";
       panel.style.borderRadius = "12px";
       panel.style.boxShadow = "0 4px 12px rgba(0,0,0,0.1)";
-      panel.style.padding = "0"; // 标题栏自己控制padding
+      panel.style.padding = "0";
       panel.style.zIndex = "9999";
       panel.style.fontFamily =
         'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
@@ -179,7 +179,7 @@ class TwitterNotes {
     const titleBar = document.createElement("div");
     titleBar.style.display = "flex";
     titleBar.style.alignItems = "center";
-    titleBar.style.justifyContent = "center"; // 默认居中标题文字
+    titleBar.style.justifyContent = "center";
     titleBar.style.position = "sticky";
     titleBar.style.top = "0";
     titleBar.style.zIndex = "1";
@@ -194,8 +194,8 @@ class TwitterNotes {
     // 标题文字
     const titleText = document.createElement("div");
     titleText.textContent = tag?.name || "标签";
-    titleText.style.flex = "1"; // 占据剩余空间
-    titleText.style.textAlign = "center"; // 居中
+    titleText.style.flex = "1";
+    titleText.style.textAlign = "center";
     titleBar.appendChild(titleText);
 
     // 关闭按钮
