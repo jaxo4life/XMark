@@ -29,6 +29,7 @@ class TwitterNotes {
     this.notes = {}; // 存储备注数据，键可能是用户名或用户ID
     this.userIdCache = new Map(); // 缓存用户名到ID的映射
     this.init();
+    this.avatarTTLMap = {};
     this.observeGroups();
     this._profileProcessStatus = new Map();
   }
@@ -240,7 +241,11 @@ class TwitterNotes {
       img.style.borderRadius = "50%";
       img.style.marginRight = "10px";
 
-      img.src = `https://unavatar.io/x/${user.username}`;
+      if (!this.avatarTTLMap[user.username]) {
+        this.avatarTTLMap[user.username] = Math.floor(Math.random() * 24) + 1;
+      }
+      const ttl = this.avatarTTLMap[user.username];
+      img.src = `https://unavatar.io/x/${user.username}?ttl=${ttl}h`;
 
       const text = document.createElement("div");
       text.innerHTML = `<strong>${user.name}</strong><br>@${user.username}<br>${
