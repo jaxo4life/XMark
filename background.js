@@ -30,8 +30,6 @@ chrome.runtime.onInstalled.addListener(async () => {
   }
 });
 
-let lastFrequency;
-
 // 监听存储变化，可以用于同步等功能
 chrome.storage.onChanged.addListener((changes, namespace) => {
   if (namespace === "local" && changes.twitterNotes) {
@@ -308,9 +306,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   // 按标签显示
   if (request.action === "getGroups") {
-    chrome.storage.local.get(["twitterNotes", "noteTags"], (data) => {
-      sendResponse(data || {});
-    });
+    chrome.storage.local.get(
+      ["twitterNotes", "noteTags", "noteTagsOrder"],
+      (data) => {
+        sendResponse(data || {});
+      }
+    );
     return true; // 异步响应
   }
 });

@@ -56,11 +56,15 @@ class TwitterNotes {
   }
 
   async initGroups() {
-    const { twitterNotes = {}, noteTags = {} } = await this.getGroups();
+    // 取出标签和顺序
+    const { noteTags = {}, noteTagsOrder = [] } = await this.getGroups();
 
     const nav = document.querySelector("header nav");
     if (!nav) return;
-    if (nav.querySelector("[data-groups-nav]")) return;
+
+    // 删除旧 wrapper，保证每次刷新都生效
+    const oldWrapper = nav.querySelector("[data-groups-nav]");
+    if (oldWrapper) oldWrapper.remove();
 
     const wrapper = document.createElement("div");
     wrapper.setAttribute("data-groups-nav", "true");
@@ -74,7 +78,15 @@ class TwitterNotes {
     wrapper.style.overflowX = "auto"; // 超出可横向滚动
     wrapper.style.scrollBehavior = "smooth"; // 滑动平滑
 
-    Object.values(noteTags).forEach((tag) => {
+    // 渲染顺序：先按 noteTagsOrder，再补上缺的
+    const order = (
+      noteTagsOrder.length ? noteTagsOrder : Object.keys(noteTags)
+    ).filter((id) => noteTags[id]);
+
+    order.forEach((id) => {
+      const tag = noteTags[id];
+      if (!tag) return;
+
       const btn = document.createElement("span");
       btn.textContent = tag.name;
 
@@ -299,8 +311,15 @@ class TwitterNotes {
   }
 
   observeGroups() {
+    let busy = false;
     const observer = new MutationObserver(() => {
-      this.initGroups().catch(() => {});
+      if (busy) return; // 避免无限循环
+      busy = true;
+      this.initGroups()
+        .catch(() => {})
+        .finally(() => {
+          busy = false;
+        });
     });
     observer.observe(document.body, { childList: true, subtree: true });
   }
@@ -1439,9 +1458,6 @@ class TwitterNotes {
 // 初始化
 const twitterNotes = new TwitterNotes();
 
-// 挂到全局，供 popup 调用
-window.twitterNotesInstance = twitterNotes;
-
 // 监听语言变化
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes.lang) {
@@ -1449,5 +1465,17 @@ chrome.storage.onChanged.addListener((changes, area) => {
     getCurrentLangData().then(() => {
       twitterNotes.updateAllLanguageDependentElements(); // 更新界面文本
     });
+  }
+});
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.action === "initGroups") {
+    if (twitterNotes.initGroups) {
+      twitterNotes
+        .initGroups()
+        .then(() => sendResponse({ ok: true }))
+        .catch((err) => sendResponse({ ok: false, error: err.message }));
+      return true; // 表示异步响应
+    }
   }
 });

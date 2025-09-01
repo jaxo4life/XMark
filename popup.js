@@ -1391,9 +1391,14 @@ async function testWebdavConnection() {
 
 async function exportNotes() {
   try {
-    const result = await chrome.storage.local.get(["twitterNotes", "noteTags"]);
+    const result = await chrome.storage.local.get([
+      "twitterNotes",
+      "noteTags",
+      "noteTagsOrder",
+    ]);
     const notes = result.twitterNotes || {};
     const tags = result.noteTags || {};
+    const order = result.noteTagsOrder || [];
 
     const manifest = chrome.runtime.getManifest();
     const exportData = {
@@ -1401,6 +1406,7 @@ async function exportNotes() {
       exportTime: new Date().toISOString(),
       notes: notes,
       tags: tags,
+      noteTagsOrder: order,
     };
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], {
@@ -1433,9 +1439,14 @@ async function importNotes(event) {
     }
 
     // 获取现有备注
-    const result = await chrome.storage.local.get(["twitterNotes", "noteTags"]);
+    const result = await chrome.storage.local.get([
+      "twitterNotes",
+      "noteTags",
+      "noteTagsOrder",
+    ]);
     const existingNotes = result.twitterNotes || {};
     const existingTags = result.noteTags || {};
+    const existingOrder = result.noteTagsOrder || [];
 
     // 处理导入的备注，确保格式正确
     const processedNotes = {};
@@ -1455,9 +1466,21 @@ async function importNotes(event) {
     const mergedNotes = { ...existingNotes, ...processedNotes };
     const mergedTags = { ...existingTags, ...processedTags };
 
+    // 处理导入的标签顺序
+    let mergedOrder = [];
+    if (importData.noteTagsOrder) {
+      mergedOrder = existingOrder.concat(
+        importData.noteTagsOrder.filter((id) => !existingOrder.includes(id))
+      );
+    } else {
+      // 老文件，没有 noteTagsOrder，用标签对象的顺序自动生成
+      mergedOrder = Object.keys(importData.tags || {});
+    }
+
     await chrome.storage.local.set({
       twitterNotes: mergedNotes,
       noteTags: mergedTags,
+      noteTagsOrder: mergedOrder,
     });
 
     // 重新加载数据
@@ -1500,9 +1523,14 @@ async function backupToWebDAV() {
     }
 
     // 获取备注和标签数据
-    const result = await chrome.storage.local.get(["twitterNotes", "noteTags"]);
+    const result = await chrome.storage.local.get([
+      "twitterNotes",
+      "noteTags",
+      "noteTagsOrder",
+    ]);
     const notes = result.twitterNotes || {};
     const tags = result.noteTags || {};
+    const order = result.noteTagsOrder || [];
 
     const manifest = chrome.runtime.getManifest();
     const exportData = {
@@ -1510,6 +1538,7 @@ async function backupToWebDAV() {
       exportTime: new Date().toISOString(),
       notes: notes,
       tags: tags,
+      noteTagsOrder: order,
     };
 
     const fileName = `XMark-backup-${
@@ -1657,6 +1686,22 @@ async function restoreFromWebDAV() {
       await loadTags();
     }
 
+    // 处理标签顺序
+    let mergedOrder = [];
+    if (importData.noteTagsOrder) {
+      const result = await chrome.storage.local.get(["noteTagsOrder"]);
+      const existingOrder = result.noteTagsOrder || [];
+      mergedOrder = existingOrder.concat(
+        importData.noteTagsOrder.filter((id) => !existingOrder.includes(id))
+      );
+    } else {
+      // 老文件，没有 noteTagsOrder，用标签对象的顺序自动生成
+      mergedOrder = Object.keys(importData.tags || {});
+    }
+
+    await chrome.storage.local.set({ noteTagsOrder: mergedOrder });
+    await loadTags();
+
     showMessage(
       `${langData.messages.webdavRestoreSuccess} ${
         Object.keys(importData.notes).length
@@ -1681,7 +1726,11 @@ async function clearAllNotes() {
 
   try {
     await exportNotes();
-    await chrome.storage.local.remove(["twitterNotes", "noteTags"]);
+    await chrome.storage.local.remove([
+      "twitterNotes",
+      "noteTags",
+      "noteTagsOrder",
+    ]);
     await loadStats();
     await loadRecentNotes();
     await loadTags();
@@ -2359,6 +2408,22 @@ async function restoreFromSpecificBackup(fileName) {
       await loadTags();
     }
 
+    // 恢复标签顺序
+    let mergedOrder = [];
+    if (importData.noteTagsOrder) {
+      const result = await chrome.storage.local.get(["noteTagsOrder"]);
+      const existingOrder = result.noteTagsOrder || [];
+      mergedOrder = existingOrder.concat(
+        importData.noteTagsOrder.filter((id) => !existingOrder.includes(id))
+      );
+    } else {
+      // 老文件，没有 noteTagsOrder，用标签对象的顺序自动生成
+      mergedOrder = Object.keys(importData.tags || {});
+    }
+
+    await chrome.storage.local.set({ noteTagsOrder: mergedOrder });
+    await loadTags();
+
     showMessage(
       `${langData.messages.restoreSuccess} ${
         Object.keys(importData.notes).length
@@ -2618,8 +2683,12 @@ function showAddTagDialog() {
         }
 
         // 检查标签名是否已存在
-        const result = await chrome.storage.local.get(["noteTags"]);
+        const result = await chrome.storage.local.get([
+          "noteTags",
+          "noteTagsOrder",
+        ]);
         const existingTags = result.noteTags || {};
+        const order = result.noteTagsOrder || [];
 
         const tagExists = Object.values(existingTags).some(
           (tag) => tag.name === tagName
@@ -2638,11 +2707,38 @@ function showAddTagDialog() {
           createdAt: new Date().toISOString(),
         };
 
+        // 更新标签 & 顺序
         existingTags[tagId] = newTag;
-        await chrome.storage.local.set({ noteTags: existingTags });
+        order.push(tagId);
+
+        await chrome.storage.local.set({
+          noteTags: existingTags,
+          noteTagsOrder: order,
+        });
 
         await loadTags();
         await loadAutoBackupSettings(); // 重新加载自动备份设置以更新标签选项
+
+        try {
+          const [tab] = await chrome.tabs.query({
+            active: true,
+            currentWindow: true,
+          });
+          await new Promise((resolve, reject) => {
+            chrome.tabs.sendMessage(
+              tab.id,
+              { action: "initGroups" },
+              (resp) => {
+                if (chrome.runtime.lastError)
+                  return reject(chrome.runtime.lastError);
+                resolve(resp);
+              }
+            );
+          });
+        } catch (err) {
+          console.error("刷新页面标签失败：", err);
+        }
+
         closeDialog();
         showMessage(`${tagName} ${langData.messages.tagCreated}`, "success");
       });
@@ -2799,15 +2895,46 @@ function showEditTagDialog(tagId) {
         }
 
         try {
-          const result = await chrome.storage.local.get(["noteTags"]);
+          const result = await chrome.storage.local.get([
+            "noteTags",
+            "noteTagsOrder",
+          ]);
           const tags = result.noteTags || {};
+          let order = result.noteTagsOrder || [];
 
           const tagName = tags[tagId]?.name;
           delete tags[tagId];
 
-          await chrome.storage.local.set({ noteTags: tags });
+          // 从顺序中移除
+          order = order.filter((id) => id !== tagId);
+
+          await chrome.storage.local.set({
+            noteTags: tags,
+            noteTagsOrder: order,
+          });
           await loadTags();
           await loadAutoBackupSettings(); // 重新加载自动备份设置以更新标签选项
+
+          try {
+            const [tab] = await chrome.tabs.query({
+              active: true,
+              currentWindow: true,
+            });
+            await new Promise((resolve, reject) => {
+              chrome.tabs.sendMessage(
+                tab.id,
+                { action: "initGroups" },
+                (resp) => {
+                  if (chrome.runtime.lastError)
+                    return reject(chrome.runtime.lastError);
+                  resolve(resp);
+                }
+              );
+            });
+          } catch (err) {
+            console.error("刷新页面标签失败：", err);
+          }
+
           closeDialog();
 
           showMessage(`${tagName} ${langData.messages.tagDeleted}`, "success");
@@ -2828,32 +2955,109 @@ function showEditTagDialog(tagId) {
     });
 }
 
-// loadTags 函数，添加编辑功能
+// loadTags 函数，添加编辑功能，拖拽排序 + 持久化顺序（原生实现）
 async function loadTags() {
   try {
-    const result = await chrome.storage.local.get(["noteTags"]);
-    const tags = result.noteTags || {};
+    const { noteTags = {}, noteTagsOrder = [] } =
+      await chrome.storage.local.get(["noteTags", "noteTagsOrder"]);
 
     const tagList = document.getElementById("tagList");
 
-    if (Object.keys(tags).length === 0) {
-      tagList.innerHTML = `<div style="color: #536471; font-size: 12px; text-align: center; padding: 10px;">暂无标签</div>`;
+    // 计算用于渲染的顺序：优先用持久化顺序，过滤掉已删除的 id；没有则退回当前对象键
+    const order = (
+      noteTagsOrder.length ? noteTagsOrder : Object.keys(noteTags)
+    ).filter((id) => noteTags[id]);
+
+    if (order.length === 0) {
+      tagList.innerHTML = `<div style="color:#536471;font-size:12px;text-align:center;padding:10px;">暂无标签</div>`;
       return;
     }
 
-    tagList.innerHTML = Object.entries(tags)
-      .map(
-        ([tagId, tag]) => `
-        <div class="tag-item" style="background-color: ${tag.color}">
-          <span>${tag.name}</span>
-          <button class="tag-edit" data-id="${tagId}">✏️</button>
-        </div>
-      `
-      )
+    // 渲染（按顺序数组）
+    tagList.innerHTML = order
+      .map((id) => {
+        const tag = noteTags[id];
+        return `
+          <div class="tag-item"
+               draggable="true"
+               data-id="${id}"
+               style="background-color:${
+                 tag.color
+               };display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:10px;margin:6px 0;cursor:grab;">
+            <span style="flex:1;user-select:none;">${escapeHtml(
+              tag.name
+            )}</span>
+            <button class="tag-edit" data-id="${id}" title="编辑" style="border:none;background:transparent;cursor:pointer;">✏️</button>
+          </div>
+        `;
+      })
       .join("");
+
+    // 绑定原生拖拽事件（委托到容器，省心）
+    initDragAndDrop(tagList);
   } catch (error) {
     console.error("加载标签失败:", error);
   }
+}
+
+// 简单的转义，避免名字里有 < > & 之类导致布局异常
+function escapeHtml(str = "") {
+  return str
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function initDragAndDrop(tagList) {
+  let dragEl = null;
+
+  tagList.addEventListener("dragstart", (e) => {
+    const item = e.target.closest(".tag-item");
+    if (!item) return;
+    dragEl = item;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", item.dataset.id);
+    // 小延迟避免被浏览器默认拖拽样式遮挡
+    requestAnimationFrame(() => item.classList.add("dragging"));
+  });
+
+  tagList.addEventListener("dragover", (e) => {
+    e.preventDefault(); // 必须阻止默认，drop 才会触发
+    const overItem = e.target.closest(".tag-item");
+    if (!dragEl || !overItem || overItem === dragEl) return;
+
+    const rect = overItem.getBoundingClientRect();
+    const after = e.clientY - rect.top > rect.height / 2;
+    tagList.insertBefore(dragEl, after ? overItem.nextSibling : overItem);
+  });
+
+  tagList.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    await persistOrder(tagList);
+  });
+
+  tagList.addEventListener("dragend", async () => {
+    if (dragEl) dragEl.classList.remove("dragging");
+    await persistOrder(tagList);
+    dragEl = null;
+  });
+}
+
+async function persistOrder(tagList) {
+  // 仅保存顺序数组，不再依赖对象键顺序
+  const newOrder = [...tagList.querySelectorAll(".tag-item")].map(
+    (el) => el.dataset.id
+  );
+  const { noteTags = {} } = await chrome.storage.local.get(["noteTags"]);
+
+  // 过滤掉已被删除的 id（以防万一）
+  const filtered = newOrder.filter((id) => noteTags[id]);
+
+  await chrome.storage.local.set({ noteTagsOrder: filtered });
+  // 如果你希望立即按新顺序重新渲染，也可以调用：
+  // await loadTags();
 }
 
 // 控制页面标签显示
@@ -2881,15 +3085,19 @@ async function TagGroups() {
         chrome.storage.local.set({
           twitterGroupsVisible: newDisplay === "flex",
         });
-      } else if (window.twitterNotesInstance?.initGroups) {
-        await window.twitterNotesInstance.initGroups();
-        chrome.storage.local.get(
-          ["twitterGroupsVisible"],
-          ({ twitterGroupsVisible }) => {
-            const w = document.querySelector("[data-groups-nav]");
-            if (w && twitterGroupsVisible === false) w.style.display = "none";
-          }
-        );
+      } else {
+        // 直接调用 content script 里的实例刷新
+        chrome.runtime.sendMessage({ action: "initGroups" }, (resp) => {
+          // 可选：处理返回值
+          if (!resp?.ok) console.error("刷新标签失败", resp?.error);
+          chrome.storage.local.get(
+            ["twitterGroupsVisible"],
+            ({ twitterGroupsVisible }) => {
+              const w = document.querySelector("[data-groups-nav]");
+              if (w && twitterGroupsVisible === false) w.style.display = "none";
+            }
+          );
+        });
       }
     },
   });
