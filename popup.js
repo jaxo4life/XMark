@@ -65,6 +65,19 @@ async function loadLanguage(lang) {
   }
 }
 
+// 语言模块
+async function getCurrentLangData() {
+  return new Promise((resolve, reject) => {
+    if (langData && Object.keys(langData).length > 0) {
+      resolve();
+    } else {
+      loadLanguage(currentLang)
+        .then(() => resolve())
+        .catch((error) => reject(error));
+    }
+  });
+}
+
 // 更新页面中所有需要翻译的文本
 function updateTexts() {
   // 统计部分标签更新
@@ -306,16 +319,80 @@ function showUpdateNotification(newVersion, releaseUrl) {
   }
 }
 
+// 加载统计数据
+async function loadStats() {
+  try {
+    const result = await chrome.storage.local.get(["twitterNotes"]);
+    const notes = result.twitterNotes || {};
+
+    const totalNotes = Object.keys(notes).length;
+    document.getElementById("totalNotes").textContent = totalNotes;
+
+    // 计算今日新增
+    const today = new Date().toDateString();
+    const todayNotes = Object.values(notes).filter(
+      (note) => new Date(note.createdAt).toDateString() === today
+    ).length;
+    document.getElementById("todayNotes").textContent = todayNotes;
+  } catch (error) {
+    console.error("加载统计数据失败:", error);
+  }
+}
+
+// 加载最近备注
+async function loadRecentNotes() {
+  try {
+    const result = await chrome.storage.local.get(["twitterNotes", "noteTags"]);
+    const notes = result.twitterNotes || {};
+    const tags = result.noteTags || {};
+
+    const recentNotesContainer = document.getElementById("recentNotes");
+
+    if (Object.keys(notes).length === 0) {
+      recentNotesContainer.innerHTML = `
+        <div style="text-align: center; color: #536471; padding: 20px;">
+          ${langData.noNotes}
+        </div>
+      `;
+      return;
+    }
+
+    // 按创建时间排序，显示最近10条
+    const sortedNotes = Object.entries(notes)
+      .sort(([, a], [, b]) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 10);
+
+    recentNotesContainer.innerHTML = sortedNotes
+      .map(([userId, note]) => {
+        const noteName = note.name || "";
+        const noteTag = note.tagId || "";
+
+        return `
+        <div class="note-item">
+          <div class="note-user">@${note.username || "unknown"}</div>
+          <div class="note-id">ID: ${userId}</div>
+          <div class="note-name">${langData.noteName}: ${noteName}</div>
+          ${
+            noteTag && tags[noteTag]
+              ? `<div class="note-desc">${langData.tagName}: ${tags[noteTag].name}</div>`
+              : ""
+          }
+        </div>
+      `;
+      })
+      .join("");
+  } catch (error) {
+    console.error("加载最近备注失败:", error);
+  }
+}
+
 // 监听来自 background script 的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "autoBackupComplete") {
     if (message.success) {
-      showMessage(
-        `${langData.messages.autoBackupSuccess} ${message.fileName}`,
-        "success"
-      );
+      showMessage(`${langData.messages.autoBackupSuccess} ${message.fileName}`);
     } else {
-      showErrorMessage(
+      showMessage(
         `${langData.messages.autoBackupFailed} ${message.error}`,
         "error"
       );
@@ -326,6 +403,373 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+/* ==========================基础模块========================== */
+// 导出备注
+async function exportNotes() {
+  try {
+    const result = await chrome.storage.local.get([
+      "twitterNotes",
+      "noteTags",
+      "noteTagsOrder",
+    ]);
+    const notes = result.twitterNotes || {};
+    const tags = result.noteTags || {};
+    const order = result.noteTagsOrder || [];
+
+    const manifest = chrome.runtime.getManifest();
+    const exportData = {
+      version: manifest.version,
+      exportTime: new Date().toISOString(),
+      notes: notes,
+      tags: tags,
+      noteTagsOrder: order,
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `XMark-${new Date().toISOString().split("T")[0]}.json`;
+    a.click();
+
+    URL.revokeObjectURL(url);
+    showMessage(langData.exportSuccess);
+  } catch (error) {
+    showMessage(langData.exportFail, "error");
+  }
+}
+
+// 导入备注
+async function importNotes(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const importData = JSON.parse(text);
+
+    if (!importData.notes) {
+      throw new Error(langData.invalidFormat);
+    }
+
+    // 处理导入的数据
+    await processImportedNotes(importData);
+
+    showMessage(langData.importSuccess);
+  } catch (error) {
+    showMessage(langData.importFail, "error");
+  }
+
+  // 清空文件输入
+  event.target.value = "";
+}
+
+// 处理导入的备注数据
+async function processImportedNotes(importData) {
+  // 获取现有备注
+  const result = await chrome.storage.local.get([
+    "twitterNotes",
+    "noteTags",
+    "noteTagsOrder",
+  ]);
+  const existingNotes = result.twitterNotes || {};
+  const existingTags = result.noteTags || {};
+  const existingOrder = result.noteTagsOrder || [];
+
+  // 处理导入的备注，确保格式正确
+  const processedNotes = {};
+  Object.entries(importData.notes).forEach(([userId, note]) => {
+    if (typeof note === "string") {
+      // 旧格式兼容
+      processedNotes[userId] = {
+        name: note,
+        description: "",
+        username: userId,
+        userId: userId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    } else if (note.text && !note.name) {
+      // 旧格式兼容
+      processedNotes[userId] = {
+        name: note.text,
+        description: note.description || "",
+        username: note.username || userId,
+        userId: note.userId || userId,
+        createdAt: note.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    } else {
+      // 新格式
+      processedNotes[userId] = note;
+    }
+  });
+
+  // 处理导入的标签
+  const processedTags = {};
+  if (importData.tags) {
+    Object.entries(importData.tags).forEach(([tagId, tag]) => {
+      processedTags[tagId] = tag;
+    });
+  }
+
+  // 合并备注（导入的备注会覆盖现有的同用户备注）
+  const mergedNotes = { ...existingNotes, ...processedNotes };
+  const mergedTags = { ...existingTags, ...processedTags };
+
+  // 处理导入的标签顺序
+  let mergedOrder = [];
+  if (importData.noteTagsOrder) {
+    mergedOrder = existingOrder.concat(
+      importData.noteTagsOrder.filter((id) => !existingOrder.includes(id))
+    );
+  } else {
+    // 老文件，没有 noteTagsOrder，用标签对象的顺序自动生成
+    mergedOrder = Object.keys(importData.tags || {});
+  }
+
+  await chrome.storage.local.set({
+    twitterNotes: mergedNotes,
+    noteTags: mergedTags,
+    noteTagsOrder: mergedOrder,
+  });
+
+  // 重新加载数据
+  await loadStats();
+  await loadRecentNotes();
+  await loadTags();
+}
+
+// 按标签筛选备注
+function filterNotesByTags(notes, selectedTagIds) {
+  if (!selectedTagIds || selectedTagIds.length === 0) {
+    return notes;
+  }
+
+  const filteredNotes = {};
+  Object.entries(notes).forEach(([userId, note]) => {
+    if (note.tagId && selectedTagIds.includes(note.tagId)) {
+      filteredNotes[userId] = note;
+    }
+  });
+
+  return filteredNotes;
+}
+
+// 按标签导出备注
+async function exportNotesByTags(selectedTagIds) {
+  try {
+    const result = await chrome.storage.local.get(["twitterNotes", "noteTags"]);
+    const allNotes = result.twitterNotes || {};
+    const tags = result.noteTags || {};
+
+    // 筛选指定标签的备注
+    const filteredNotes = filterNotesByTags(allNotes, selectedTagIds);
+
+    if (Object.keys(filteredNotes).length === 0) {
+      showMessage(langData.messages.noNotesWithSelectedTags, "error");
+      return;
+    }
+
+    // 筛选相关的标签
+    const filteredTags = {};
+    selectedTagIds.forEach((tagId) => {
+      if (tags[tagId]) {
+        filteredTags[tagId] = tags[tagId];
+      }
+    });
+
+    const manifest = chrome.runtime.getManifest();
+    const exportData = {
+      version: manifest.version,
+      exportTime: new Date().toISOString(),
+      notes: filteredNotes,
+      tags: filteredTags,
+      exportType: "tags",
+      selectedTags: selectedTagIds,
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: "application/json",
+    });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `XMark-tags-${new Date().toISOString().split("T")[0]}.json`;
+    a.click();
+
+    URL.revokeObjectURL(url);
+    showMessage(
+      `${langData.messages.exportTaggedNotes} ${
+        Object.keys(filteredNotes).length
+      } ${langData.notes}`
+    );
+  } catch (error) {
+    showMessage(langData.exportFail, "error");
+  }
+}
+
+// 显示导出对话框
+function showExportDialog() {
+  const existingDialog = document.querySelector(".export-dialog");
+  if (existingDialog) {
+    existingDialog.remove();
+  }
+
+  getCurrentLangData()
+    .then(async () => {
+      const dialog = document.createElement("div");
+      dialog.className = "export-dialog";
+
+      // 加载标签数据
+      const tagResult = await chrome.storage.local.get(["noteTags"]);
+      const availableTags = tagResult.noteTags || {};
+
+      dialog.innerHTML = `
+        <div class="export-dialog-content">
+          <div class="export-dialog-header">
+            <h3>📤 ${langData.exportOptions}</h3>
+            <button class="twitter-notes-close">×</button>
+          </div>
+          <div class="export-dialog-body">
+            <div class="export-options">
+              <div class="option-group">
+                <label>
+                  <input type="radio" name="exportType" value="all" checked>
+                  ${langData.exportAll}
+                </label>
+              </div>
+              <div class="option-group">
+                <label>
+                  <input type="radio" name="exportType" value="tags">
+                  ${langData.exportByTags}
+                </label>
+              </div>
+            </div>
+            <div id="exportTagSelection" class="tag-selection hidden">
+              <h4>${langData.selectTagsToExport}</h4>
+              <div class="tag-checkboxes">
+                ${Object.entries(availableTags)
+                  .map(
+                    ([tagId, tag]) => `
+                  <div class="tag-checkbox">
+                    <input type="checkbox" id="exportTag_${tagId}" value="${tagId}">
+                    <label for="exportTag_${tagId}">
+                      <span class="tag-color-indicator" style="background-color: ${tag.color}"></span>
+                      ${tag.name}
+                    </label>
+                  </div>
+                `
+                  )
+                  .join("")}
+              </div>
+            </div>
+          </div>
+          <div class="export-dialog-footer">
+            <button id="cancelExport" class="deleteTagBtn">
+              ${langData.exportCancel}
+            </button>
+            <button id="confirmExport" class="saveTagBtn">
+              ${langData.exportSelectedTags}
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(dialog);
+
+      const closeBtn = dialog.querySelector(".twitter-notes-close");
+      const cancelBtn = dialog.querySelector("#cancelExport");
+      const confirmBtn = dialog.querySelector("#confirmExport");
+      const radioButtons = dialog.querySelectorAll('input[name="exportType"]');
+      const tagSelection = dialog.querySelector("#exportTagSelection");
+
+      const closeDialog = () => dialog.remove();
+      closeBtn.addEventListener("click", closeDialog);
+      cancelBtn.addEventListener("click", closeDialog);
+      dialog.addEventListener("click", (e) => {
+        if (e.target === dialog) closeDialog();
+      });
+
+      // 切换导出类型
+      radioButtons.forEach((radio) => {
+        radio.addEventListener("change", () => {
+          if (radio.value === "tags") {
+            tagSelection.classList.remove("hidden");
+          } else {
+            tagSelection.classList.add("hidden");
+          }
+        });
+      });
+
+      // 确认导出
+      confirmBtn.addEventListener("click", async () => {
+        const exportType = dialog.querySelector(
+          'input[name="exportType"]:checked'
+        ).value;
+
+        if (exportType === "all") {
+          closeDialog();
+          await exportNotes();
+        } else {
+          // 按标签导出
+          const selectedTags = [];
+          dialog
+            .querySelectorAll(
+              '#exportTagSelection input[type="checkbox"]:checked'
+            )
+            .forEach((checkbox) => {
+              selectedTags.push(checkbox.value);
+            });
+
+          if (selectedTags.length === 0) {
+            alert(langData.noTagsSelected);
+            return;
+          }
+
+          closeDialog();
+          await exportNotesByTags(selectedTags);
+        }
+      });
+    })
+    .catch((e) => {
+      console.error("加载语言数据失败:", e);
+    });
+}
+
+// 清空所有备注
+async function clearAllNotes() {
+  if (!confirm(langData.confirmClear)) {
+    return;
+  }
+
+  try {
+    await exportNotes();
+    await chrome.storage.local.remove([
+      "twitterNotes",
+      "noteTags",
+      "noteTagsOrder",
+    ]);
+    await loadStats();
+    await loadRecentNotes();
+    await loadTags();
+
+    showMessage(
+      '<span style="font-weight:bold; font-size:16px;color:#960e0eff;">' +
+        langData.allCleared +
+        "</span>\n" +
+        langData.exportReminder
+    );
+  } catch (error) {
+    showMessage(langData.clearFail, "error");
+  }
+}
+
+/* ==========================WebDAV模块========================== */
 // 切换 WebDAV 配置面板
 function toggleWebdavConfigPanel() {
   const panel = document.getElementById("webdavConfigPanel");
@@ -337,6 +781,142 @@ function toggleWebdavConfigPanel() {
   } else {
     panel.classList.add("hidden");
     toggle.classList.remove("expanded");
+  }
+}
+
+// 加载WebDAV配置
+async function loadWebdavConfig() {
+  try {
+    const result = await chrome.storage.local.get(["webdavConfig"]);
+    let config = result.webdavConfig || {};
+
+    // 如果配置是加密的，先解密
+    if (config.encrypted) {
+      config = await cryptoUtils.decryptWebDAVConfig(config);
+    }
+
+    if (config.url) document.getElementById("webdavUrl").value = config.url;
+    if (config.username)
+      document.getElementById("webdavUsername").value = config.username;
+    if (config.password)
+      document.getElementById("webdavPassword").value = config.password;
+  } catch (error) {
+    console.error("加载 WebDAV 配置失败:", error);
+  }
+}
+
+// 保存WebDAV配置
+async function saveWebdavConfig() {
+  const url = document.getElementById("webdavUrl").value.trim();
+  const username = document.getElementById("webdavUsername").value.trim();
+  const password = document.getElementById("webdavPassword").value.trim();
+
+  if (!url) {
+    showMessage(langData.messages.enterServerAddress, "error");
+    return;
+  }
+
+  if (!username || !password) {
+    showMessage(langData.messages.enterCredentials, "error");
+    return;
+  }
+
+  try {
+    // 加密配置
+    const encryptedConfig = await cryptoUtils.encryptWebDAVConfig({
+      url,
+      username,
+      password,
+    });
+    console.log(encryptedConfig);
+    await chrome.storage.local.set({ webdavConfig: encryptedConfig });
+
+    // 清除之前的连接状态
+    await chrome.storage.local.remove(["webdavConnectionStatus"]);
+
+    showMessage(langData.messages.webdavConfigSaved);
+    await updateConfigurationStatusOnly(); // 只更新状态，不改变折叠状态
+  } catch (error) {
+    showMessage(
+      `langData.messages.webdavConfigSaveFailed + ${error.message}`,
+      "error"
+    );
+  }
+}
+
+// 测试WebDAV连接
+async function testWebdavConnection() {
+  const button = document.getElementById("testWebdavConnection");
+  const originalText = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = `<span>⏳</span> ${langData.buttons.testing}`;
+
+  try {
+    const configResult = await chrome.storage.local.get(["webdavConfig"]);
+    let config = configResult.webdavConfig;
+
+    if (!config || !config.url) {
+      throw new Error(langData.messages.configureWebdavFirst);
+    }
+
+    // 解密配置
+    if (config.encrypted) {
+      config = await cryptoUtils.decryptWebDAVConfig(config);
+    }
+
+    // 准备认证头
+    const headers = {};
+    if (config.username && config.password) {
+      headers["Authorization"] =
+        "Basic " + btoa(config.username + ":" + config.password);
+    }
+
+    // 测试连接 - 使用 OPTIONS 方法
+    const testResult = await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        {
+          action: "webdavRequest",
+          url: config.url,
+          method: "OPTIONS",
+          headers: headers,
+        },
+        resolve
+      );
+    });
+
+    if (!testResult.success) {
+      throw new Error(testResult.error);
+    }
+
+    if (
+      testResult.response.ok ||
+      testResult.response.status === 200 ||
+      testResult.response.status === 204
+    ) {
+      // 保存连接成功状态
+      await chrome.storage.local.set({
+        webdavConnectionStatus: "connected",
+      });
+      showMessage(langData.messages.webdavTestSuccess);
+    } else {
+      // 保存连接失败状态
+      await chrome.storage.local.set({
+        webdavConnectionStatus: "failed",
+      });
+      throw new Error(
+        `${langData.messages.connectionFailed} ${testResult.response.status} ${testResult.response.statusText}`
+      );
+    }
+  } catch (error) {
+    await chrome.storage.local.set({ webdavConnectionStatus: "failed" });
+    showMessage(
+      `${langData.messages.webdavTestFailed} + ${error.message}`,
+      "error"
+    );
+  } finally {
+    button.disabled = false;
+    button.innerHTML = originalText;
+    await updateConfigurationStatus();
   }
 }
 
@@ -645,12 +1225,12 @@ async function toggleAutoBackup() {
     await loadAutoBackupSettings();
 
     if (settings.enabled) {
-      showMessage(langData.messages.autoBackupEnabled, "success");
+      showMessage(langData.messages.autoBackupEnabled);
     } else {
-      showMessage(langData.messages.autoBackupDisabled, "info");
+      showMessage(langData.messages.autoBackupDisabled, "error");
     }
   } catch (error) {
-    showErrorMessage(langData.messages.settingsFailed, "error");
+    showMessage(langData.messages.settingsFailed, "error");
   }
 }
 
@@ -667,12 +1247,9 @@ async function updateAutoBackupFrequency() {
     await loadAutoBackupSettings();
 
     const frequencyText = langData.frequencies[frequency];
-    showMessage(
-      `${langData.messages.frequencyUpdated} ${frequencyText}`,
-      "success"
-    );
+    showMessage(`${langData.messages.frequencyUpdated} ${frequencyText}`);
   } catch (error) {
-    showErrorMessage(langData.messages.updateFailed, "error");
+    showMessage(langData.messages.updateFailed, "error");
   }
 }
 
@@ -697,160 +1274,13 @@ async function testAutoBackup() {
       chrome.runtime.sendMessage({ action: "triggerAutoBackup" }, resolve);
     });
 
-    showMessage(langData.messages.autoBackupTriggered, "info");
+    showMessage(langData.messages.autoBackupTriggered);
   } catch (error) {
-    showErrorMessage(
-      `${langData.messages.testFailed} + ${error.message}`,
-      "error"
-    );
+    showMessage(`${langData.messages.testFailed} + ${error.message}`, "error");
   } finally {
     button.disabled = false;
     button.innerHTML = originalText;
   }
-}
-
-// 根据标签筛选备注
-function filterNotesByTags(notes, selectedTagIds) {
-  if (!selectedTagIds || selectedTagIds.length === 0) {
-    return notes;
-  }
-
-  const filteredNotes = {};
-  Object.entries(notes).forEach(([userId, note]) => {
-    if (note.tagId && selectedTagIds.includes(note.tagId)) {
-      filteredNotes[userId] = note;
-    }
-  });
-
-  return filteredNotes;
-}
-
-// 显示导出对话框
-function showExportDialog() {
-  const existingDialog = document.querySelector(".export-dialog");
-  if (existingDialog) {
-    existingDialog.remove();
-  }
-
-  getCurrentLangData()
-    .then(async () => {
-      const dialog = document.createElement("div");
-      dialog.className = "export-dialog";
-
-      // 加载标签数据
-      const tagResult = await chrome.storage.local.get(["noteTags"]);
-      const availableTags = tagResult.noteTags || {};
-
-      dialog.innerHTML = `
-        <div class="export-dialog-content">
-          <div class="export-dialog-header">
-            <h3>📤 ${langData.exportOptions}</h3>
-            <button class="twitter-notes-close">×</button>
-          </div>
-          <div class="export-dialog-body">
-            <div class="export-options">
-              <div class="option-group">
-                <label>
-                  <input type="radio" name="exportType" value="all" checked>
-                  ${langData.exportAll}
-                </label>
-              </div>
-              <div class="option-group">
-                <label>
-                  <input type="radio" name="exportType" value="tags">
-                  ${langData.exportByTags}
-                </label>
-              </div>
-            </div>
-            <div id="exportTagSelection" class="tag-selection hidden">
-              <h4>${langData.selectTagsToExport}</h4>
-              <div class="tag-checkboxes">
-                ${Object.entries(availableTags)
-                  .map(
-                    ([tagId, tag]) => `
-                  <div class="tag-checkbox">
-                    <input type="checkbox" id="exportTag_${tagId}" value="${tagId}">
-                    <label for="exportTag_${tagId}">
-                      <span class="tag-color-indicator" style="background-color: ${tag.color}"></span>
-                      ${tag.name}
-                    </label>
-                  </div>
-                `
-                  )
-                  .join("")}
-              </div>
-            </div>
-          </div>
-          <div class="export-dialog-footer">
-            <button id="cancelExport" class="deleteTagBtn">
-              ${langData.exportCancel}
-            </button>
-            <button id="confirmExport" class="saveTagBtn">
-              ${langData.exportSelectedTags}
-            </button>
-          </div>
-        </div>
-      `;
-
-      document.body.appendChild(dialog);
-
-      const closeBtn = dialog.querySelector(".twitter-notes-close");
-      const cancelBtn = dialog.querySelector("#cancelExport");
-      const confirmBtn = dialog.querySelector("#confirmExport");
-      const radioButtons = dialog.querySelectorAll('input[name="exportType"]');
-      const tagSelection = dialog.querySelector("#exportTagSelection");
-
-      const closeDialog = () => dialog.remove();
-      closeBtn.addEventListener("click", closeDialog);
-      cancelBtn.addEventListener("click", closeDialog);
-      dialog.addEventListener("click", (e) => {
-        if (e.target === dialog) closeDialog();
-      });
-
-      // 切换导出类型
-      radioButtons.forEach((radio) => {
-        radio.addEventListener("change", () => {
-          if (radio.value === "tags") {
-            tagSelection.classList.remove("hidden");
-          } else {
-            tagSelection.classList.add("hidden");
-          }
-        });
-      });
-
-      // 确认导出
-      confirmBtn.addEventListener("click", async () => {
-        const exportType = dialog.querySelector(
-          'input[name="exportType"]:checked'
-        ).value;
-
-        if (exportType === "all") {
-          closeDialog();
-          await exportNotes();
-        } else {
-          // 按标签导出
-          const selectedTags = [];
-          dialog
-            .querySelectorAll(
-              '#exportTagSelection input[type="checkbox"]:checked'
-            )
-            .forEach((checkbox) => {
-              selectedTags.push(checkbox.value);
-            });
-
-          if (selectedTags.length === 0) {
-            alert(langData.noTagsSelected);
-            return;
-          }
-
-          closeDialog();
-          await exportNotesByTags(selectedTags);
-        }
-      });
-    })
-    .catch((e) => {
-      console.error("加载语言数据失败:", e);
-    });
 }
 
 // 显示备份对话框
@@ -981,58 +1411,284 @@ function showBackupDialog() {
     });
 }
 
-// 按标签导出备注
-async function exportNotesByTags(selectedTagIds) {
+// WebDAV 备份
+async function backupToWebDAV() {
+  const button = document.getElementById("webdavBackup");
+  button.disabled = true;
+  button.innerHTML = `<span>⏳</span> ${langData.buttons.backing}`;
+
   try {
-    const result = await chrome.storage.local.get(["twitterNotes", "noteTags"]);
-    const allNotes = result.twitterNotes || {};
-    const tags = result.noteTags || {};
+    const configResult = await chrome.storage.local.get(["webdavConfig"]);
+    let config = configResult.webdavConfig;
 
-    // 筛选指定标签的备注
-    const filteredNotes = filterNotesByTags(allNotes, selectedTagIds);
-
-    if (Object.keys(filteredNotes).length === 0) {
-      showErrorMessage(langData.messages.noNotesWithSelectedTags, "error");
-      return;
+    if (!config || !config.url) {
+      throw new Error(langData.messages.configureWebdavFirst);
     }
 
-    // 筛选相关的标签
-    const filteredTags = {};
-    selectedTagIds.forEach((tagId) => {
-      if (tags[tagId]) {
-        filteredTags[tagId] = tags[tagId];
-      }
-    });
+    // 解密配置
+    if (config.encrypted) {
+      config = await cryptoUtils.decryptWebDAVConfig(config);
+    }
+
+    // 获取备注和标签数据
+    const result = await chrome.storage.local.get([
+      "twitterNotes",
+      "noteTags",
+      "noteTagsOrder",
+    ]);
+    const notes = result.twitterNotes || {};
+    const tags = result.noteTags || {};
+    const order = result.noteTagsOrder || [];
 
     const manifest = chrome.runtime.getManifest();
     const exportData = {
       version: manifest.version,
       exportTime: new Date().toISOString(),
-      notes: filteredNotes,
-      tags: filteredTags,
-      exportType: "tags",
-      selectedTags: selectedTagIds,
+      notes: notes,
+      tags: tags,
+      noteTagsOrder: order,
     };
 
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-      type: "application/json",
+    const fileName = `XMark-backup-${
+      new Date().toISOString().split("T")[0]
+    }.json`;
+    const fileContent = JSON.stringify(exportData, null, 2);
+
+    // 构建 WebDAV URL
+    const webdavUrl = config.url.endsWith("/")
+      ? config.url + fileName
+      : config.url + "/" + fileName;
+
+    // 准备认证头
+    const headers = {
+      "Content-Type": "application/json",
+    };
+
+    if (config.username && config.password) {
+      headers["Authorization"] =
+        "Basic " + btoa(config.username + ":" + config.password);
+    }
+
+    // 通过 background script 发送请求以绕过 CORS
+    const uploadResult = await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        {
+          action: "webdavRequest",
+          url: webdavUrl,
+          method: "PUT",
+          headers: headers,
+          body: fileContent,
+        },
+        resolve
+      );
     });
 
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `XMark-tags-${new Date().toISOString().split("T")[0]}.json`;
-    a.click();
+    if (!uploadResult.success) {
+      throw new Error(uploadResult.error);
+    }
 
-    URL.revokeObjectURL(url);
-    showMessage(
-      `${langData.messages.exportTaggedNotes} ${
-        Object.keys(filteredNotes).length
-      } ${langData.notes}`,
-      "success"
-    );
+    if (!uploadResult.response.ok) {
+      throw new Error(
+        `WebDAV 上传失败: ${uploadResult.response.status} ${uploadResult.response.statusText}`
+      );
+    }
+
+    showMessage(langData.messages.webdavBackupSuccess);
   } catch (error) {
-    showErrorMessage(langData.exportFail, "error");
+    showMessage(
+      `${langData.messages.webdavBackupFailed} + ${error.message}`,
+      "error"
+    );
+  } finally {
+    button.disabled = false;
+    button.innerHTML = `<span>${langData.manualBackup}</span>`;
+  }
+}
+
+// WebDAV 恢复
+async function restoreFromWebDAV() {
+  const button = document.getElementById("webdavRestore");
+  button.disabled = true;
+  button.innerHTML = `<span>⏳</span> ${langData.buttons.restoring}`;
+
+  try {
+    const configResult = await chrome.storage.local.get(["webdavConfig"]);
+    let config = configResult.webdavConfig;
+
+    if (!config || !config.url) {
+      throw new Error(langData.messages.configureWebdavFirst);
+    }
+
+    // 解密配置
+    if (config.encrypted) {
+      config = await cryptoUtils.decryptWebDAVConfig(config);
+    }
+
+    // 获取所有备份文件列表
+    console.log("正在查找最新的备份文件...");
+    const backupFiles = await getWebDAVBackupList(config);
+
+    if (backupFiles.length === 0) {
+      throw new Error("服务器上没有找到任何备份文件");
+    }
+
+    // 按修改时间排序，获取最新的备份文件
+    const latestBackup = backupFiles.sort((a, b) => {
+      const dateA = new Date(a.lastModified);
+      const dateB = new Date(b.lastModified);
+      return dateB - dateA;
+    })[0];
+
+    const webdavUrl = config.url.endsWith("/")
+      ? config.url + latestBackup.name
+      : config.url + "/" + latestBackup.name;
+
+    // 准备认证头
+    const headers = {};
+    if (config.username && config.password) {
+      headers["Authorization"] =
+        "Basic " + btoa(config.username + ":" + config.password);
+    }
+
+    // 通过 background script 发送请求以绕过 CORS
+    const downloadResult = await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        {
+          action: "webdavRequest",
+          url: webdavUrl,
+          method: "GET",
+          headers: headers,
+        },
+        resolve
+      );
+    });
+
+    if (!downloadResult.success) {
+      throw new Error(downloadResult.error);
+    }
+
+    if (!downloadResult.response.ok) {
+      if (downloadResult.response.status === 404) {
+        throw new Error(langData.messages.noBackupToday);
+      }
+      throw new Error(
+        `${langData.messages.WebDAVDownloadFailed}: ${downloadResult.response.status} ${downloadResult.response.statusText}`
+      );
+    }
+
+    const fileContent = downloadResult.response.text;
+    const importData = JSON.parse(fileContent);
+
+    if (!importData.notes) {
+      throw new Error(langData.messages.missingNotesData);
+    }
+
+    await processImportedNotes(importData);
+
+    showMessage(langData.messages.webdavRestoreSuccess);
+  } catch (error) {
+    showMessage(
+      `${langData.messages.webdavRestoreFailed} + ${error.message}`,
+      "error"
+    );
+  } finally {
+    button.disabled = false;
+    button.innerHTML = `<span>${langData.restoreData}</span>`;
+  }
+}
+
+// 从特定备份恢复
+async function restoreFromSpecificBackup(fileName) {
+  const button = document.getElementById("viewBackupList");
+  const originalText = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = `<span>⏳</span> ${langData.buttons.restoring}`;
+
+  try {
+    const configResult = await chrome.storage.local.get(["webdavConfig"]);
+    let config = configResult.webdavConfig;
+
+    if (!config || !config.url) {
+      throw new Error(langData.messages.configureWebdavFirst);
+    }
+
+    // 解密配置
+    if (config.encrypted) {
+      config = await cryptoUtils.decryptWebDAVConfig(config);
+    }
+
+    const webdavUrl = config.url.endsWith("/")
+      ? config.url + fileName
+      : config.url + "/" + fileName;
+
+    const headers = {};
+    if (config.username && config.password) {
+      headers["Authorization"] =
+        "Basic " + btoa(config.username + ":" + config.password);
+    }
+
+    const downloadResult = await new Promise((resolve) => {
+      chrome.runtime.sendMessage(
+        {
+          action: "webdavRequest",
+          url: webdavUrl,
+          method: "GET",
+          headers: headers,
+        },
+        resolve
+      );
+    });
+
+    if (!downloadResult.success) {
+      throw new Error(downloadResult.error);
+    }
+
+    if (!downloadResult.response.ok) {
+      throw new Error(
+        `${langData.messages.WebDAVDownloadFailed}: ${downloadResult.response.status} ${downloadResult.response.statusText}`
+      );
+    }
+
+    const fileContent = downloadResult.response.text;
+
+    if (!fileContent) {
+      throw new Error(langData.messages.emptyBackupFile);
+    }
+
+    let importData;
+    try {
+      importData = JSON.parse(fileContent);
+    } catch (parseError) {
+      throw new Error(langData.messages.invalidBackupFormat);
+    }
+
+    if (!importData.notes) {
+      throw new Error(langData.messages.missingNotesData);
+    }
+
+    // 询问用户是否要覆盖现有数据
+    const shouldMerge = confirm(
+      `${langData.messages.restoreFromBackup} ${
+        Object.keys(importData.notes).length
+      } ${langData.messages.restoreFromBackup2}`
+    );
+
+    if (!shouldMerge) {
+      showMessage(langData.messages.restoreCancelled, "error");
+      return;
+    }
+
+    await processImportedNotes(importData);
+
+    showMessage(langData.messages.restoreSuccess);
+  } catch (error) {
+    showMessage(
+      `${langData.messages.restoreFailed} + ${error.message}`,
+      "error"
+    );
+  } finally {
+    button.disabled = false;
+    button.innerHTML = originalText;
   }
 }
 
@@ -1132,617 +1788,16 @@ async function backupToWebDAVByTags(selectedTagIds) {
     showMessage(
       `${langData.messages.backupTaggedNotes} ${
         Object.keys(filteredNotes).length
-      } ${langData.notes}`,
-      "success"
+      } ${langData.notes}`
     );
   } catch (error) {
-    showErrorMessage(
+    showMessage(
       `${langData.messages.webdavBackupFailed} + ${error.message}`,
       "error"
     );
   } finally {
     button.disabled = false;
     button.innerHTML = `<span>🌐</span> ${langData.manualBackup}`;
-  }
-}
-
-// 处理导入的备注数据
-async function processImportedNotes(importedNotes) {
-  // 获取现有备注
-  const result = await chrome.storage.local.get(["twitterNotes"]);
-  const existingNotes = result.twitterNotes || {};
-
-  // 处理导入的备注，确保格式正确
-  const processedNotes = {};
-  Object.entries(importedNotes).forEach(([userId, note]) => {
-    if (typeof note === "string") {
-      // 旧格式兼容
-      processedNotes[userId] = {
-        name: note,
-        description: "",
-        username: userId,
-        userId: userId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-    } else if (note.text && !note.name) {
-      // 旧格式兼容
-      processedNotes[userId] = {
-        name: note.text,
-        description: note.description || "",
-        username: note.username || userId,
-        userId: note.userId || userId,
-        createdAt: note.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-    } else {
-      // 新格式
-      processedNotes[userId] = note;
-    }
-  });
-
-  // 合并备注（导入的备注会覆盖现有的同用户备注）
-  const mergedNotes = { ...existingNotes, ...processedNotes };
-
-  await chrome.storage.local.set({ twitterNotes: mergedNotes });
-
-  // 重新加载数据
-  await loadStats();
-  await loadRecentNotes();
-}
-
-async function loadStats() {
-  try {
-    const result = await chrome.storage.local.get(["twitterNotes"]);
-    const notes = result.twitterNotes || {};
-
-    const totalNotes = Object.keys(notes).length;
-    document.getElementById("totalNotes").textContent = totalNotes;
-
-    // 计算今日新增
-    const today = new Date().toDateString();
-    const todayNotes = Object.values(notes).filter(
-      (note) => new Date(note.createdAt).toDateString() === today
-    ).length;
-    document.getElementById("todayNotes").textContent = todayNotes;
-  } catch (error) {
-    console.error("加载统计数据失败:", error);
-  }
-}
-
-async function loadRecentNotes() {
-  try {
-    const result = await chrome.storage.local.get(["twitterNotes", "noteTags"]);
-    const notes = result.twitterNotes || {};
-    const tags = result.noteTags || {};
-
-    const recentNotesContainer = document.getElementById("recentNotes");
-
-    if (Object.keys(notes).length === 0) {
-      recentNotesContainer.innerHTML = `
-        <div style="text-align: center; color: #536471; padding: 20px;">
-          ${langData.noNotes}
-        </div>
-      `;
-      return;
-    }
-
-    // 按创建时间排序，显示最近10条
-    const sortedNotes = Object.entries(notes)
-      .sort(([, a], [, b]) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 10);
-
-    recentNotesContainer.innerHTML = sortedNotes
-      .map(([userId, note]) => {
-        const noteName = note.name || "";
-        const noteTag = note.tagId || "";
-
-        return `
-        <div class="note-item">
-          <div class="note-user">@${note.username || "unknown"}</div>
-          <div class="note-id">ID: ${userId}</div>
-          <div class="note-name">${langData.noteName}: ${noteName}</div>
-          ${
-            noteTag && tags[noteTag]
-              ? `<div class="note-desc">${langData.tagName}: ${tags[noteTag].name}</div>`
-              : ""
-          }
-        </div>
-      `;
-      })
-      .join("");
-  } catch (error) {
-    console.error("加载最近备注失败:", error);
-  }
-}
-
-async function loadWebdavConfig() {
-  try {
-    const result = await chrome.storage.local.get(["webdavConfig"]);
-    let config = result.webdavConfig || {};
-
-    // 如果配置是加密的，先解密
-    if (config.encrypted) {
-      config = await cryptoUtils.decryptWebDAVConfig(config);
-    }
-
-    if (config.url) document.getElementById("webdavUrl").value = config.url;
-    if (config.username)
-      document.getElementById("webdavUsername").value = config.username;
-    if (config.password)
-      document.getElementById("webdavPassword").value = config.password;
-  } catch (error) {
-    console.error("加载 WebDAV 配置失败:", error);
-  }
-}
-
-async function saveWebdavConfig() {
-  const url = document.getElementById("webdavUrl").value.trim();
-  const username = document.getElementById("webdavUsername").value.trim();
-  const password = document.getElementById("webdavPassword").value.trim();
-
-  if (!url) {
-    showErrorMessage(langData.messages.enterServerAddress, "error");
-    return;
-  }
-
-  if (!username || !password) {
-    showErrorMessage(langData.messages.enterCredentials, "error");
-    return;
-  }
-
-  try {
-    // 加密配置
-    const encryptedConfig = await cryptoUtils.encryptWebDAVConfig({
-      url,
-      username,
-      password,
-    });
-    console.log(encryptedConfig);
-    await chrome.storage.local.set({ webdavConfig: encryptedConfig });
-
-    // 清除之前的连接状态
-    await chrome.storage.local.remove(["webdavConnectionStatus"]);
-
-    showMessage(langData.messages.webdavConfigSaved, "success");
-    await updateConfigurationStatusOnly(); // 只更新状态，不改变折叠状态
-  } catch (error) {
-    showErrorMessage(
-      `langData.messages.webdavConfigSaveFailed + ${error.message}`,
-      "error"
-    );
-  }
-}
-
-async function testWebdavConnection() {
-  const button = document.getElementById("testWebdavConnection");
-  const originalText = button.innerHTML;
-  button.disabled = true;
-  button.innerHTML = `<span>⏳</span> ${langData.buttons.testing}`;
-
-  try {
-    const configResult = await chrome.storage.local.get(["webdavConfig"]);
-    let config = configResult.webdavConfig;
-
-    if (!config || !config.url) {
-      throw new Error(langData.messages.configureWebdavFirst);
-    }
-
-    // 解密配置
-    if (config.encrypted) {
-      config = await cryptoUtils.decryptWebDAVConfig(config);
-    }
-
-    // 准备认证头
-    const headers = {};
-    if (config.username && config.password) {
-      headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + config.password);
-    }
-
-    // 测试连接 - 使用 OPTIONS 方法
-    const testResult = await new Promise((resolve) => {
-      chrome.runtime.sendMessage(
-        {
-          action: "webdavRequest",
-          url: config.url,
-          method: "OPTIONS",
-          headers: headers,
-        },
-        resolve
-      );
-    });
-
-    if (!testResult.success) {
-      throw new Error(testResult.error);
-    }
-
-    if (
-      testResult.response.ok ||
-      testResult.response.status === 200 ||
-      testResult.response.status === 204
-    ) {
-      // 保存连接成功状态
-      await chrome.storage.local.set({
-        webdavConnectionStatus: "connected",
-      });
-      showMessage(langData.messages.webdavTestSuccess, "success");
-    } else {
-      // 保存连接失败状态
-      await chrome.storage.local.set({
-        webdavConnectionStatus: "failed",
-      });
-      throw new Error(
-        `${langData.messages.connectionFailed} ${testResult.response.status} ${testResult.response.statusText}`
-      );
-    }
-  } catch (error) {
-    await chrome.storage.local.set({ webdavConnectionStatus: "failed" });
-    showErrorMessage(
-      `${langData.messages.webdavTestFailed} + ${error.message}`,
-      "error"
-    );
-  } finally {
-    button.disabled = false;
-    button.innerHTML = originalText;
-    await updateConfigurationStatus();
-  }
-}
-
-async function exportNotes() {
-  try {
-    const result = await chrome.storage.local.get([
-      "twitterNotes",
-      "noteTags",
-      "noteTagsOrder",
-    ]);
-    const notes = result.twitterNotes || {};
-    const tags = result.noteTags || {};
-    const order = result.noteTagsOrder || [];
-
-    const manifest = chrome.runtime.getManifest();
-    const exportData = {
-      version: manifest.version,
-      exportTime: new Date().toISOString(),
-      notes: notes,
-      tags: tags,
-      noteTagsOrder: order,
-    };
-
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-      type: "application/json",
-    });
-
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `XMark-${new Date().toISOString().split("T")[0]}.json`;
-    a.click();
-
-    URL.revokeObjectURL(url);
-    showMessage(langData.exportSuccess, "success");
-  } catch (error) {
-    showErrorMessage(langData.exportFail, "error");
-  }
-}
-
-async function importNotes(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  try {
-    const text = await file.text();
-    const importData = JSON.parse(text);
-
-    if (!importData.notes) {
-      throw new Error(langData.invalidFormat);
-    }
-
-    // 获取现有备注
-    const result = await chrome.storage.local.get([
-      "twitterNotes",
-      "noteTags",
-      "noteTagsOrder",
-    ]);
-    const existingNotes = result.twitterNotes || {};
-    const existingTags = result.noteTags || {};
-    const existingOrder = result.noteTagsOrder || [];
-
-    // 处理导入的备注，确保格式正确
-    const processedNotes = {};
-    Object.entries(importData.notes).forEach(([userId, note]) => {
-      processedNotes[userId] = note;
-    });
-
-    // 处理导入的标签
-    const processedTags = {};
-    if (importData.tags) {
-      Object.entries(importData.tags).forEach(([tagId, tag]) => {
-        processedTags[tagId] = tag;
-      });
-    }
-
-    // 合并数据
-    const mergedNotes = { ...existingNotes, ...processedNotes };
-    const mergedTags = { ...existingTags, ...processedTags };
-
-    // 处理导入的标签顺序
-    let mergedOrder = [];
-    if (importData.noteTagsOrder) {
-      mergedOrder = existingOrder.concat(
-        importData.noteTagsOrder.filter((id) => !existingOrder.includes(id))
-      );
-    } else {
-      // 老文件，没有 noteTagsOrder，用标签对象的顺序自动生成
-      mergedOrder = Object.keys(importData.tags || {});
-    }
-
-    await chrome.storage.local.set({
-      twitterNotes: mergedNotes,
-      noteTags: mergedTags,
-      noteTagsOrder: mergedOrder,
-    });
-
-    // 重新加载数据
-    await loadStats();
-    await loadRecentNotes();
-    await loadTags();
-
-    const noteCount = Object.keys(processedNotes).length;
-    const tagCount = Object.keys(processedTags).length;
-    showMessage(
-      `${langData.importSuccess} ${noteCount} ${langData.notes}${
-        tagCount > 0 ? ` 和 ${tagCount} 个标签` : ""
-      }`
-    );
-  } catch (error) {
-    showErrorMessage(langData.importFail);
-  }
-
-  // 清空文件输入
-  event.target.value = "";
-}
-
-// WebDAV 备份
-async function backupToWebDAV() {
-  const button = document.getElementById("webdavBackup");
-  button.disabled = true;
-  button.innerHTML = `<span>⏳</span> ${langData.buttons.backing}`;
-
-  try {
-    const configResult = await chrome.storage.local.get(["webdavConfig"]);
-    let config = configResult.webdavConfig;
-
-    if (!config || !config.url) {
-      throw new Error(langData.messages.configureWebdavFirst);
-    }
-
-    // 解密配置
-    if (config.encrypted) {
-      config = await cryptoUtils.decryptWebDAVConfig(config);
-    }
-
-    // 获取备注和标签数据
-    const result = await chrome.storage.local.get([
-      "twitterNotes",
-      "noteTags",
-      "noteTagsOrder",
-    ]);
-    const notes = result.twitterNotes || {};
-    const tags = result.noteTags || {};
-    const order = result.noteTagsOrder || [];
-
-    const manifest = chrome.runtime.getManifest();
-    const exportData = {
-      version: manifest.version,
-      exportTime: new Date().toISOString(),
-      notes: notes,
-      tags: tags,
-      noteTagsOrder: order,
-    };
-
-    const fileName = `XMark-backup-${
-      new Date().toISOString().split("T")[0]
-    }.json`;
-    const fileContent = JSON.stringify(exportData, null, 2);
-
-    // 构建 WebDAV URL
-    const webdavUrl = config.url.endsWith("/")
-      ? config.url + fileName
-      : config.url + "/" + fileName;
-
-    // 准备认证头
-    const headers = {
-      "Content-Type": "application/json",
-    };
-
-    if (config.username && config.password) {
-      headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + config.password);
-    }
-
-    // 通过 background script 发送请求以绕过 CORS
-    const uploadResult = await new Promise((resolve) => {
-      chrome.runtime.sendMessage(
-        {
-          action: "webdavRequest",
-          url: webdavUrl,
-          method: "PUT",
-          headers: headers,
-          body: fileContent,
-        },
-        resolve
-      );
-    });
-
-    if (!uploadResult.success) {
-      throw new Error(uploadResult.error);
-    }
-
-    if (!uploadResult.response.ok) {
-      throw new Error(
-        `WebDAV 上传失败: ${uploadResult.response.status} ${uploadResult.response.statusText}`
-      );
-    }
-
-    showMessage(langData.messages.webdavBackupSuccess, "success");
-  } catch (error) {
-    showErrorMessage(
-      `${langData.messages.webdavBackupFailed} + ${error.message}`,
-      "error"
-    );
-  } finally {
-    button.disabled = false;
-    button.innerHTML = `<span>${langData.manualBackup}</span>`;
-  }
-}
-
-// WebDAV 恢复
-async function restoreFromWebDAV() {
-  const button = document.getElementById("webdavRestore");
-  button.disabled = true;
-  button.innerHTML = `<span>⏳</span> ${langData.buttons.restoring}`;
-
-  try {
-    const configResult = await chrome.storage.local.get(["webdavConfig"]);
-    let config = configResult.webdavConfig;
-
-    if (!config || !config.url) {
-      throw new Error(langData.messages.configureWebdavFirst);
-    }
-
-    // 解密配置
-    if (config.encrypted) {
-      config = await cryptoUtils.decryptWebDAVConfig(config);
-    }
-
-    // 获取所有备份文件列表
-    console.log("正在查找最新的备份文件...");
-    const backupFiles = await getWebDAVBackupList(config);
-
-    if (backupFiles.length === 0) {
-      throw new Error("服务器上没有找到任何备份文件");
-    }
-
-    // 按修改时间排序，获取最新的备份文件
-    const latestBackup = backupFiles.sort((a, b) => {
-      const dateA = new Date(a.lastModified);
-      const dateB = new Date(b.lastModified);
-      return dateB - dateA;
-    })[0];
-
-    const webdavUrl = config.url.endsWith("/")
-      ? config.url + latestBackup.name
-      : config.url + "/" + latestBackup.name;
-
-    // 准备认证头
-    const headers = {};
-    if (config.username && config.password) {
-      headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + config.password);
-    }
-
-    // 通过 background script 发送请求以绕过 CORS
-    const downloadResult = await new Promise((resolve) => {
-      chrome.runtime.sendMessage(
-        {
-          action: "webdavRequest",
-          url: webdavUrl,
-          method: "GET",
-          headers: headers,
-        },
-        resolve
-      );
-    });
-
-    if (!downloadResult.success) {
-      throw new Error(downloadResult.error);
-    }
-
-    if (!downloadResult.response.ok) {
-      if (downloadResult.response.status === 404) {
-        throw new Error(langData.messages.noBackupToday);
-      }
-      throw new Error(
-        `WebDAV download failed: ${downloadResult.response.status} ${downloadResult.response.statusText}`
-      );
-    }
-
-    const fileContent = downloadResult.response.text;
-    const importData = JSON.parse(fileContent);
-
-    if (!importData.notes) {
-      throw new Error(langData.messages.missingNotesData);
-    }
-
-    await processImportedNotes(importData.notes);
-
-    // 处理标签数据
-    if (importData.tags) {
-      const result = await chrome.storage.local.get(["noteTags"]);
-      const existingTags = result.noteTags || {};
-      const mergedTags = { ...existingTags, ...importData.tags };
-      await chrome.storage.local.set({ noteTags: mergedTags });
-      await loadTags();
-    }
-
-    // 处理标签顺序
-    let mergedOrder = [];
-    if (importData.noteTagsOrder) {
-      const result = await chrome.storage.local.get(["noteTagsOrder"]);
-      const existingOrder = result.noteTagsOrder || [];
-      mergedOrder = existingOrder.concat(
-        importData.noteTagsOrder.filter((id) => !existingOrder.includes(id))
-      );
-    } else {
-      // 老文件，没有 noteTagsOrder，用标签对象的顺序自动生成
-      mergedOrder = Object.keys(importData.tags || {});
-    }
-
-    await chrome.storage.local.set({ noteTagsOrder: mergedOrder });
-    await loadTags();
-
-    showMessage(
-      `${langData.messages.webdavRestoreSuccess} ${
-        Object.keys(importData.notes).length
-      } ${langData.messages.webdavRestoreNum}`,
-      "success"
-    );
-  } catch (error) {
-    showErrorMessage(
-      `${langData.messages.webdavRestoreFailed} + ${error.message}`,
-      "error"
-    );
-  } finally {
-    button.disabled = false;
-    button.innerHTML = `<span>${langData.restoreData}</span>`;
-  }
-}
-
-async function clearAllNotes() {
-  if (!confirm(langData.confirmClear)) {
-    return;
-  }
-
-  try {
-    await exportNotes();
-    await chrome.storage.local.remove([
-      "twitterNotes",
-      "noteTags",
-      "noteTagsOrder",
-    ]);
-    await loadStats();
-    await loadRecentNotes();
-    await loadTags();
-
-    showMessage(
-      '<span style="font-weight:bold; font-size:16px;color:#FFD700;">' +
-        langData.allCleared +
-        "</span>\n" +
-        langData.exportReminder
-    );
-  } catch (error) {
-    showErrorMessage(langData.clearFail);
   }
 }
 
@@ -1867,7 +1922,7 @@ async function showBackupList() {
       });
     }
   } catch (error) {
-    showErrorMessage(
+    showMessage(
       `${langData.messages.loadBackupListFailed} + ${error.message}`,
       "error"
     );
@@ -2316,131 +2371,6 @@ function formatDate(dateString) {
   }
 }
 
-// 从特定备份恢复
-async function restoreFromSpecificBackup(fileName) {
-  const button = document.getElementById("viewBackupList");
-  const originalText = button.innerHTML;
-  button.disabled = true;
-  button.innerHTML = `<span>⏳</span> ${langData.buttons.restoring}`;
-
-  try {
-    const configResult = await chrome.storage.local.get(["webdavConfig"]);
-    let config = configResult.webdavConfig;
-
-    if (!config || !config.url) {
-      throw new Error(langData.messages.configureWebdavFirst);
-    }
-
-    // 解密配置
-    if (config.encrypted) {
-      config = await cryptoUtils.decryptWebDAVConfig(config);
-    }
-
-    const webdavUrl = config.url.endsWith("/")
-      ? config.url + fileName
-      : config.url + "/" + fileName;
-
-    const headers = {};
-    if (config.username && config.password) {
-      headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + config.password);
-    }
-
-    const downloadResult = await new Promise((resolve) => {
-      chrome.runtime.sendMessage(
-        {
-          action: "webdavRequest",
-          url: webdavUrl,
-          method: "GET",
-          headers: headers,
-        },
-        resolve
-      );
-    });
-
-    if (!downloadResult.success) {
-      throw new Error(downloadResult.error);
-    }
-
-    if (!downloadResult.response.ok) {
-      throw new Error(
-        `下载备份失败: ${downloadResult.response.status} ${downloadResult.response.statusText}`
-      );
-    }
-
-    const fileContent = downloadResult.response.text;
-
-    if (!fileContent) {
-      throw new Error(langData.messages.emptyBackupFile);
-    }
-
-    let importData;
-    try {
-      importData = JSON.parse(fileContent);
-    } catch (parseError) {
-      throw new Error(langData.messages.invalidBackupFormat);
-    }
-
-    if (!importData.notes) {
-      throw new Error(langData.messages.missingNotesData);
-    }
-
-    // 询问用户是否要覆盖现有数据
-    const shouldMerge = confirm(
-      `${langData.messages.restoreFromBackup} ${
-        Object.keys(importData.notes).length
-      } ${langData.messages.restoreFromBackup2}`
-    );
-
-    if (!shouldMerge) {
-      showErrorMessage(langData.messages.restoreCancelled, "info");
-      return;
-    }
-
-    await processImportedNotes(importData.notes);
-
-    // 恢复标签数据
-    if (importData.tags) {
-      const result = await chrome.storage.local.get(["noteTags"]);
-      const existingTags = result.noteTags || {};
-      const mergedTags = { ...existingTags, ...importData.tags };
-      await chrome.storage.local.set({ noteTags: mergedTags });
-      await loadTags();
-    }
-
-    // 恢复标签顺序
-    let mergedOrder = [];
-    if (importData.noteTagsOrder) {
-      const result = await chrome.storage.local.get(["noteTagsOrder"]);
-      const existingOrder = result.noteTagsOrder || [];
-      mergedOrder = existingOrder.concat(
-        importData.noteTagsOrder.filter((id) => !existingOrder.includes(id))
-      );
-    } else {
-      // 老文件，没有 noteTagsOrder，用标签对象的顺序自动生成
-      mergedOrder = Object.keys(importData.tags || {});
-    }
-
-    await chrome.storage.local.set({ noteTagsOrder: mergedOrder });
-    await loadTags();
-
-    showMessage(
-      `${langData.messages.restoreSuccess} ${
-        Object.keys(importData.notes).length
-      } ${langData.messages.webdavRestoreNum}`,
-      "success"
-    );
-  } catch (error) {
-    showErrorMessage(
-      `${langData.messages.restoreFailed} + ${error.message}`,
-      "error"
-    );
-  } finally {
-    button.disabled = false;
-    button.innerHTML = originalText;
-  }
-}
-
 // 删除备份文件
 async function deleteBackupFile(fileName) {
   try {
@@ -2488,114 +2418,17 @@ async function deleteBackupFile(fileName) {
       );
     }
 
-    showMessage(`${langData.messages.backupDeleted} : ${fileName}`, "success");
+    showMessage(`${langData.messages.backupDeleted} : ${fileName}`);
   } catch (error) {
-    showErrorMessage(
+    showMessage(
       `${langData.messages.deleteFailed} + ${error.message}`,
       "error"
     );
   }
 }
 
-function showMessage(messageHTML) {
-  const messageDiv = document.createElement("div");
-
-  // 创建临时消息提示
-
-  messageDiv.innerHTML = messageHTML;
-  messageDiv.style.cssText = `
-    position: fixed;
-    bottom: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: mediumseagreen;
-    color: white;
-    padding: 8px 16px;
-    border-radius: 4px;
-    font-size: 12px;
-    z-index: 1000;
-    white-space: pre-wrap;
-  `;
-
-  // 创建关闭按钮元素
-  const closeBtn = document.createElement("button");
-  closeBtn.textContent = "×";
-  closeBtn.style.cssText = `
-		position: absolute;
-		top: 2px;
-		right: 2px;
-		background: transparent;
-		border: none;
-		color: rebeccapurple;
-		font-size: 16px;
-		font-weight: bold;
-		cursor: pointer;
-		line-height: 1;
-	`;
-
-  // 关闭按钮点击时隐藏或移除消息弹窗
-  closeBtn.onclick = () => {
-    messageDiv.style.display = "none";
-  };
-  messageDiv.appendChild(closeBtn);
-
-  document.body.appendChild(messageDiv);
-
-  setTimeout(() => {
-    document.body.removeChild(messageDiv);
-  }, 3000);
-}
-
-function showErrorMessage(messageHTML) {
-  const messageDiv = document.createElement("div");
-
-  // 创建临时消息提示
-
-  messageDiv.innerHTML = messageHTML;
-  messageDiv.style.cssText = `
-    position: fixed;
-    bottom: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: red;
-    color: white;
-    padding: 8px 16px;
-    border-radius: 4px;
-    font-size: 12px;
-		font-weight: bold;
-    z-index: 1000;
-    white-space: pre-wrap;
-  `;
-
-  // 创建关闭按钮元素
-  const closeBtn = document.createElement("button");
-  closeBtn.textContent = "×";
-  closeBtn.style.cssText = `
-		position: absolute;
-		top: 2px;
-		right: 2px;
-		background: transparent;
-		border: none;
-		color: darkblue;
-		font-size: 16px;
-		font-weight: bold;
-		cursor: pointer;
-		line-height: 1;
-	`;
-
-  // 关闭按钮点击时隐藏或移除消息弹窗
-  closeBtn.onclick = () => {
-    messageDiv.style.display = "none";
-  };
-  messageDiv.appendChild(closeBtn);
-
-  document.body.appendChild(messageDiv);
-
-  setTimeout(() => {
-    document.body.removeChild(messageDiv);
-  }, 3000);
-}
-
+/* ==========================标签模块========================== */
+// 添加标签面板
 function showAddTagDialog() {
   const existingDialog = document.querySelector(".tag-dialog");
   if (existingDialog) {
@@ -2740,7 +2573,7 @@ function showAddTagDialog() {
         }
 
         closeDialog();
-        showMessage(`${tagName} ${langData.messages.tagCreated}`, "success");
+        showMessage(`${tagName} ${langData.messages.tagCreated}`);
       });
 
       document.addEventListener("keydown", function escHandler(e) {
@@ -2755,7 +2588,7 @@ function showAddTagDialog() {
     });
 }
 
-// 在 showAddTagDialog 函数后添加编辑标签功能
+// 在标签面板后添加编辑标签功能
 function showEditTagDialog(tagId) {
   const existingDialog = document.querySelector(".tag-dialog");
   if (existingDialog) {
@@ -2770,7 +2603,7 @@ function showEditTagDialog(tagId) {
       const tag = tags[tagId];
 
       if (!tag) {
-        showErrorMessage("标签不存在", "error");
+        showMessage("标签不存在", "error");
         return;
       }
 
@@ -2885,7 +2718,7 @@ function showEditTagDialog(tagId) {
         await loadTags();
         await loadAutoBackupSettings(); // 重新加载自动备份设置以更新标签选项
         closeDialog();
-        showMessage(`${tagName} ${langData.messages.tagUpdated}`, "success");
+        showMessage(`${tagName} ${langData.messages.tagUpdated}`);
       });
 
       // 删除标签
@@ -2937,9 +2770,9 @@ function showEditTagDialog(tagId) {
 
           closeDialog();
 
-          showMessage(`${tagName} ${langData.messages.tagDeleted}`, "success");
+          showMessage(`${tagName} ${langData.messages.tagDeleted}`);
         } catch (error) {
-          showErrorMessage(`${langData.messages.tagDeletedFailed}`, "error");
+          showMessage(langData.messages.tagDeletedFailed, "error");
         }
       });
 
@@ -3010,6 +2843,7 @@ function escapeHtml(str = "") {
     .replaceAll("'", "&#039;");
 }
 
+// 标签拖拽
 function initDragAndDrop(tagList) {
   let dragEl = null;
 
@@ -3045,6 +2879,7 @@ function initDragAndDrop(tagList) {
   });
 }
 
+// 保存标签顺序
 async function persistOrder(tagList) {
   // 仅保存顺序数组，不再依赖对象键顺序
   const newOrder = [...tagList.querySelectorAll(".tag-item")].map(
@@ -3102,17 +2937,75 @@ async function TagGroups() {
     },
   });
 
-  showMessage(langData.messages.TagGroupsSwitch, "success");
+  showMessage(langData.messages.TagGroupsSwitch);
 }
 
-async function getCurrentLangData() {
-  return new Promise((resolve, reject) => {
-    if (langData && Object.keys(langData).length > 0) {
-      resolve();
-    } else {
-      loadLanguage(currentLang)
-        .then(() => resolve())
-        .catch((error) => reject(error));
+/* ==========================消息模块========================== */
+function showMessage(messageHTML, type = "success") {
+  const messageDiv = document.createElement("div");
+
+  // 样式配置
+  const styles = {
+    success: {
+      background: "mediumseagreen",
+      color: "white",
+      fontWeight: "normal",
+      closeColor: "rebeccapurple",
+    },
+    error: {
+      background: "red",
+      color: "white",
+      fontWeight: "bold",
+      closeColor: "darkblue",
+    },
+  };
+
+  const { background, color, fontWeight, closeColor } =
+    styles[type] || styles.success;
+
+  // 创建消息元素
+  messageDiv.innerHTML = messageHTML;
+  messageDiv.style.cssText = `
+    position: fixed;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: ${background};
+    color: ${color};
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: ${fontWeight};
+    z-index: 1000;
+    white-space: pre-wrap;
+  `;
+
+  // 创建关闭按钮
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "×";
+  closeBtn.style.cssText = `
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background: transparent;
+    border: none;
+    color: ${closeColor};
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 1;
+  `;
+  closeBtn.onclick = () => {
+    messageDiv.style.display = "none";
+  };
+
+  messageDiv.appendChild(closeBtn);
+  document.body.appendChild(messageDiv);
+
+  // 自动移除
+  setTimeout(() => {
+    if (messageDiv.parentNode) {
+      document.body.removeChild(messageDiv);
     }
-  });
+  }, 3000);
 }
