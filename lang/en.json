@@ -108,6 +108,8 @@
     "importSuccess": "Successfully imported notes!",
     "importFailed": "Import failed, please check file format",
     "invalidFileFormat": "Invalid notes file format",
+    "webdavEnabled": "WebDAV is enabled",
+    "webdavDisabled": "WebDAV is disabled",
     "webdavConfigSaved": "WebDAV configuration saved, please test connection",
     "webdavConfigSaveFailed": "Failed to save configuration",
     "webdavTestSuccess": "WebDAV connection test successful!",

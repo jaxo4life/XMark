@@ -833,11 +833,9 @@ async function toggleWebDAV() {
   if (res.WebDAVisOn.enabled) {
     toggle.classList.add("active");
     webdav.classList.remove("hidden");
-    showMessage(langData.messages.autoBackupEnabled);
   } else {
     toggle.classList.remove("active");
     webdav.classList.add("hidden");
-    showMessage(langData.messages.autoBackupDisabled, "error");
   }
 
   // 刷新配置面板或自动备份设置
@@ -857,10 +855,10 @@ async function toggleWebDAV() {
     // 提示信息
     if (isEnabled) {
       webdav.classList.remove("hidden");
-      showMessage(langData.messages.autoBackupEnabled);
+      showMessage(langData.messages.webdavEnabled);
     } else {
       webdav.classList.add("hidden");
-      showMessage(langData.messages.autoBackupDisabled, "error");
+      showMessage(langData.messages.webdavDisabled, "error");
     }
   });
 }
@@ -2160,8 +2158,20 @@ async function tryCommonFilePatterns(config, headers) {
   const patterns = [];
   const now = new Date();
 
-  // 最近30天的日期（按本地时间）
+    // 最近30天的日期
   for (let i = 0; i < 30; i++) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - i);
+    const dateStr = date.toISOString().split("T")[0];
+
+    patterns.push(`XMark-backup-${dateStr}.json`);
+    patterns.push(`XMark-auto-backup-${dateStr}.json`);
+    patterns.push(`XMark-tags-backup-${dateStr}.json`);
+    patterns.push(`XMark-${dateStr}.json`);
+  }
+
+  // 最近3天按小时（按本地时间）
+  for (let i = 0; i < 3; i++) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
 
@@ -2170,11 +2180,6 @@ async function tryCommonFilePatterns(config, headers) {
     const day = date.getDate().toString().padStart(2, "0");
 
     const dateStr = `${year}-${month}-${day}`;
-
-    // 只保留 XMark-*.json 形式
-    patterns.push(`XMark-backup-${dateStr}.json`);
-    patterns.push(`XMark-hourly-${dateStr}.json`);
-
     // 小时备份模式（每天 24 小时）
     for (let hour = 0; hour < 24; hour++) {
       const hourStr = hour.toString().padStart(2, "0");
@@ -2202,12 +2207,6 @@ async function tryCommonFilePatterns(config, headers) {
         backupFiles.push(result);
       }
     });
-
-    // 如果已经找到一些文件，可以提前返回
-    if (backupFiles.length > 0 && i > 50) {
-      console.log(`已找到 ${backupFiles.length} 个文件，停止搜索`);
-      break;
-    }
   }
 
   console.log(`模式匹配完成，找到 ${backupFiles.length} 个备份文件`);

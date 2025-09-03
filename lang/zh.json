@@ -108,6 +108,8 @@
     "importSuccess": "成功导入备注！",
     "importFailed": "导入失败，请检查文件格式",
     "invalidFileFormat": "无效的备注文件格式",
+    "webdavEnabled": "WebDAV已启用",
+    "webdavDisabled": "WebDAV已禁用",
     "webdavConfigSaved": "WebDAV 配置已保存，请测试连接",
     "webdavConfigSaveFailed": "保存配置失败",
     "webdavTestSuccess": "WebDAV 连接测试成功！",
