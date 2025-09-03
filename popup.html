@@ -27,10 +27,19 @@
       </div>
     </div>
 
+    <div class="auto-backup-header">
+      <span data-key="TweetCapture">启用推文截图</span>
+      <div class="toggle-switch" id="toggle-screenshot"></div>
+    </div>
+
     <div class="section">
       <h3 data-key="dataManagement">数据管理</h3>
-      <button class="btn btn-primary" id="exportBtn" data-key="exportNotes">📤 导出备注</button>
-      <button class="btn btn-secondary" id="importBtn" data-key="importNotes">📥 导入备注</button>
+      <button class="btn btn-primary" id="exportBtn" data-key="exportNotes">
+        📤 导出备注
+      </button>
+      <button class="btn btn-secondary" id="importBtn" data-key="importNotes">
+        📥 导入备注
+      </button>
       <input type="file" id="fileInput" accept=".json" />
       <button
         class="btn btn-secondary"
@@ -43,13 +52,17 @@
 
       <!-- 标签管理 -->
       <div class="tag-section">
-        <h4 style="margin: 0 0 10px 0; font-size: 13px; color: #536471" data-key="tagManagement">
+        <h4
+          style="margin: 0 0 10px 0; font-size: 13px; color: #536471"
+          data-key="tagManagement"
+        >
           🏷️ 标签管理
         </h4>
 
-        <button class="btn btn-secondary" id="toggle-groups">
-          <span data-key="TagGroups">切换标签显示</span>   
-        </button>
+        <div class="auto-backup-header">
+          <span data-key="TagGroups">切换标签显示</span>
+          <div class="toggle-switch" id="toggle-groups"></div>
+        </div>
 
         <div class="tag-list" id="tagList">
           <!-- 标签列表将在这里动态生成 -->
@@ -62,135 +75,160 @@
 
       <!-- WebDAV 备份 -->
       <div class="cloud-section">
-        <h4 style="margin: 0 0 10px 0; font-size: 13px; color: #536471" data-key="webdavCloudBackup">
-          WebDAV 备份
+        <h4
+          style="
+            display: flex;
+            justify-content: space-between;
+            margin: 0 0 10px 0;
+            font-size: 13px;
+            color: #536471;
+          "
+        >
+          <span data-key="webdavCloudBackup">WebDAV 备份</span>
+          <div class="toggle-switch" id="webdavToggle"></div>
         </h4>
 
         <div id="cloudStatus" class="cloud-status hidden"></div>
+        <div id="webdav">
+          <!-- WebDAV 配置 - 始终显示在上方 -->
+          <div class="webdav-config-header" id="webdavConfigHeader">
+            <h4>
+              <span data-key="webdavServerConfig">⚙️ WebDAV 服务器配置</span>
+              <span class="config-toggle" id="configToggle">▼</span>
+            </h4>
 
-        <!-- WebDAV 配置 - 始终显示在上方 -->
-        <div class="webdav-config-header" id="webdavConfigHeader">
-          <h4>
-            <span data-key="webdavServerConfig">⚙️ WebDAV 服务器配置</span>
-            <span class="config-toggle" id="configToggle">▼</span>
-          </h4>
-
-          <div id="configStatus" class="config-status unconfigured">
-            <span>⚠️</span> 请配置 WebDAV 服务器以启用云备份功能
-          </div>
-        </div>
-
-        <div class="webdav-config hidden" id="webdavConfigPanel">
-          <label for="webdavUrl" data-key="serverAddress">服务器地址:</label>
-          <input
-            type="url"
-            id="webdavUrl"
-            placeholder="https://example.com/webdav/"
-          />
-
-          <label for="webdavUsername" data-key="username">用户名:</label>
-          <input type="text" id="webdavUsername" data-key="usernamePlaceholder" />
-
-          <label for="webdavPassword" data-key="password">密码:</label>
-          <input type="password" id="webdavPassword" data-key="passwordPlaceholder" />
-
-          <div class="config-buttons">
-            <button
-              class="btn btn-secondary"
-              id="saveWebdavConfig"
-              style="font-size: 12px"
-            >
-              <span data-key="saveConfig">💾 保存配置</span>
-            </button>
-            <button
-              class="btn btn-secondary"
-              id="testWebdavConnection"
-              style="font-size: 12px"
-            >
-              <span data-key="testConnection">🔗 测试连接</span> 
-            </button>
-          </div>
-        </div>
-
-        <!-- 备份功能区域 - 只有配置完成后才显示 -->
-        <div id="backupFunctions" class="backup-section hidden">
-          <div class="backup-grid">
-            <button class="btn btn-warning" id="webdavBackup">
-              <span data-key="manualBackup">🌐 手动备份</span> 
-            </button>
-            <button class="btn btn-secondary" id="webdavRestore">
-              <span data-key="restoreData">📥 恢复数据</span> 
-            </button>
+            <div id="configStatus" class="config-status unconfigured">
+              <span>⚠️</span> 请配置 WebDAV 服务器以启用云备份功能
+            </div>
           </div>
 
-          <!-- 添加查看备份列表按钮 -->
-          <button
-            class="btn btn-secondary"
-            id="viewBackupList"
-            style="margin-bottom: 8px"
-          >
-            <span data-key="viewBackupList">📋 查看备份列表</span> 
-          </button>
+          <div class="webdav-config hidden" id="webdavConfigPanel">
+            <label for="webdavUrl" data-key="serverAddress">服务器地址:</label>
+            <input
+              type="url"
+              id="webdavUrl"
+              placeholder="https://example.com/webdav/"
+            />
 
-          <!-- 自动备份设置 -->
-          <div class="auto-backup-section">
-            <div class="auto-backup-header">
-              <span data-key="autoBackup">🕒 自动备份</span>
-              <div class="toggle-switch" id="autoBackupToggle"></div>
+            <label for="webdavUsername" data-key="username">用户名:</label>
+            <input
+              type="text"
+              id="webdavUsername"
+              data-key="usernamePlaceholder"
+            />
+
+            <label for="webdavPassword" data-key="password">密码:</label>
+            <input
+              type="password"
+              id="webdavPassword"
+              data-key="passwordPlaceholder"
+            />
+
+            <div class="config-buttons">
+              <button
+                class="btn btn-secondary"
+                id="saveWebdavConfig"
+                style="font-size: 12px"
+              >
+                <span data-key="saveConfig">💾 保存配置</span>
+              </button>
+              <button
+                class="btn btn-secondary"
+                id="testWebdavConnection"
+                style="font-size: 12px"
+              >
+                <span data-key="testConnection">🔗 测试连接</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 备份功能区域 - 只有配置完成后才显示 -->
+          <div id="backupFunctions" class="backup-section hidden">
+            <div class="backup-grid">
+              <button class="btn btn-warning" id="webdavBackup">
+                <span data-key="manualBackup">🌐 手动备份</span>
+              </button>
+              <button class="btn btn-secondary" id="webdavRestore">
+                <span data-key="restoreData">📥 恢复数据</span>
+              </button>
             </div>
 
-            <div class="auto-backup-settings hidden" id="autoBackupSettings">
-              <!-- 自动备份标签筛选 -->
-              <div class="form-group">
-                <div class="auto-backup-tag-filter">
-                  <div class="filter-header">
-                    <span data-key="autoBackupTagFilter">自动备份标签筛选</span>
-                    <div class="toggle-switch small" id="autoBackupTagFilterToggle"></div>
-                  </div>
-                  <div
-                    id="autoBackupTagFilterSettings"
-                    class="tag-filter-settings hidden"
-                  >
-                    <div class="tag-filter-options" id="autoBackupTagOptions">
-                      <!-- 标签选项将在这里动态生成 -->
+            <!-- 添加查看备份列表按钮 -->
+            <button
+              class="btn btn-secondary"
+              id="viewBackupList"
+              style="margin-bottom: 8px"
+            >
+              <span data-key="viewBackupList">📋 查看备份列表</span>
+            </button>
+
+            <!-- 自动备份设置 -->
+            <div class="auto-backup-section">
+              <div class="auto-backup-header">
+                <span data-key="autoBackup">🕒 自动备份</span>
+                <div class="toggle-switch" id="autoBackupToggle"></div>
+              </div>
+
+              <div class="auto-backup-settings hidden" id="autoBackupSettings">
+                <!-- 自动备份标签筛选 -->
+                <div class="form-group">
+                  <div class="auto-backup-tag-filter">
+                    <div class="filter-header">
+                      <span data-key="autoBackupTagFilter"
+                        >自动备份标签筛选</span
+                      >
+                      <div
+                        class="toggle-switch small"
+                        id="autoBackupTagFilterToggle"
+                      ></div>
+                    </div>
+                    <div
+                      id="autoBackupTagFilterSettings"
+                      class="tag-filter-settings hidden"
+                    >
+                      <div class="tag-filter-options" id="autoBackupTagOptions">
+                        <!-- 标签选项将在这里动态生成 -->
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-              
-              <div class="frequency-grid">
-                <div>
-                  <label for="backupFrequency" data-key="backupFrequency">备份频率:</label>
-                  <select id="backupFrequency">
-                    <option value="hourly">每小时</option>
-                    <option value="daily">每天</option>
-                    <option value="weekly">每周</option>
-                    <option value="monthly">每月</option>
-                  </select>
+
+                <div class="frequency-grid">
+                  <div>
+                    <label for="backupFrequency" data-key="backupFrequency"
+                      >备份频率:</label
+                    >
+                    <select id="backupFrequency">
+                      <option value="hourly">每小时</option>
+                      <option value="daily">每天</option>
+                      <option value="weekly">每周</option>
+                      <option value="monthly">每月</option>
+                    </select>
+                  </div>
+
+                  <button
+                    class="btn btn-secondary"
+                    id="testAutoBackup"
+                    style="font-size: 11px; padding: 3px 8px; margin: 0"
+                  >
+                    <span data-key="test">🧪 测试</span>
+                  </button>
                 </div>
-
-                <button
-                  class="btn btn-secondary"
-                  id="testAutoBackup"
-                  style="font-size: 11px; padding: 3px 8px; margin: 0"
-                >
-                  <span data-key="test">🧪 测试</span>
-                </button>
               </div>
-            </div>
 
-            <div class="auto-backup-status" id="autoBackupStatus">
-              自动备份已关闭
+              <div class="auto-backup-status" id="autoBackupStatus">
+                自动备份已关闭
+              </div>
             </div>
           </div>
-        </div>
 
-        <!-- 未配置时的提示 -->
-        <div id="setupNotice" class="setup-notice">
-          <span class="icon">🌐</span>
-          <div>配置 WebDAV 服务器后即可使用云备份功能</div>
-          <div style="margin-top: 8px; font-size: 11px; color: #999">
-            支持 Nextcloud、ownCloud、坚果云等 WebDAV 服务
+          <!-- 未配置时的提示 -->
+          <div id="setupNotice" class="setup-notice">
+            <span class="icon">🌐</span>
+            <div>配置 WebDAV 服务器后即可使用云备份功能</div>
+            <div style="margin-top: 8px; font-size: 11px; color: #999">
+              支持 Nextcloud、ownCloud、坚果云等 WebDAV 服务
+            </div>
           </div>
         </div>
       </div>

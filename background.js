@@ -195,8 +195,8 @@ async function performAutoBackup() {
 
     // 构建 WebDAV URL
     const webdavUrl = config.url.endsWith("/")
-      ? config.url + fileName
-      : config.url + "/" + fileName;
+      ? config.url + "Xmark/Backup/" + fileName
+      : config.url + "/Xmark/Backup/" + fileName;
 
     // 准备认证头
     const headers = {
@@ -258,6 +258,90 @@ async function performAutoBackup() {
   }
 }
 
+// 推文截图上传WebDAV
+async function uploadToWebDAV(blob, filename, handle) {
+  try {
+    // 获取 WebDAV 配置
+    const configResult = await chrome.storage.local.get(["webdavConfig"]);
+    let config = configResult.webdavConfig;
+
+    if (!config || !config.url) {
+      throw new Error("WebDAV 未配置");
+    }
+
+    // 解密配置
+    if (config.encrypted) {
+      config = await cryptoUtils.decryptWebDAVConfig(config);
+    }
+
+    // 构建 WebDAV URL
+    const baseUrl = config.url.endsWith("/") ? config.url : config.url + "/";
+
+    // 准备认证头
+    const headers = {};
+    if (config.username && config.password) {
+      headers["Authorization"] =
+        "Basic " + btoa(config.username + ":" + config.password);
+    }
+
+    // 尝试创建用户文件夹（MKCOL）
+    const folderUrl = await ensureThreeLevelDirExists(baseUrl, handle, headers);
+
+    const fileUrl = folderUrl + encodeURIComponent(filename);
+
+    // 上传文件
+    const res = await fetch(fileUrl, {
+      method: "PUT",
+      headers: {
+        ...headers,
+        "Content-Type": blob.type || "image/png",
+      },
+      body: blob,
+    });
+
+    if (!res.ok) {
+      throw new Error(`上传失败: ${res.status} ${res.statusText}`);
+    }
+
+    return res; // 返回 fetch Response
+  } catch (error) {
+    console.error("WebDAV 上传失败:", error);
+    throw error;
+  }
+}
+
+async function ensureThreeLevelDirExists(baseUrl, handle, headers) {
+  // 处理 handle 中的非法字符
+  const safeHandle = encodeURIComponent(handle);
+
+  // 三级目录依次检查
+  const dirs = ["Xmark", "Screenshot", safeHandle];
+  let currentUrl = baseUrl.replace(/\/?$/, ""); // 确保 baseUrl 末尾没有多余斜杠
+
+  for (const dir of dirs) {
+    currentUrl += `/${dir}`;
+
+    // 检查目录是否存在
+    const res = await fetch(currentUrl, { method: "PROPFIND", headers });
+    if (!res.ok) {
+      // 如果不存在，就创建
+      try {
+        await fetch(currentUrl, {
+          method: "MKCOL",
+          headers,
+        });
+        console.log("MKCOL 创建成功:", currentUrl);
+      } catch (err) {
+        console.warn("MKCOL 创建失败（可能已存在）:", currentUrl, err);
+      }
+    } else {
+      console.log("目录已存在:", currentUrl);
+    }
+  }
+
+  return currentUrl + "/";
+}
+
 // 处理来自content script和popup的消息
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "getNotes") {
@@ -313,6 +397,276 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
     );
     return true; // 异步响应
+  }
+
+  // 获取头像
+  if (request.action === "fetchAvatar") {
+    (async () => {
+      const maxRetries = 3;
+      let attempt = 0;
+      let ttl = request.ttl; // 第一次传进来的 TTL
+      let blob = null;
+
+      try {
+        while (attempt < maxRetries) {
+          const url = `https://unavatar.io/x/${request.username}?ttl=${ttl}h`;
+          const res = await fetch(url);
+          blob = await res.blob();
+          const contentType = res.headers.get("content-type") || "";
+
+          // 判断是否是默认头像
+          if (contentType.includes("image/png") && blob.size < 5000) {
+            attempt++;
+            ttl = Math.floor(Math.random() * 24) + 1; // 重新随机 TTL
+            console.warn(
+              `Fallback avatar detected, retrying with new TTL (${attempt}/${maxRetries})...`
+            );
+            // 通知 content script 更新 TTL
+            chrome.tabs.sendMessage(sender.tab.id, {
+              action: "updateTTL",
+              username: request.username,
+              ttl,
+            });
+          } else {
+            break; // 正常头像，跳出循环
+          }
+        }
+
+        // Blob 转 Base64
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          sendResponse({ src: reader.result });
+        };
+        reader.readAsDataURL(blob);
+      } catch (err) {
+        console.error("fetchAvatar error", err);
+        sendResponse({ src: null });
+      }
+    })();
+    return true; // 异步 sendResponse 必须返回 true
+  }
+
+  // 处理推文快照
+  if (request.action === "saveTweet") {
+    const windowId = sender.tab?.windowId ?? chrome.windows.WINDOW_ID_CURRENT;
+
+    chrome.tabs.captureVisibleTab(
+      windowId,
+      { format: "png", quality: 100 },
+      (dataUrl) => {
+        if (chrome.runtime.lastError) {
+          console.error(
+            "Error capturing screenshot:",
+            JSON.stringify(chrome.runtime.lastError, null, 2)
+          );
+          sendResponse({
+            success: false,
+            error:
+              chrome.runtime.lastError.message ||
+              JSON.stringify(chrome.runtime.lastError),
+          });
+          return;
+        }
+
+        fetch(dataUrl)
+          .then((res) => res.blob())
+          .then((blob) => createImageBitmap(blob))
+          .then((imageBitmap) => {
+            const devicePixelRatio = request.elementInfo.devicePixelRatio || 1;
+            const cropX =
+              (request.elementInfo.x - request.elementInfo.scrollX) *
+              devicePixelRatio;
+            const cropY =
+              (request.elementInfo.y - request.elementInfo.scrollY) *
+              devicePixelRatio;
+            const cropWidth = request.elementInfo.width * devicePixelRatio;
+            const cropHeight = request.elementInfo.height * devicePixelRatio;
+
+            // 阴影扩展大小
+            const shadowBlur = 16 * devicePixelRatio;
+            const shadowOffset = 8 * devicePixelRatio;
+
+            const canvas = new OffscreenCanvas(
+              cropWidth + shadowBlur * 2,
+              cropHeight + shadowBlur * 2
+            );
+            const ctx = canvas.getContext("2d");
+
+            const xOffset = shadowBlur;
+            const yOffset = shadowBlur;
+
+            // 圆角半径
+            const radius = 20 * devicePixelRatio;
+
+            // 1. 绘制半透明阴影边框
+            ctx.save();
+            ctx.fillStyle = "white";
+            ctx.shadowColor = "rgba(0, 0, 0, 0.25)"; // 阴影颜色
+            ctx.shadowBlur = shadowBlur;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = shadowOffset;
+
+            ctx.beginPath();
+            ctx.moveTo(xOffset + radius, yOffset);
+            ctx.lineTo(xOffset + cropWidth - radius, yOffset);
+            ctx.quadraticCurveTo(
+              xOffset + cropWidth,
+              yOffset,
+              xOffset + cropWidth,
+              yOffset + radius
+            );
+            ctx.lineTo(xOffset + cropWidth, yOffset + cropHeight - radius);
+            ctx.quadraticCurveTo(
+              xOffset + cropWidth,
+              yOffset + cropHeight,
+              xOffset + cropWidth - radius,
+              yOffset + cropHeight
+            );
+            ctx.lineTo(xOffset + radius, yOffset + cropHeight);
+            ctx.quadraticCurveTo(
+              xOffset,
+              yOffset + cropHeight,
+              xOffset,
+              yOffset + cropHeight - radius
+            );
+            ctx.lineTo(xOffset, yOffset + radius);
+            ctx.quadraticCurveTo(xOffset, yOffset, xOffset + radius, yOffset);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+
+            // 2. 裁剪路径（圆角矩形）
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(xOffset + radius, yOffset);
+            ctx.lineTo(xOffset + cropWidth - radius, yOffset);
+            ctx.quadraticCurveTo(
+              xOffset + cropWidth,
+              yOffset,
+              xOffset + cropWidth,
+              yOffset + radius
+            );
+            ctx.lineTo(xOffset + cropWidth, yOffset + cropHeight - radius);
+            ctx.quadraticCurveTo(
+              xOffset + cropWidth,
+              yOffset + cropHeight,
+              xOffset + cropWidth - radius,
+              yOffset + cropHeight
+            );
+            ctx.lineTo(xOffset + radius, yOffset + cropHeight);
+            ctx.quadraticCurveTo(
+              xOffset,
+              yOffset + cropHeight,
+              xOffset,
+              yOffset + cropHeight - radius
+            );
+            ctx.lineTo(xOffset, yOffset + radius);
+            ctx.quadraticCurveTo(xOffset, yOffset, xOffset + radius, yOffset);
+            ctx.closePath();
+            ctx.clip();
+
+            // 3. 绘制截图
+            ctx.drawImage(
+              imageBitmap,
+              cropX,
+              cropY,
+              cropWidth,
+              cropHeight,
+              xOffset,
+              yOffset,
+              cropWidth,
+              cropHeight
+            );
+
+            // 4. 绘制右上角 X logo
+            const logoSize = 32 * devicePixelRatio;
+            const logoMargin = 10 * devicePixelRatio;
+            const logoUrl = chrome.runtime.getURL("public/X_logo.png");
+
+            return fetch(logoUrl)
+              .then((res) => res.blob())
+              .then((blob) => createImageBitmap(blob))
+              .then((logoBitmap) => {
+                ctx.drawImage(
+                  logoBitmap,
+                  xOffset + cropWidth - logoSize - logoMargin,
+                  yOffset + logoMargin,
+                  logoSize,
+                  logoSize
+                );
+                ctx.restore();
+                return canvas.convertToBlob({
+                  type: "image/png",
+                  quality: 1.0,
+                });
+              })
+              .catch((err) => {
+                console.warn(
+                  "Failed to load X logo, proceeding without it:",
+                  err
+                );
+                ctx.restore();
+                return canvas.convertToBlob({
+                  type: "image/png",
+                  quality: 1.0,
+                });
+              });
+          })
+          .then((blob) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (request.choice) {
+                uploadToWebDAV(blob, request.filename, request.handle)
+                  .then((res) => {
+                    if (res.ok) {
+                      console.log("图片上传到 WebDAV 成功！");
+                      sendResponse({ success: true });
+                    } else {
+                      console.error("上传失败", res.statusText);
+                      sendResponse({ success: false, error: res.statusText });
+                    }
+                  })
+                  .catch((err) => {
+                    console.error("上传错误", err);
+                    sendResponse({ success: false, error: err.message });
+                  });
+              } else {
+                chrome.downloads.download(
+                  {
+                    url: reader.result,
+                    filename: `Xmark/Screenshot/${request.handle}/${request.filename}`,
+                    saveAs: false,
+                  },
+                  (downloadId) => {
+                    if (chrome.runtime.lastError) {
+                      console.error(
+                        "Error downloading cropped screenshot:",
+                        chrome.runtime.lastError
+                      );
+                      sendResponse({
+                        success: false,
+                        error: chrome.runtime.lastError.message,
+                      });
+                    } else {
+                      sendResponse({ success: true, downloadId });
+                    }
+                  }
+                );
+              }
+            };
+            reader.readAsDataURL(blob);
+          })
+          .catch((error) => {
+            console.error("Error processing screenshot:", error);
+            sendResponse({
+              success: false,
+              error: "Failed to process screenshot: " + error.message,
+            });
+          });
+      }
+    );
+
+    return true;
   }
 });
 

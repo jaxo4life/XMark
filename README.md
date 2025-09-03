@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/version-4.1.3-blue.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-4.2.0-blue.svg" alt="Version"></a>
   <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Manifest-V3-green.svg" alt="Manifest"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Chrome%20Extension-orange.svg" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
@@ -12,6 +12,17 @@
 ---
 
 <summary>🕑 Changelog</summary>
+
+## v4.2.0
+
+- 增加推文截图功能
+- 规范了文件保存路径
+- 推文截图支持保存到WebDAV
+- 优化了代码
+- Added tweet screenshot
+- Standardized file save paths
+- Supports saving tweet screenshots to WebDAV
+- Optimized code
 
 ## v4.1.3
 

@@ -144,20 +144,20 @@ document.addEventListener("DOMContentLoaded", async function () {
   // 加载统计数据
   await loadStats();
 
+  // 加载推文截图开关
+  await Screeshot();
+
   // 加载最近备注
   await loadRecentNotes();
 
-  // 加载 WebDAV 配置
-  await loadWebdavConfig();
+  // 加载WebDAV开关
+  await toggleWebDAV();
 
-  // 加载自动备份设置
-  await loadAutoBackupSettings();
+  // 加载标签面板
+  await TagGroups();
 
   // 加载标签
   await loadTags();
-
-  // 检查配置状态并更新界面
-  await updateConfigurationStatus();
 
   // 绑定其他事件
   document
@@ -201,17 +201,17 @@ document.addEventListener("DOMContentLoaded", async function () {
   const autoBackupTagFilterToggle = document.getElementById(
     "autoBackupTagFilterToggle"
   );
-  if (autoBackupTagFilterToggle)
+  if (autoBackupTagFilterToggle) {
     autoBackupTagFilterToggle.addEventListener(
       "click",
       toggleAutoBackupTagFilter
     );
+  }
 
   // 标签管理事件
   document
     .getElementById("addTagBtn")
     .addEventListener("click", showAddTagDialog);
-  document.getElementById("toggle-groups").addEventListener("click", TagGroups);
 
   const tagList = document.getElementById("tagList");
   tagList.addEventListener("click", (event) => {
@@ -339,6 +339,28 @@ async function loadStats() {
   }
 }
 
+// 加载推文保存按钮
+async function Screeshot() {
+  const toggle = document.getElementById("toggle-screenshot");
+
+  // 读取状态并初始化样式
+  const res = await new Promise((resolve) => {
+    chrome.storage.local.get({ enableScreenshot: true }, resolve);
+  });
+
+  if (res.enableScreenshot) {
+    toggle.classList.add("active");
+  } else {
+    toggle.classList.remove("active");
+  }
+
+  // 点击切换状态
+  toggle.addEventListener("click", () => {
+    const isActive = toggle.classList.toggle("active"); // 切换样式
+    chrome.storage.local.set({ enableScreenshot: isActive }); // 保存状态
+  });
+}
+
 // 加载最近备注
 async function loadRecentNotes() {
   try {
@@ -429,14 +451,30 @@ async function exportNotes() {
       type: "application/json",
     });
 
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `XMark-${new Date().toISOString().split("T")[0]}.json`;
-    a.click();
+    const filename = `Xmark/Backup/XMark-${
+      new Date().toISOString().split("T")[0]
+    }.json`;
 
-    URL.revokeObjectURL(url);
-    showMessage(langData.exportSuccess);
+    // 创建临时 URL
+    const url = URL.createObjectURL(blob);
+
+    // 使用 chrome.downloads.download 保存到子目录
+    chrome.downloads.download(
+      {
+        url: url,
+        filename: filename,
+        saveAs: false, // 如果想让用户选择路径改成 true
+      },
+      (downloadId) => {
+        URL.revokeObjectURL(url); // 释放对象 URL
+        if (chrome.runtime.lastError) {
+          console.error("导出失败:", chrome.runtime.lastError);
+          showMessage(langData.exportFail, "error");
+        } else {
+          showMessage(langData.exportSuccess);
+        }
+      }
+    );
   } catch (error) {
     showMessage(langData.exportFail, "error");
   }
@@ -596,17 +634,29 @@ async function exportNotesByTags(selectedTagIds) {
       type: "application/json",
     });
 
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `XMark-tags-${new Date().toISOString().split("T")[0]}.json`;
-    a.click();
+    const filename = `Xmark/Backup/XMark-tags-${
+      new Date().toISOString().split("T")[0]
+    }.json`;
 
-    URL.revokeObjectURL(url);
-    showMessage(
-      `${langData.messages.exportTaggedNotes} ${
-        Object.keys(filteredNotes).length
-      } ${langData.notes}`
+    // 创建临时 URL
+    const url = URL.createObjectURL(blob);
+
+    // 使用 chrome.downloads.download 保存到子目录
+    chrome.downloads.download(
+      {
+        url: url,
+        filename: filename,
+        saveAs: false, // 如果想让用户选择路径改成 true
+      },
+      (downloadId) => {
+        URL.revokeObjectURL(url); // 释放对象 URL
+        if (chrome.runtime.lastError) {
+          console.error("导出失败:", chrome.runtime.lastError);
+          showMessage(langData.exportFail, "error");
+        } else {
+          showMessage(langData.exportSuccess);
+        }
+      }
     );
   } catch (error) {
     showMessage(langData.exportFail, "error");
@@ -770,18 +820,71 @@ async function clearAllNotes() {
 }
 
 /* ==========================WebDAV模块========================== */
-// 切换 WebDAV 配置面板
-function toggleWebdavConfigPanel() {
-  const panel = document.getElementById("webdavConfigPanel");
-  const toggle = document.getElementById("configToggle");
+// WebDAV 开关
+async function toggleWebDAV() {
+  const toggle = document.getElementById("webdavToggle");
+  const webdav = document.getElementById("webdav");
 
-  if (panel.classList.contains("hidden")) {
-    panel.classList.remove("hidden");
-    toggle.classList.add("expanded");
+  // 读取存储状态并初始化 UI
+  const res = await new Promise((resolve) => {
+    chrome.storage.local.get({ WebDAVisOn: { enabled: false } }, resolve);
+  });
+
+  if (res.WebDAVisOn.enabled) {
+    toggle.classList.add("active");
+    webdav.classList.remove("hidden");
+    showMessage(langData.messages.autoBackupEnabled);
   } else {
-    panel.classList.add("hidden");
-    toggle.classList.remove("expanded");
+    toggle.classList.remove("active");
+    webdav.classList.add("hidden");
+    showMessage(langData.messages.autoBackupDisabled, "error");
   }
+
+  // 刷新配置面板或自动备份设置
+  await loadWebdavConfig();
+  await loadAutoBackupSettings();
+  await updateConfigurationStatus();
+  // 点击切换状态
+  toggle.addEventListener("click", async () => {
+    const isEnabled = toggle.classList.toggle("active"); // 切换样式
+    await chrome.storage.local.set({ WebDAVisOn: { enabled: isEnabled } }); // 保存状态
+
+    // 刷新配置面板或自动备份设置
+    await loadWebdavConfig();
+    await loadAutoBackupSettings();
+    await updateConfigurationStatus();
+
+    // 提示信息
+    if (isEnabled) {
+      webdav.classList.remove("hidden");
+      showMessage(langData.messages.autoBackupEnabled);
+    } else {
+      webdav.classList.add("hidden");
+      showMessage(langData.messages.autoBackupDisabled, "error");
+    }
+  });
+}
+
+// 切换 WebDAV 配置面板
+async function toggleWebdavConfigPanel() {
+  try {
+    const header = document.getElementById("webdavConfigHeader");
+    const panel = document.getElementById("webdavConfigPanel");
+    const toggle = document.getElementById("configToggle");
+    const result = await chrome.storage.local.get(["WebDAVisOn"]);
+    const settings = result.WebDAVisOn || { enabled: false };
+    if (settings.enabled) {
+      if (panel.classList.contains("hidden")) {
+        panel.classList.remove("hidden");
+        toggle.classList.add("expanded");
+      } else {
+        panel.classList.add("hidden");
+        toggle.classList.remove("expanded");
+      }
+    } else {
+      header.classList.add("hidden");
+    }
+  } catch (error) {}
 }
 
 // 加载WebDAV配置
@@ -828,7 +931,7 @@ async function saveWebdavConfig() {
       username,
       password,
     });
-    console.log(encryptedConfig);
+
     await chrome.storage.local.set({ webdavConfig: encryptedConfig });
 
     // 清除之前的连接状态
@@ -884,6 +987,9 @@ async function testWebdavConnection() {
       );
     });
 
+    // 创建/Xmark/Backup/
+    await makedir(config.url, headers);
+
     if (!testResult.success) {
       throw new Error(testResult.error);
     }
@@ -920,6 +1026,35 @@ async function testWebdavConnection() {
   }
 }
 
+async function makedir(baseUrl, headers) {
+  // 二级目录依次检查
+  const dirs = ["Xmark", "Backup"];
+  let currentUrl = baseUrl.replace(/\/?$/, ""); // 确保 baseUrl 末尾没有多余斜杠
+
+  for (const dir of dirs) {
+    currentUrl += `/${dir}`;
+
+    // 检查目录是否存在
+    const res = await fetch(currentUrl, { method: "PROPFIND", headers });
+    if (!res.ok) {
+      // 如果不存在，就创建
+      try {
+        await fetch(currentUrl, {
+          method: "MKCOL",
+          headers,
+        });
+        console.log("MKCOL 创建成功:", currentUrl);
+      } catch (err) {
+        console.warn("MKCOL 创建失败（可能已存在）:", currentUrl, err);
+      }
+    } else {
+      console.log("目录已存在:", currentUrl);
+    }
+  }
+
+  return;
+}
+
 // 只更新配置状态，不改变折叠状态（用于输入变化时）
 async function updateConfigurationStatusOnly() {
   const url = document.getElementById("webdavUrl").value.trim();
@@ -931,6 +1066,11 @@ async function updateConfigurationStatusOnly() {
   const setupNotice = document.getElementById("setupNotice");
 
   const isConfigured = url && username && password;
+
+  // 读取存储状态并初始化 UI
+  const res = await new Promise((resolve) => {
+    chrome.storage.local.get({ WebDAVisOn: { enabled: false } }, resolve);
+  });
 
   if (isConfigured) {
     // 检查是否已测试连接
@@ -1411,7 +1551,7 @@ function showBackupDialog() {
     });
 }
 
-// WebDAV 备份
+// WebDAV 手动备份
 async function backupToWebDAV() {
   const button = document.getElementById("webdavBackup");
   button.disabled = true;
@@ -1456,8 +1596,8 @@ async function backupToWebDAV() {
 
     // 构建 WebDAV URL
     const webdavUrl = config.url.endsWith("/")
-      ? config.url + fileName
-      : config.url + "/" + fileName;
+      ? config.url + "Xmark/Backup/" + fileName
+      : config.url + "/Xmark/Backup/" + fileName;
 
     // 准备认证头
     const headers = {
@@ -1540,8 +1680,8 @@ async function restoreFromWebDAV() {
     })[0];
 
     const webdavUrl = config.url.endsWith("/")
-      ? config.url + latestBackup.name
-      : config.url + "/" + latestBackup.name;
+      ? config.url + "Xmark/Backup/" + latestBackup.name
+      : config.url + "/Xmark/Backup/" + latestBackup.name;
 
     // 准备认证头
     const headers = {};
@@ -1618,8 +1758,8 @@ async function restoreFromSpecificBackup(fileName) {
     }
 
     const webdavUrl = config.url.endsWith("/")
-      ? config.url + fileName
-      : config.url + "/" + fileName;
+      ? config.url + "Xmark/Backup/" + fileName
+      : config.url + "/Xmark/Backup/" + fileName;
 
     const headers = {};
     if (config.username && config.password) {
@@ -1748,8 +1888,8 @@ async function backupToWebDAVByTags(selectedTagIds) {
 
     // 构建 WebDAV URL
     const webdavUrl = config.url.endsWith("/")
-      ? config.url + fileName
-      : config.url + "/" + fileName;
+      ? config.url + "Xmark/Backup/" + fileName
+      : config.url + "/Xmark/Backup/" + fileName;
 
     // 准备认证头
     const headers = {
@@ -1932,104 +2072,45 @@ async function showBackupList() {
   }
 }
 
-// 获取 WebDAV 备份文件列表
+// 获取 WebDAV 备份文件列表（只使用文件名模式匹配）
 async function getWebDAVBackupList(config) {
-  console.log("开始获取 WebDAV 备份列表...");
+  console.log("开始获取 WebDAV 备份列表（使用文件名模式匹配）...");
+
+  // 构造请求头
   const headers = {};
   if (config.username && config.password) {
     headers["Authorization"] =
       "Basic " + btoa(config.username + ":" + config.password);
   }
-
-  // 添加缓存控制头，确保获取最新数据
   headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
   headers["Pragma"] = "no-cache";
-  headers["Expires"] = Expires;
+  headers["Expires"] = "0";
 
-  // 方法1: 尝试使用 PROPFIND
-  try {
-    console.log("尝试使用 PROPFIND 方法...");
-    const propfindBody = `<?xml version="1.0" encoding="utf-8" ?>
-    <D:propfind xmlns:D="DAV:">
-      <D:prop>
-        <D:displayname/>
-        <D:getcontentlength/>
-        <D:getlastmodified/>
-        <D:resourcetype/>
-      </D:prop>
-    </D:propfind>`;
+  // 调用 tryCommonFilePatterns 获取所有 XMark-*.json 文件
+  const backupFiles = await tryCommonFilePatterns(config, headers);
 
-    const listResult = await new Promise((resolve) => {
-      chrome.runtime.sendMessage(
-        {
-          action: "webdavRequest",
-          url: config.url + "?t=" + Date.now(), // 添加时间戳防止缓存
-          method: "PROPFIND",
-          headers: {
-            ...headers,
-            "Content-Type": "application/xml; charset=utf-8",
-            Depth: "1",
-          },
-          body: propfindBody,
-        },
-        resolve
-      );
-    });
-
-    console.log("PROPFIND 响应:", listResult);
-
-    if (listResult.success && listResult.response.ok) {
-      const backupFiles = parsePropfindResponse(listResult.response.text);
-      if (backupFiles.length > 0) {
-        console.log("PROPFIND 成功，找到文件:", backupFiles.length);
-        return await enrichFileInfo(backupFiles, config, headers);
-      }
-    }
-  } catch (error) {
-    console.log("PROPFIND 方法失败:", error);
+  if (backupFiles.length === 0) {
+    console.warn("未找到任何备份文件！");
+    return [];
   }
 
-  // 方法2: 尝试简单的 GET 请求（某些服务器支持目录列表）
-  try {
-    console.log("尝试使用 GET 方法获取目录列表...");
-    const getResult = await new Promise((resolve) => {
-      chrome.runtime.sendMessage(
-        {
-          action: "webdavRequest",
-          url: config.url + "?t=" + Date.now(), // 添加时间戳防止缓存
-          method: "GET",
-          headers: headers,
-        },
-        resolve
-      );
-    });
+  // 按 lastModified 排序（最新的在前面）
+  backupFiles.sort((a, b) => {
+    const dateA = new Date(a.lastModified).getTime();
+    const dateB = new Date(b.lastModified).getTime();
+    return dateB - dateA; // 最新的在前
+  });
 
-    console.log("GET 响应:", getResult);
-
-    if (getResult.success && getResult.response.ok) {
-      const backupFiles = parseHTMLDirectoryListing(getResult.response.text);
-      if (backupFiles.length > 0) {
-        console.log("GET 方法成功，找到文件:", backupFiles.length);
-        return await enrichFileInfo(backupFiles, config, headers);
-      }
-    }
-  } catch (error) {
-    console.log("GET 方法失败:", error);
-  }
-
-  // 方法3: 尝试常见的备份文件名模式
-  console.log("尝试使用文件名模式匹配...");
-  const patternResults = await tryCommonFilePatterns(config, headers);
-  console.log("模式匹配结果:", patternResults);
-  return patternResults;
+  console.log(`找到 ${backupFiles.length} 个备份文件，按最新排序完成`);
+  return backupFiles;
 }
 
 // 测试文件是否存在
 async function testFileExists(config, headers, fileName) {
   try {
     const fileUrl = config.url.endsWith("/")
-      ? config.url + fileName
-      : config.url + "/" + fileName;
+      ? config.url + "Xmark/Backup/" + fileName
+      : config.url + "/Xmark/Backup/" + fileName;
 
     // 添加时间戳和缓存控制头
     const urlWithTimestamp = fileUrl + "?t=" + Date.now();
@@ -2071,193 +2152,49 @@ async function testFileExists(config, headers, fileName) {
   return null;
 }
 
-// 解析 PROPFIND XML 响应
-function parsePropfindResponse(xmlText) {
-  console.log("解析 PROPFIND XML 响应...");
-  const backupFiles = [];
-
-  try {
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-
-    // 尝试不同的命名空间
-    const namespaces = ["D:", "d:", ""];
-    let responses = [];
-
-    for (const ns of namespaces) {
-      responses = xmlDoc.getElementsByTagName(`${ns}response`);
-      if (responses.length > 0) break;
-    }
-
-    console.log(`找到 ${responses.length} 个响应项`);
-
-    for (let i = 0; i < responses.length; i++) {
-      const response = responses[i];
-      // 尝试获取文件信息
-      const href = getElementText(response, ["D:href", "d:href", "href"]);
-      const displayname = getElementText(response, [
-        "D:displayname",
-        "d:displayname",
-        "displayname",
-      ]);
-      const contentlength = getElementText(response, [
-        "D:getcontentlength",
-        "d:getcontentlength",
-        "getcontentlength",
-      ]);
-      const lastmodified = getElementText(response, [
-        "D:getlastmodified",
-        "d:getlastmodified",
-        "getlastmodified",
-      ]);
-
-      // 检查是否是目录
-      const resourcetype =
-        response.getElementsByTagName("D:resourcetype")[0] ||
-        response.getElementsByTagName("d:resourcetype")[0] ||
-        response.getElementsByTagName("resourcetype")[0];
-
-      const isCollection =
-        resourcetype &&
-        (resourcetype.getElementsByTagName("D:collection").length > 0 ||
-          resourcetype.getElementsByTagName("d:collection").length > 0 ||
-          resourcetype.getElementsByTagName("collection").length > 0);
-
-      if (isCollection) continue; // 跳过目录
-
-      // 从 href 或 displayname 中提取文件名
-      const fileName =
-        displayname || (href ? decodeURIComponent(href.split("/").pop()) : "");
-
-      console.log(`检查文件: ${fileName}`);
-
-      // 检查是否是备份文件
-      if (fileName && isBackupFile(fileName)) {
-        console.log(`找到备份文件: ${fileName}`);
-
-        const fileInfo = {
-          name: fileName,
-          href: href,
-          size: formatSize(Number.parseInt(contentlength)),
-          lastModified: formatDate(lastmodified),
-          rawSize: Number.parseInt(contentlength) || 0,
-        };
-
-        backupFiles.push(fileInfo);
-      }
-    }
-  } catch (error) {
-    console.error("解析 XML 失败:", error);
-  }
-
-  console.log(`解析完成，找到 ${backupFiles.length} 个备份文件`);
-  return backupFiles;
-}
-
-// 辅助函数：获取元素文本内容
-function getElementText(parent, tagNames) {
-  for (const tagName of tagNames) {
-    const element = parent.getElementsByTagName(tagName)[0];
-    if (element) return element.textContent;
-  }
-  return null;
-}
-
-// 解析 HTML 目录列表
-function parseHTMLDirectoryListing(htmlText) {
-  console.log("解析 HTML 目录列表...");
-  const backupFiles = [];
-
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlText, "text/html");
-
-    // 查找链接
-    const links = doc.getElementsByTagName("a");
-
-    for (let i = 0; i < links.length; i++) {
-      const link = links[i];
-      const href = link.getAttribute("href");
-      const text = link.textContent.trim();
-
-      if (href && isBackupFile(href)) {
-        console.log(`找到备份文件链接: ${href}`);
-
-        backupFiles.push({
-          name: decodeURIComponent(href),
-          href: href,
-          size: "未知",
-          lastModified: "未知",
-          rawSize: 0,
-        });
-      } else if (text && isBackupFile(text)) {
-        console.log(`找到备份文件文本: ${text}`);
-
-        backupFiles.push({
-          name: text,
-          href: text,
-          size: "未知",
-          lastModified: "未知",
-          rawSize: 0,
-        });
-      }
-    }
-  } catch (error) {
-    console.error("解析 HTML 失败:", error);
-  }
-
-  console.log(`HTML 解析完成，找到 ${backupFiles.length} 个备份文件`);
-  return backupFiles;
-}
-
-// 尝试常见的文件名模式
+// 尝试匹配常见的文件名模式（只匹配 XMark-*.json）
 async function tryCommonFilePatterns(config, headers) {
-  console.log("尝试常见的备份文件名模式...");
+  console.log("尝试使用通用文件名模式...");
   const backupFiles = [];
 
-  // 生成可能的文件名
   const patterns = [];
   const now = new Date();
 
-  // 最近30天的日期
+  // 最近30天的日期（按本地时间）
   for (let i = 0; i < 30; i++) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
-    const dateStr = date.toISOString().split("T")[0];
 
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const day = date.getDate().toString().padStart(2, "0");
+
+    const dateStr = `${year}-${month}-${day}`;
+
+    // 只保留 XMark-*.json 形式
     patterns.push(`XMark-backup-${dateStr}.json`);
-    patterns.push(`XMark-auto-backup-${dateStr}.json`);
-    patterns.push(`XMark-tags-backup-${dateStr}.json`);
-    patterns.push(`XMark-${dateStr}.json`);
-  }
+    patterns.push(`XMark-hourly-${dateStr}.json`);
 
-  // 添加一些其他可能的模式
-  patterns.push("XMark.json");
-  patterns.push("XMark-backup.json");
-  patterns.push("notes.json");
-
-  // 小时备份模式 - 扩展到最近7天，每天24小时
-  for (let day = 0; day < 7; day++) {
-    const date = new Date(now);
-    date.setDate(date.getDate() - day);
-    const dateStr = date.toISOString().split("T")[0];
-
+    // 小时备份模式（每天 24 小时）
     for (let hour = 0; hour < 24; hour++) {
       const hourStr = hour.toString().padStart(2, "0");
       patterns.push(`XMark-hourly-${dateStr}-${hourStr}.json`);
     }
   }
 
-  console.log(`生成了 ${patterns.length} 个可能的文件名模式`);
+  // 兜底几个常见文件名
+  patterns.push("XMark.json");
+  patterns.push("XMark-backup.json");
 
-  // 并发测试文件是否存在（限制并发数）
+  console.log(`生成了 ${patterns.length} 个可能的文件名`);
+
+  // 并发测试文件是否存在（限制 batch）
   const batchSize = 5;
   for (let i = 0; i < patterns.length; i += batchSize) {
     const batch = patterns.slice(i, i + batchSize);
-    const promises = batch.map((fileName) =>
-      testFileExists(config, headers, fileName)
+    const results = await Promise.all(
+      batch.map((fileName) => testFileExists(config, headers, fileName))
     );
-    const results = await Promise.all(promises);
 
     results.forEach((result, index) => {
       if (result) {
@@ -2266,8 +2203,8 @@ async function tryCommonFilePatterns(config, headers) {
       }
     });
 
-    // 如果找到了一些文件，可以提前返回
-    if (backupFiles.length > 0 && i > 100) {
+    // 如果已经找到一些文件，可以提前返回
+    if (backupFiles.length > 0 && i > 50) {
       console.log(`已找到 ${backupFiles.length} 个文件，停止搜索`);
       break;
     }
@@ -2275,82 +2212,6 @@ async function tryCommonFilePatterns(config, headers) {
 
   console.log(`模式匹配完成，找到 ${backupFiles.length} 个备份文件`);
   return backupFiles;
-}
-
-// 检查是否是备份文件
-function isBackupFile(fileName) {
-  if (!fileName) return false;
-
-  const lowerName = fileName.toLowerCase();
-  return (
-    lowerName.includes("xmark") &&
-    lowerName.endsWith(".json") &&
-    !lowerName.includes("..") // 安全检查
-  );
-}
-
-// 丰富文件信息（获取备注数量等）
-async function enrichFileInfo(backupFiles, config, headers) {
-  console.log(`开始丰富 ${backupFiles.length} 个文件的信息...`);
-
-  // 限制并发数，避免服务器压力过大
-  const batchSize = 3;
-  const enrichedFiles = [];
-
-  for (let i = 0; i < backupFiles.length; i += batchSize) {
-    const batch = backupFiles.slice(i, i + batchSize);
-    const promises = batch.map((file) =>
-      enrichSingleFile(file, config, headers)
-    );
-    const results = await Promise.all(promises);
-    enrichedFiles.push(...results);
-  }
-
-  // 按修改时间排序（最新的在前）
-  enrichedFiles.sort((a, b) => {
-    const dateA = new Date(a.lastModified);
-    const dateB = new Date(b.lastModified);
-    return dateB - dateA;
-  });
-
-  console.log(`文件信息丰富完成，共 ${enrichedFiles.length} 个文件`);
-  return enrichedFiles;
-}
-
-// 丰富单个文件信息
-async function enrichSingleFile(file, config, headers) {
-  try {
-    const fileUrl = config.url.endsWith("/")
-      ? config.url + file.name
-      : config.url + "/" + file.name;
-
-    const fileResult = await new Promise((resolve) => {
-      chrome.runtime.sendMessage(
-        {
-          action: "webdavRequest",
-          url: fileUrl,
-          method: "GET",
-          headers: headers,
-        },
-        resolve
-      );
-    });
-
-    if (fileResult.success && fileResult.response.ok) {
-      try {
-        const fileContent = JSON.parse(fileResult.response.text);
-        if (fileContent.notes) {
-          file.notesCount = Object.keys(fileContent.notes).length;
-        }
-      } catch (parseError) {
-        console.log(`无法解析文件内容: ${file.name}`, parseError);
-      }
-    }
-  } catch (error) {
-    console.log(`获取文件详情失败: ${file.name}`, error);
-  }
-
-  return file;
 }
 
 // 格式化文件大小
@@ -2891,53 +2752,70 @@ async function persistOrder(tagList) {
   const filtered = newOrder.filter((id) => noteTags[id]);
 
   await chrome.storage.local.set({ noteTagsOrder: filtered });
-  // 如果你希望立即按新顺序重新渲染，也可以调用：
-  // await loadTags();
+
+  await loadTags();
+  await loadAutoBackupSettings(); // 重新加载自动备份设置以更新标签选项
 }
 
 // 控制页面标签显示
 async function TagGroups() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (
-    !tab.url.startsWith("https://x.com") &&
-    !tab.url.startsWith("https://twitter.com")
-  ) {
-    alert("请在 Twitter/X 页面使用该功能");
-    return;
-  }
+  const toggle = document.getElementById("toggle-groups");
 
-  chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: async () => {
-      const wrapper = document.querySelector("[data-groups-nav]");
-      if (wrapper) {
-        const style = getComputedStyle(wrapper);
-        const newDisplay =
-          wrapper.style.display === "none" || style.display === "none"
-            ? "flex"
-            : "none";
-        wrapper.style.display = newDisplay;
-        chrome.storage.local.set({
-          twitterGroupsVisible: newDisplay === "flex",
-        });
-      } else {
-        // 直接调用 content script 里的实例刷新
-        chrome.runtime.sendMessage({ action: "initGroups" }, (resp) => {
-          // 可选：处理返回值
-          if (!resp?.ok) console.error("刷新标签失败", resp?.error);
-          chrome.storage.local.get(
-            ["twitterGroupsVisible"],
-            ({ twitterGroupsVisible }) => {
-              const w = document.querySelector("[data-groups-nav]");
-              if (w && twitterGroupsVisible === false) w.style.display = "none";
-            }
-          );
-        });
-      }
-    },
+  // 1️⃣ 初始化状态并设置样式
+  const res = await new Promise((resolve) => {
+    chrome.storage.local.get({ tagGroupsVisible: true }, resolve);
   });
 
-  showMessage(langData.messages.TagGroupsSwitch);
+  if (res.tagGroupsVisible) {
+    toggle.classList.add("active");
+  } else {
+    toggle.classList.remove("active");
+  }
+
+  // 2️⃣ 点击切换状态
+  toggle.addEventListener("click", async () => {
+    // 3️⃣ 在当前 tab 执行显示/隐藏逻辑
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    if (
+      !tab.url.startsWith("https://x.com") &&
+      !tab.url.startsWith("https://twitter.com")
+    ) {
+      alert("请在 Twitter/X 页面使用该功能");
+      return;
+    }
+
+    const isActive = toggle.classList.toggle("active"); // 切换样式
+    chrome.storage.local.set({ tagGroupsVisible: isActive });
+
+    chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: (visible) => {
+        const wrapper = document.querySelector("[data-groups-nav]");
+        if (wrapper) {
+          wrapper.style.display = visible ? "flex" : "none";
+        } else {
+          chrome.runtime.sendMessage({ action: "initGroups" }, (resp) => {
+            chrome.storage.local.get(
+              ["twitterGroupsVisible"],
+              ({ twitterGroupsVisible }) => {
+                const w = document.querySelector("[data-groups-nav]");
+                if (w && !twitterGroupsVisible) w.style.display = "none";
+              }
+            );
+          });
+        }
+      },
+      args: [isActive],
+    });
+
+    showMessage(
+      isActive ? langData.messages.TagGroupsOn : langData.messages.TagGroupsOff,
+      isActive ? "" : "error"
+    );
+  });
 }
 
 /* ==========================消息模块========================== */

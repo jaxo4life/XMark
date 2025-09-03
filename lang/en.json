@@ -150,7 +150,8 @@
     "exportTaggedNotes": "Successfully exported tagged notes:",
     "backupTaggedNotes": "Successfully backed up tagged notes:",
     "noNotesWithSelectedTags": "No notes found with selected tags",
-    "TagGroupsSwitch": "Display switch success"
+    "TagGroupsOn": "Tag Panel On",
+    "TagGroupsOff": "Tag Panel OFF"
   },
   "dialog": {
     "webdavBackupList": "WebDAV Backup List",

@@ -29,13 +29,24 @@ class TwitterNotes {
     this.notes = {}; // 存储备注数据，键可能是用户名或用户ID
     this.userIdCache = new Map(); // 缓存用户名到ID的映射
     this.init();
+    this.avatarTTLMap = {};
     this.observeGroups();
+    this.twitterObserver = null;
     this._profileProcessStatus = new Map();
+    this.extensionEnabled = true;
+    this.notificationElement = null;
   }
 
   async init() {
     // 加载已保存的备注
     await this.loadNotes();
+
+    // 判断是否开启推文截图
+    chrome.storage.local.get({ enableScreenshot: true }, (res) => {
+      if (res.enableScreenshot) {
+        this.initTwitterScreenshot();
+      }
+    });
 
     // 监听页面变化
     this.observePageChanges();
@@ -44,6 +55,7 @@ class TwitterNotes {
     this.processPage();
   }
 
+  // 标签面板
   async getGroups() {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage({ action: "getGroups" }, (res) => {
@@ -250,8 +262,20 @@ class TwitterNotes {
         this.avatarTTLMap[user.username] = Math.floor(Math.random() * 24) + 1;
         localStorage.setItem("avatarTTLMap", JSON.stringify(this.avatarTTLMap));
       }
-      const ttl = this.avatarTTLMap[user.username];
-      img.src = `https://unavatar.io/x/${user.username}?ttl=${ttl}h`;
+      const initialTTL = this.avatarTTLMap[user.username];
+
+      chrome.runtime.sendMessage(
+        {
+          action: "fetchAvatar",
+          username: user.username,
+          ttl: initialTTL,
+        },
+        (res) => {
+          if (res && res.src) {
+            img.src = res.src;
+          }
+        }
+      );
 
       const text = document.createElement("div");
       text.innerHTML = `<strong>${user.name}</strong><br>@${user.username}<br>${
@@ -269,17 +293,28 @@ class TwitterNotes {
     requestAnimationFrame(() => (panel.style.right = "0"));
   }
 
+  updateUserTTL(username, newTTL) {
+    this.avatarTTLMap[username] = newTTL;
+    localStorage.setItem("avatarTTLMap", JSON.stringify(this.avatarTTLMap));
+  }
+
   observeGroups() {
     let busy = false;
     const observer = new MutationObserver(() => {
-      if (busy) return; // 避免无限循环
+      if (busy) return; // 避免递归触发
       busy = true;
-      this.initGroups()
-        .catch(() => {})
-        .finally(() => {
-          busy = false;
-        });
+
+      const wrapper = document.querySelector("[data-groups-nav]");
+      if (!wrapper) {
+        // ❌ wrapper 不存在，才初始化并设置 display
+        this.initGroups()
+          .catch(console.error)
+          .finally(() => (busy = false));
+      }
+
+      busy = false;
     });
+
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
@@ -437,6 +472,7 @@ class TwitterNotes {
     await this.saveNotes();
   }
 
+  // 监听页面变化
   observePageChanges() {
     const self = this;
     const normalize = (p) => (p || "/").replace(/\/+$/, "") || "/";
@@ -655,8 +691,7 @@ class TwitterNotes {
       const username = this.extractUsername(userNameElement.href);
       if (!username) return;
 
-      // 在主页基于用户名显示备注
-      this.addTweetNoteElements(tweet, null, username, userNameElement, true); // 主页模式
+      this.addTweetNoteElements(tweet, null, username, userNameElement, true);
       tweet.setAttribute("data-twitter-notes-processed", "true");
     });
   }
@@ -868,7 +903,7 @@ class TwitterNotes {
     });
   }
 
-  // 为用户卡片添加备注元素
+  /* ==========================为用户卡片添加备注元素========================== */
   addUserCardNoteElements(userCell, userNameContainer, username) {
     // 检查是否已经添加过
     if (userCell.querySelector(".twitter-notes-inline")) return;
@@ -1412,6 +1447,453 @@ class TwitterNotes {
       }
     });
   }
+
+  /* ==========================保存推文快照========================== */
+  addTwitterScreenshotButtons() {
+    if (
+      !window.location.hostname.includes("twitter.com") &&
+      !window.location.hostname.includes("x.com")
+    ) {
+      return;
+    }
+
+    document.querySelectorAll(".screenshot-btn").forEach((btn) => btn.remove());
+
+    const tweetSelectors = [
+      '[data-testid="tweet"]',
+      'article[data-testid="tweet"]',
+      '[data-testid="tweetText"]',
+    ];
+
+    let tweets = [];
+    for (const selector of tweetSelectors) {
+      tweets = document.querySelectorAll(selector);
+      if (tweets.length > 0) break;
+    }
+
+    tweets.forEach((tweet) => {
+      if (tweet.querySelector(".screenshot-btn")) return;
+
+      const actionBar =
+        tweet.querySelector('[role="group"]') ||
+        tweet.querySelector('[data-testid="reply"]')?.parentElement ||
+        tweet.querySelector('[aria-label*="reply"]')?.parentElement;
+
+      if (actionBar) {
+        const screenshotBtn = document.createElement("div");
+        screenshotBtn.className = "screenshot-btn";
+
+        screenshotBtn.innerHTML = `
+          <div class="screenshot-inner">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgb(83, 100, 113)" stroke-width="2">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+              <circle cx="12" cy="13" r="4"></circle>
+            </svg>
+          </div>
+        `;
+
+        // 添加样式
+        const style = document.createElement("style");
+        style.textContent = `
+          .screenshot-inner {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            border-radius: 9999px;
+            cursor: pointer;
+            margin-left: 12px;
+            transition: background-color 0.2s, transform 0.15s;
+          }
+          .screenshot-inner:hover {
+            background-color: rgba(29, 155, 240, 0.1);
+            transform: scale(1.1);
+          }
+          .screenshot-inner:hover svg {
+            stroke: rgb(29, 155, 240);
+          }
+        `;
+        document.head.appendChild(style);
+
+        screenshotBtn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          // 获取 WebDAV 连接状态
+          const result = await chrome.storage.local.get([
+            "webdavConnectionStatus",
+          ]);
+          const connectionStatus = result.webdavConnectionStatus;
+
+          const showToast = (tweet, saveToWebDAV = false) => {
+            this.screenshotTweet(tweet, saveToWebDAV);
+
+            const toast = document.createElement("div");
+            toast.style.cssText = `
+              position: fixed;
+              bottom: 20px;
+              right: 20px;
+              background: #15202b;
+              color: #fff;
+              border-radius: 16px;
+              padding: 12px 16px;
+              min-width: 220px;
+              box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              font-size: 14px;
+              opacity: 0;
+              transform: translateY(20px);
+              transition: opacity 0.3s ease, transform 0.3s ease;
+              z-index: 9999;
+            `;
+            toast.innerHTML = `
+              <span>${saveToWebDAV ? "已保存到 WebDAV" : "已保存到本地"}</span>
+              <button style="
+                background: transparent;
+                border: none;
+                color: #1da1f2;
+                font-weight: bold;
+                cursor: pointer;
+                font-size: 14px;
+              ">关闭</button>
+            `;
+            document.body.appendChild(toast);
+
+            requestAnimationFrame(() => {
+              toast.style.opacity = "1";
+              toast.style.transform = "translateY(0)";
+            });
+
+            const removeToast = () => {
+              toast.style.opacity = "0";
+              toast.style.transform = "translateY(20px)";
+              setTimeout(() => toast.remove(), 300);
+              document.removeEventListener("click", handleOutsideClick);
+            };
+
+            toast
+              .querySelector("button")
+              .addEventListener("click", removeToast);
+
+            // 点击空白区域关闭
+            const handleOutsideClick = (event) => {
+              if (!toast.contains(event.target)) {
+                removeToast();
+              }
+            };
+            // 延迟绑定，避免立即触发点击事件关闭
+            setTimeout(
+              () => document.addEventListener("click", handleOutsideClick),
+              0
+            );
+
+            // 自动消失
+            setTimeout(removeToast, 4000);
+          };
+
+          if (connectionStatus) {
+            // 已连接 WebDAV，显示选择小浮窗
+            const toast = document.createElement("div");
+            toast.style.cssText = `
+              position: fixed;
+              bottom: 20px;
+              right: 20px;
+              background: #15202b;
+              color: #fff;
+              border-radius: 16px;
+              padding: 12px 16px;
+              min-width: 240px;
+              box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+              display: flex;
+              flex-direction: column;
+              gap: 8px;
+              font-size: 14px;
+              opacity: 0;
+              transform: translateY(20px);
+              transition: opacity 0.3s ease, transform 0.3s ease;
+              z-index: 9999;
+            `;
+            toast.innerHTML = `
+              <div style="font-weight: 500; margin-bottom: 4px;">选择保存位置</div>
+              <div style="display:flex; gap:8px; justify-content: flex-end;">
+                <button id="saveLocal" style="
+                  background-color: #1da1f2;
+                  color: #fff;
+                  border: none;
+                  padding: 6px 12px;
+                  border-radius: 9999px;
+                  cursor: pointer;
+                  font-weight: 500;
+                  transition: filter 0.2s;
+                ">保存到本地</button>
+                <button id="saveWebDAV" style="
+                  background-color: #17bf63;
+                  color: #fff;
+                  border: none;
+                  padding: 6px 12px;
+                  border-radius: 9999px;
+                  cursor: pointer;
+                  font-weight: 500;
+                  transition: filter 0.2s;
+                ">保存到 WebDAV</button>
+              </div>
+            `;
+            document.body.appendChild(toast);
+
+            requestAnimationFrame(() => {
+              toast.style.opacity = "1";
+              toast.style.transform = "translateY(0)";
+            });
+
+            const removeToast = () => {
+              toast.style.opacity = "0";
+              toast.style.transform = "translateY(20px)";
+              setTimeout(() => toast.remove(), 300);
+            };
+
+            // 按钮悬停效果
+            toast.querySelectorAll("button").forEach((btn) => {
+              btn.addEventListener(
+                "mouseenter",
+                () => (btn.style.filter = "brightness(1.1)")
+              );
+              btn.addEventListener(
+                "mouseleave",
+                () => (btn.style.filter = "brightness(1)")
+              );
+            });
+
+            toast.querySelector("#saveLocal").addEventListener("click", () => {
+              showToast(tweet, false);
+              removeToast();
+            });
+            toast.querySelector("#saveWebDAV").addEventListener("click", () => {
+              showToast(tweet, true);
+              removeToast();
+            });
+
+            // 点击空白区域关闭浮窗
+            const handleOutsideClick = (event) => {
+              if (!toast.contains(event.target)) {
+                removeToast();
+              }
+            };
+            setTimeout(
+              () => document.addEventListener("click", handleOutsideClick),
+              0
+            );
+          } else {
+            // 未连接 WebDAV，直接保存到本地
+            showToast(tweet, false);
+          }
+        });
+
+        actionBar.appendChild(screenshotBtn);
+      }
+    });
+  }
+
+  screenshotTweet(tweetElement, saveToWebDAV = false) {
+    try {
+      // 生成文件名
+      const handleElement =
+        tweetElement.querySelector('[data-testid="User-Name"] a[href*="/"]') ||
+        tweetElement.querySelector('a[href*="/"][role="link"]') ||
+        tweetElement.querySelector('[href*="/"]');
+
+      let handle = "unknown";
+      if (handleElement) {
+        const href = handleElement.getAttribute("href");
+        const match = href.match(/\/([^/?]+)/);
+        if (match) {
+          handle = match[1];
+        }
+      }
+
+      const now = new Date();
+      const dateStr =
+        now.getFullYear() +
+        String(now.getMonth() + 1).padStart(2, "0") +
+        String(now.getDate()).padStart(2, "0") +
+        "_" +
+        String(now.getHours()).padStart(2, "0") +
+        String(now.getMinutes()).padStart(2, "0");
+
+      const filename = `${handle}_${dateStr}.png`;
+
+      // 隐藏右上角的三个点
+      const menuButton = tweetElement.querySelector('[data-testid="caret"]');
+      let originalDisplay = null;
+      if (menuButton) {
+        originalDisplay = menuButton.style.display;
+        menuButton.style.display = "none";
+      }
+
+      // 隐藏备注（twitter-notes-inline）
+      const noteElement = tweetElement.querySelector(".twitter-notes-inline");
+      let originalNoteDisplay = null;
+      if (noteElement) {
+        originalNoteDisplay = noteElement.style.display;
+        noteElement.style.display = "none";
+      }
+
+      // 隐藏订阅按钮
+      const subscribeButton = [
+        ...tweetElement.querySelectorAll("button[data-testid]"),
+      ].find((btn) => btn.getAttribute("data-testid")?.endsWith("-subscribe"));
+      let originalsubscribeDisplay = null;
+      if (subscribeButton) {
+        originalsubscribeDisplay = subscribeButton.style.display;
+        subscribeButton.style.display = "none";
+      }
+
+      // 获取位置和尺寸
+      const rect = tweetElement.getBoundingClientRect();
+      const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+      const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+
+      // 延迟截图
+      setTimeout(() => {
+        chrome.runtime.sendMessage(
+          {
+            action: "saveTweet",
+            choice: saveToWebDAV,
+            filename: filename,
+            handle: handle,
+            elementInfo: {
+              x: rect.left + scrollX,
+              y: rect.top + scrollY,
+              width: rect.width,
+              height: rect.height,
+              scrollX: scrollX,
+              scrollY: scrollY,
+              devicePixelRatio: window.devicePixelRatio || 1,
+            },
+          },
+          (response) => {
+            // 截图结束后恢复
+            if (menuButton) {
+              menuButton.style.display = originalDisplay || "";
+            }
+            if (noteElement) {
+              noteElement.style.display = originalNoteDisplay || "";
+            }
+            if (subscribeButton) {
+              subscribeButton.style.display = originalsubscribeDisplay || "";
+            }
+
+            // 处理截图结果
+            if (chrome.runtime.lastError) {
+              console.error("Screenshot failed:", chrome.runtime.lastError);
+              this.showNotification("截图失败，请重试", "error");
+            } else if (response && response.success) {
+              this.showNotification(`推文截图已保存: ${filename}`);
+            } else {
+              this.showNotification("截图失败，请重试", "error");
+            }
+          }
+        );
+      }, 500);
+    } catch (error) {
+      console.error("Screenshot error:", error);
+      this.showNotification("截图失败，请重试", "error");
+    }
+  }
+
+  initTwitterScreenshot() {
+    if (
+      !window.location.hostname.includes("twitter.com") &&
+      !window.location.hostname.includes("x.com")
+    ) {
+      return;
+    }
+
+    setTimeout(() => this.addTwitterScreenshotButtons(), 1000);
+
+    if (this.twitterObserver) {
+      this.twitterObserver.disconnect();
+    }
+
+    this.twitterObserver = new MutationObserver((mutations) => {
+      let shouldUpdate = false;
+      mutations.forEach((mutation) => {
+        if (mutation.type === "childList" && mutation.addedNodes.length > 0) {
+          for (const node of mutation.addedNodes) {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              if (
+                node.matches('[data-testid="tweet"]') ||
+                node.querySelector('[data-testid="tweet"]')
+              ) {
+                shouldUpdate = true;
+                break;
+              }
+            }
+          }
+        }
+      });
+
+      if (shouldUpdate) {
+        setTimeout(() => this.addTwitterScreenshotButtons(), 500);
+      }
+    });
+
+    this.twitterObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  createNotification() {
+    if (this.notificationElement) return this.notificationElement;
+
+    this.notificationElement = document.createElement("div");
+    this.notificationElement.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0);
+    background: rgba(0, 0, 0, 0.15);
+    color: #ffffffff;
+    padding: 16px 32px;
+    border-radius: 8px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 16px;
+    font-weight: 500;
+    z-index: 10000000;
+    transition: transform 0.2s ease;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    text-align: center;
+    min-width: 160px;
+    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+  `;
+    document.body.appendChild(this.notificationElement);
+    return this.notificationElement;
+  }
+
+  showNotification(message, type = "success") {
+    if (!this.extensionEnabled) return;
+
+    const notification = this.createNotification();
+
+    const colors = {
+      success: "rgba(16, 185, 129, 0.6)",
+      error: "rgba(239, 68, 68, 0.8)",
+      info: "rgba(8, 145, 178, 0.8)",
+    };
+
+    notification.style.background = colors[type] || "rgba(0, 0, 0, 0.7)";
+    notification.textContent = message;
+    notification.style.transform = "translate(-50%, -50%) scale(1)";
+
+    setTimeout(() => {
+      notification.style.transform = "translate(-50%, -50%) scale(0)";
+    }, 1500);
+  }
 }
 
 // 初始化
@@ -1435,6 +1917,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         .then(() => sendResponse({ ok: true }))
         .catch((err) => sendResponse({ ok: false, error: err.message }));
       return true; // 表示异步响应
+    }
+  }
+
+  if (message?.action === "updateTTL") {
+    if (twitterNotes.initGroups) {
+      twitterNotes.updateUserTTL(message.username, message.ttl);
     }
   }
 });

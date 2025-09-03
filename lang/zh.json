@@ -150,7 +150,8 @@
     "exportTaggedNotes": "成功导出标签筛选的备注：",
     "backupTaggedNotes": "成功备份标签筛选的备注：",
     "noNotesWithSelectedTags": "选定的标签下没有备注数据",
-    "TagGroupsSwitch": "显示状态切换成功"
+    "TagGroupsOn": "标签面板已显示",
+    "TagGroupsOff": "标签面板已隐藏"
   },
   "dialog": {
     "webdavBackupList": "WebDAV 备份列表",
