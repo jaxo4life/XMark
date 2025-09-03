@@ -258,7 +258,7 @@ async function performAutoBackup() {
   }
 }
 
-// 推文截图上传WebDAV
+// 推文截图上传
 async function uploadToWebDAV(blob, filename, handle) {
   try {
     // 获取 WebDAV 配置
@@ -471,7 +471,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         fetch(dataUrl)
           .then((res) => res.blob())
           .then((blob) => createImageBitmap(blob))
-          .then((imageBitmap) => {
+          .then(async (imageBitmap) => {
             const devicePixelRatio = request.elementInfo.devicePixelRatio || 1;
             const cropX =
               (request.elementInfo.x - request.elementInfo.scrollX) *
@@ -579,38 +579,37 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             );
 
             // 4. 绘制右上角 X logo
-            const logoSize = 32 * devicePixelRatio;
+            const logoSize = 20 * devicePixelRatio;
             const logoMargin = 10 * devicePixelRatio;
             const logoUrl = chrome.runtime.getURL("public/X_logo.png");
 
-            return fetch(logoUrl)
-              .then((res) => res.blob())
-              .then((blob) => createImageBitmap(blob))
-              .then((logoBitmap) => {
-                ctx.drawImage(
-                  logoBitmap,
-                  xOffset + cropWidth - logoSize - logoMargin,
-                  yOffset + logoMargin,
-                  logoSize,
-                  logoSize
-                );
-                ctx.restore();
-                return canvas.convertToBlob({
-                  type: "image/png",
-                  quality: 1.0,
-                });
-              })
-              .catch((err) => {
-                console.warn(
-                  "Failed to load X logo, proceeding without it:",
-                  err
-                );
-                ctx.restore();
-                return canvas.convertToBlob({
-                  type: "image/png",
-                  quality: 1.0,
-                });
+            try {
+              const res = await fetch(logoUrl);
+              const blob = await res.blob();
+              const logoBitmap = await createImageBitmap(blob);
+              ctx.drawImage(
+                logoBitmap,
+                xOffset + cropWidth - logoSize - logoMargin,
+                yOffset + logoMargin,
+                logoSize,
+                logoSize
+              );
+              ctx.restore();
+              return await canvas.convertToBlob({
+                type: "image/png",
+                quality: 1.0,
               });
+            } catch (err) {
+              console.warn(
+                "Failed to load X logo, proceeding without it:",
+                err
+              );
+              ctx.restore();
+              return await canvas.convertToBlob({
+                type: "image/png",
+                quality: 1.0,
+              });
+            }
           })
           .then((blob) => {
             const reader = new FileReader();
