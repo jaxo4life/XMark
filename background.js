@@ -618,44 +618,65 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             console.log("截图已保存到 IndexedDB");
 
             const reader = new FileReader();
-            reader.onload = () => {
-              if (request.choice) {
-                uploadToWebDAV(blob, request.filename, request.handle)
-                  .then((res) => {
-                    if (res.ok) {
-                      console.log("图片上传到 WebDAV 成功！");
-                      sendResponse({ success: true });
-                    } else {
-                      console.error("上传失败", res.statusText);
-                      sendResponse({ success: false, error: res.statusText });
+            reader.onload = async () => {
+              try {
+                if (request.choice) {
+                  uploadToWebDAV(blob, request.filename, request.handle)
+                    .then((res) => {
+                      if (res.ok) {
+                        console.log("图片上传到 WebDAV 成功！");
+                        sendResponse({ success: true });
+                      } else {
+                        console.error("上传失败", res.statusText);
+                        sendResponse({ success: false, error: res.statusText });
+                      }
+                    })
+                    .catch((err) => {
+                      console.error("上传错误", err);
+                      sendResponse({ success: false, error: err.message });
+                    });
+                } else {
+                  chrome.downloads.download(
+                    {
+                      url: reader.result,
+                      filename: `XMark/Screenshot/${request.handle}/${request.filename}`,
+                      saveAs: false,
+                    },
+                    (downloadId) => {
+                      if (chrome.runtime.lastError) {
+                        console.error(
+                          "Error downloading cropped screenshot:",
+                          chrome.runtime.lastError
+                        );
+                        sendResponse({
+                          success: false,
+                          error: chrome.runtime.lastError.message,
+                        });
+                      } else {
+                        sendResponse({ success: true, downloadId });
+                      }
                     }
-                  })
-                  .catch((err) => {
-                    console.error("上传错误", err);
-                    sendResponse({ success: false, error: err.message });
-                  });
-              } else {
-                chrome.downloads.download(
-                  {
-                    url: reader.result,
-                    filename: `Xmark/Screenshot/${request.handle}/${request.filename}`,
-                    saveAs: false,
-                  },
-                  (downloadId) => {
-                    if (chrome.runtime.lastError) {
-                      console.error(
-                        "Error downloading cropped screenshot:",
-                        chrome.runtime.lastError
-                      );
-                      sendResponse({
-                        success: false,
-                        error: chrome.runtime.lastError.message,
-                      });
-                    } else {
-                      sendResponse({ success: true, downloadId });
-                    }
-                  }
+                  );
+                }
+
+                // 截图时间线
+                const result = await chrome.storage.local.get(
+                  "ScreenshotTimeline"
                 );
+                const timeline = result.ScreenshotTimeline || [];
+
+                timeline.push({
+                  userId: request.userId,
+                  path: `XMark/Screenshot/${request.handle}/${request.filename}`,
+                  date: new Date().toISOString(),
+                });
+
+                await chrome.storage.local.set({
+                  ScreenshotTimeline: timeline,
+                });
+              } catch (err) {
+                console.error("保存 ScreenshotTimeline 失败:", err);
+                sendResponse({ success: false, error: err.message });
               }
             };
             reader.readAsDataURL(blob);
