@@ -65,6 +65,15 @@ class TwitterNotes {
   }
 
   async initGroups() {
+    // 初始化状态并设置样式
+    const res = await new Promise((resolve) => {
+      chrome.storage.local.get({ tagGroupsVisible: true }, resolve);
+    });
+
+    if (!res.tagGroupsVisible) {
+      return;
+    }
+
     // 取出标签和顺序
     const { noteTags = {}, noteTagsOrder = [] } = await this.getGroups();
 
@@ -119,16 +128,6 @@ class TwitterNotes {
     });
 
     nav.appendChild(wrapper);
-
-    // **读取保存的显示状态**
-    chrome.storage.local.get(
-      ["twitterGroupsVisible"],
-      ({ twitterGroupsVisible }) => {
-        if (twitterGroupsVisible === false) {
-          wrapper.style.display = "none";
-        }
-      }
-    );
   }
 
   async filterUsersByTag(tagId) {
@@ -442,11 +441,11 @@ class TwitterNotes {
       return this.notes[userId];
     }
 
-    // ⛏️ 通过用户名查找 ID
+    // 通过用户名查找 ID
     for (const id in this.notes) {
       const note = this.notes[id];
       if (note.username === username) {
-        return this.notes[note.userId]; // ✅ 找到了 username，返回 userId 对应的数据
+        return this.notes[note.userId];
       }
     }
 
@@ -1696,7 +1695,22 @@ class TwitterNotes {
     });
   }
 
-  screenshotTweet(tweetElement, saveToWebDAV = false) {
+  // 根据handle获取userId
+  async getUserId(handle) {
+    // 先尝试从已有 notes 里查找
+    for (const id in this.notes) {
+      const note = this.notes[id];
+      if (note.username === handle) {
+        return note.userId; // 直接返回 userId
+      }
+    }
+
+    // 如果没找到，就调用 fetchUserIdFromProfile
+    const userId = await this.fetchUserIdFromProfile(handle);
+    return userId;
+  }
+
+  async screenshotTweet(tweetElement, saveToWebDAV = false) {
     try {
       // 生成文件名
       const handleElement =
@@ -1712,6 +1726,8 @@ class TwitterNotes {
           handle = match[1];
         }
       }
+
+      const userId = await this.getUserId(handle);
 
       const now = new Date();
       const dateStr =
@@ -1763,6 +1779,7 @@ class TwitterNotes {
             choice: saveToWebDAV,
             filename: filename,
             handle: handle,
+            userId: userId,
             elementInfo: {
               x: rect.left + scrollX,
               y: rect.top + scrollY,

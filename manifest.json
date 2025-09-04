@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "XMark",
-  "version": "4.2.0",
+  "version": "5.0.0",
   "description": "XMark is a note-taking tool designed specifically for X (formerly Twitter)",
   "permissions": ["storage", "activeTab", "scripting", "downloads", "alarms"],
   "host_permissions": ["<all_urls>"],
@@ -9,7 +9,7 @@
     {
       "matches": ["https://twitter.com/*", "https://x.com/*"],
       "js": ["content.js"],
-      "css": ["content.css"],
+      "css": ["styles/content.css"],
       "run_at": "document_end"
     }
   ],
@@ -26,7 +26,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["lang/*.json", "crypto-utils.js", "public/X_logo.png"],
+      "resources": ["lang/*.json", "utils/crypto-utils.js"],
       "matches": ["<all_urls>"]
     }
   ],

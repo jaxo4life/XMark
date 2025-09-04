@@ -1,6 +1,7 @@
 // Twitter Notes Background Script
 
-import { cryptoUtils } from "./crypto-utils.js";
+import { cryptoUtils } from "./utils/crypto-utils.js";
+import { saveScreenshotToDB } from './utils/db.js';
 
 // 扩展启动时，恢复自动备份
 chrome.runtime.onStartup.addListener(async () => {
@@ -195,8 +196,8 @@ async function performAutoBackup() {
 
     // 构建 WebDAV URL
     const webdavUrl = config.url.endsWith("/")
-      ? config.url + "Xmark/Backup/" + fileName
-      : config.url + "/Xmark/Backup/" + fileName;
+      ? config.url + "XMark/Backup/" + fileName
+      : config.url + "/XMark/Backup/" + fileName;
 
     // 准备认证头
     const headers = {
@@ -315,7 +316,7 @@ async function ensureThreeLevelDirExists(baseUrl, handle, headers) {
   const safeHandle = encodeURIComponent(handle);
 
   // 三级目录依次检查
-  const dirs = ["Xmark", "Screenshot", safeHandle];
+  const dirs = ["XMark", "Screenshot", safeHandle];
   let currentUrl = baseUrl.replace(/\/?$/, ""); // 确保 baseUrl 末尾没有多余斜杠
 
   for (const dir of dirs) {
@@ -579,9 +580,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             );
 
             // 4. 绘制右上角 X logo
-            const logoSize = 20 * devicePixelRatio;
+            const logoSize = 40 * devicePixelRatio;
             const logoMargin = 10 * devicePixelRatio;
-            const logoUrl = chrome.runtime.getURL("public/X_logo.png");
+            const logoUrl = chrome.runtime.getURL("public/128.png");
 
             try {
               const res = await fetch(logoUrl);
@@ -611,46 +612,71 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
               });
             }
           })
-          .then((blob) => {
+          .then(async (blob) => {
+            // 保存 Blob 到 IndexedDB
+            await saveScreenshotToDB(blob, request.handle, request.userId, request.fileName);
+            console.log("截图已保存到 IndexedDB");
+
             const reader = new FileReader();
-            reader.onload = () => {
-              if (request.choice) {
-                uploadToWebDAV(blob, request.filename, request.handle)
-                  .then((res) => {
-                    if (res.ok) {
-                      console.log("图片上传到 WebDAV 成功！");
-                      sendResponse({ success: true });
-                    } else {
-                      console.error("上传失败", res.statusText);
-                      sendResponse({ success: false, error: res.statusText });
+            reader.onload = async () => {
+              try {
+                if (request.choice) {
+                  uploadToWebDAV(blob, request.filename, request.handle)
+                    .then((res) => {
+                      if (res.ok) {
+                        console.log("图片上传到 WebDAV 成功！");
+                        sendResponse({ success: true });
+                      } else {
+                        console.error("上传失败", res.statusText);
+                        sendResponse({ success: false, error: res.statusText });
+                      }
+                    })
+                    .catch((err) => {
+                      console.error("上传错误", err);
+                      sendResponse({ success: false, error: err.message });
+                    });
+                } else {
+                  chrome.downloads.download(
+                    {
+                      url: reader.result,
+                      filename: `XMark/Screenshot/${request.handle}/${request.filename}`,
+                      saveAs: false,
+                    },
+                    (downloadId) => {
+                      if (chrome.runtime.lastError) {
+                        console.error(
+                          "Error downloading cropped screenshot:",
+                          chrome.runtime.lastError
+                        );
+                        sendResponse({
+                          success: false,
+                          error: chrome.runtime.lastError.message,
+                        });
+                      } else {
+                        sendResponse({ success: true, downloadId });
+                      }
                     }
-                  })
-                  .catch((err) => {
-                    console.error("上传错误", err);
-                    sendResponse({ success: false, error: err.message });
-                  });
-              } else {
-                chrome.downloads.download(
-                  {
-                    url: reader.result,
-                    filename: `Xmark/Screenshot/${request.handle}/${request.filename}`,
-                    saveAs: false,
-                  },
-                  (downloadId) => {
-                    if (chrome.runtime.lastError) {
-                      console.error(
-                        "Error downloading cropped screenshot:",
-                        chrome.runtime.lastError
-                      );
-                      sendResponse({
-                        success: false,
-                        error: chrome.runtime.lastError.message,
-                      });
-                    } else {
-                      sendResponse({ success: true, downloadId });
-                    }
-                  }
+                  );
+                }
+
+                // 截图时间线
+                const result = await chrome.storage.local.get(
+                  "ScreenshotTimeline"
                 );
+                const timeline = result.ScreenshotTimeline || [];
+
+                timeline.push({
+                  userId: request.userId,
+                  path: `XMark/Screenshot/${request.handle}/${request.filename}`,
+                  date: new Date().toISOString(),
+                });
+
+                await chrome.storage.local.set({
+                  ScreenshotTimeline: timeline,
+                });
+              } catch (err) {
+                console.error("保存 ScreenshotTimeline 失败:", err);
+                sendResponse({ success: false, error: err.message });
               }
             };
             reader.readAsDataURL(blob);

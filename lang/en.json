@@ -6,6 +6,8 @@
   "exportNotes": "📤 Export Notes",
   "importNotes": "📥 Import Notes",
   "clearNotes": "🗑️ Clear All Notes",
+  "TweetCapture": "TurnOn TweetCapture",
+  "Timeline": "Show Timeline",
   "webdavCloudBackup": "WebDAV Cloud Backup",
   "webdavServerConfig": "⚙️WebDAV Server Configuration",
   "serverAddress": "Server Address",
@@ -39,7 +41,6 @@
   "exportReminder": "For safety, all previous notes have been exported automatically. You can delete the file if you don't need it.",
   "clearFail": "Clear failed, please try again",
   "notes": "notes",
-  "TagGroups": "Swith TagGroups display",
   "addNote": "Add Note",
   "userID": "Current UserID:",
   "oldusername": "Former Name:",
@@ -59,6 +60,7 @@
   "viewDetail": "View Details",
   "noteDetail": "Note Details",
   "tagManagement": "🏷️Tag Management",
+  "TagGroups": "TurnOn TagPanel",
   "addTag": "➕Add Tag",
   "editTag": "Edit Tag",
   "tagName": "Tag Name:",
@@ -153,7 +155,8 @@
     "backupTaggedNotes": "Successfully backed up tagged notes:",
     "noNotesWithSelectedTags": "No notes found with selected tags",
     "TagGroupsOn": "Tag Panel On",
-    "TagGroupsOff": "Tag Panel OFF"
+    "TagGroupsOff": "Tag Panel OFF",
+    "TagGroupsAlert": "Please use on Twitter/X page"
   },
   "dialog": {
     "webdavBackupList": "WebDAV Backup List",
@@ -176,5 +179,8 @@
     "backing": "Backing up...",
     "restoring": "Restoring...",
     "loading": "Loading..."
-  }
+  },
+    "allTimeline": "All Time line",
+  "timelineStats": "Stats",
+  "timelineRank": "Ranks"
 }

@@ -1,0 +1,138 @@
+/* Glass + Apple-ish components */
+:root {
+  --apple-blue: #0a84ff;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.35);
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    Roboto, Helvetica, Arial, "Noto Sans CJK SC", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: radial-gradient(
+    1000px 1000px at 10% 10%,
+    #eef2ff 0%,
+    #f8fafc 40%,
+    #ffffff 100%
+  );
+}
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+}
+
+.tab-button {
+  padding: 0.6rem 1rem;
+  border-bottom: 2px solid transparent;
+  border-radius: 0.75rem 0.75rem 0 0;
+  background: transparent;
+  transition: all 0.25s ease;
+}
+.tab-button:hover {
+  background: rgba(255, 255, 255, 0.7);
+  transform: translateY(-1px);
+}
+.tab-button.active {
+  color: #1e3a8a;
+  font-weight: 600;
+  background: linear-gradient(
+    180deg,
+    rgba(191, 219, 254, 0.8),
+    rgba(147, 197, 253, 0.65)
+  );
+  border-color: #3b82f6;
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.15);
+}
+
+.timeline-card {
+  position: relative;
+  overflow: hidden;
+  border-left: 6px solid var(--apple-blue);
+}
+.timeline-card .thumb {
+  cursor: pointer;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.timeline-card:hover .thumb {
+  transform: scale(1.03);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
+}
+/* Subtle shimmer on hover */
+.timeline-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    120deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 60%
+  );
+  transform: translateX(-200%);
+  transition: transform 0.8s ease;
+  pointer-events: none;
+}
+.timeline-card:hover::after {
+  transform: translateX(200%);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 0.65rem;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  font-size: 0.75rem;
+}
+
+/* Utilities */
+.hidden {
+  display: none;
+}
+
+  /* 灯箱背景 */
+  .lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+  }
+
+  /* 图片 */
+  .lightbox img {
+    max-width: 90%;
+    max-height: 90%;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    animation: zoomIn 0.2s ease;
+  }
+
+  @keyframes zoomIn {
+    from { transform: scale(0.8); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+
+  /* 关闭按钮 */
+  .lightbox-close {
+    position: absolute;
+    top: 20px;
+    right: 30px;
+    font-size: 32px;
+    color: white;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.2s;
+  }
+  .lightbox-close:hover {
+    color: #ccc;
+  }

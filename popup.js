@@ -1,4 +1,4 @@
-import { cryptoUtils } from "./crypto-utils.js";
+import { cryptoUtils } from "./utils/crypto-utils.js";
 
 const langBtn = document.getElementById("langBtn");
 let currentLang = localStorage.getItem("lang") || "zh";
@@ -342,6 +342,7 @@ async function loadStats() {
 // 加载推文保存按钮
 async function Screeshot() {
   const toggle = document.getElementById("toggle-screenshot");
+  const showtimeline = document.getElementById("showTimeline");
 
   // 读取状态并初始化样式
   const res = await new Promise((resolve) => {
@@ -350,14 +351,38 @@ async function Screeshot() {
 
   if (res.enableScreenshot) {
     toggle.classList.add("active");
+    await showTimeline();
   } else {
     toggle.classList.remove("active");
+    showtimeline.classList.add("hidden");
   }
 
   // 点击切换状态
-  toggle.addEventListener("click", () => {
+  toggle.addEventListener("click", async () => {
     const isActive = toggle.classList.toggle("active"); // 切换样式
     chrome.storage.local.set({ enableScreenshot: isActive }); // 保存状态
+    if (isActive) {
+      await showTimeline();
+    } else {
+      showtimeline.classList.add("hidden");
+    }
+  });
+}
+
+// 加载推文截图时间线
+async function showTimeline() {
+  const showtimeline = document.getElementById("showTimeline");
+  const result = await chrome.storage.local.get("ScreenshotTimeline");
+  const timeline = result.ScreenshotTimeline || [];
+
+  if (timeline) {
+    showtimeline.classList.remove("hidden");
+  }
+
+  showtimeline.addEventListener("click", () => {
+    chrome.tabs.create({
+      url: chrome.runtime.getURL("timeline.html"),
+    });
   });
 }
 
@@ -451,7 +476,7 @@ async function exportNotes() {
       type: "application/json",
     });
 
-    const filename = `Xmark/Backup/XMark-${
+    const filename = `XMark/Backup/XMark-${
       new Date().toISOString().split("T")[0]
     }.json`;
 
@@ -634,7 +659,7 @@ async function exportNotesByTags(selectedTagIds) {
       type: "application/json",
     });
 
-    const filename = `Xmark/Backup/XMark-tags-${
+    const filename = `XMark/Backup/XMark-tags-${
       new Date().toISOString().split("T")[0]
     }.json`;
 
@@ -985,7 +1010,7 @@ async function testWebdavConnection() {
       );
     });
 
-    // 创建/Xmark/Backup/
+    // 创建/XMark/Backup/
     await makedir(config.url, headers);
 
     if (!testResult.success) {
@@ -1026,7 +1051,7 @@ async function testWebdavConnection() {
 
 async function makedir(baseUrl, headers) {
   // 二级目录依次检查
-  const dirs = ["Xmark", "Backup"];
+  const dirs = ["XMark", "Backup"];
   let currentUrl = baseUrl.replace(/\/?$/, ""); // 确保 baseUrl 末尾没有多余斜杠
 
   for (const dir of dirs) {
@@ -1594,8 +1619,8 @@ async function backupToWebDAV() {
 
     // 构建 WebDAV URL
     const webdavUrl = config.url.endsWith("/")
-      ? config.url + "Xmark/Backup/" + fileName
-      : config.url + "/Xmark/Backup/" + fileName;
+      ? config.url + "XMark/Backup/" + fileName
+      : config.url + "/XMark/Backup/" + fileName;
 
     // 准备认证头
     const headers = {
@@ -1678,8 +1703,8 @@ async function restoreFromWebDAV() {
     })[0];
 
     const webdavUrl = config.url.endsWith("/")
-      ? config.url + "Xmark/Backup/" + latestBackup.name
-      : config.url + "/Xmark/Backup/" + latestBackup.name;
+      ? config.url + "XMark/Backup/" + latestBackup.name
+      : config.url + "/XMark/Backup/" + latestBackup.name;
 
     // 准备认证头
     const headers = {};
@@ -1756,8 +1781,8 @@ async function restoreFromSpecificBackup(fileName) {
     }
 
     const webdavUrl = config.url.endsWith("/")
-      ? config.url + "Xmark/Backup/" + fileName
-      : config.url + "/Xmark/Backup/" + fileName;
+      ? config.url + "XMark/Backup/" + fileName
+      : config.url + "/XMark/Backup/" + fileName;
 
     const headers = {};
     if (config.username && config.password) {
@@ -1886,8 +1911,8 @@ async function backupToWebDAVByTags(selectedTagIds) {
 
     // 构建 WebDAV URL
     const webdavUrl = config.url.endsWith("/")
-      ? config.url + "Xmark/Backup/" + fileName
-      : config.url + "/Xmark/Backup/" + fileName;
+      ? config.url + "XMark/Backup/" + fileName
+      : config.url + "/XMark/Backup/" + fileName;
 
     // 准备认证头
     const headers = {
@@ -2107,8 +2132,8 @@ async function getWebDAVBackupList(config) {
 async function testFileExists(config, headers, fileName) {
   try {
     const fileUrl = config.url.endsWith("/")
-      ? config.url + "Xmark/Backup/" + fileName
-      : config.url + "/Xmark/Backup/" + fileName;
+      ? config.url + "XMark/Backup/" + fileName
+      : config.url + "/XMark/Backup/" + fileName;
 
     // 添加时间戳和缓存控制头
     const urlWithTimestamp = fileUrl + "?t=" + Date.now();
@@ -2158,7 +2183,7 @@ async function tryCommonFilePatterns(config, headers) {
   const patterns = [];
   const now = new Date();
 
-    // 最近30天的日期
+  // 最近30天的日期
   for (let i = 0; i < 30; i++) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
@@ -2288,6 +2313,67 @@ async function deleteBackupFile(fileName) {
 }
 
 /* ==========================标签模块========================== */
+// 控制页面标签显示
+async function TagGroups() {
+  const toggle = document.getElementById("toggle-groups");
+
+  // 初始化状态并设置样式
+  const res = await new Promise((resolve) => {
+    chrome.storage.local.get({ tagGroupsVisible: true }, resolve);
+  });
+
+  if (res.tagGroupsVisible) {
+    toggle.classList.add("active");
+  } else {
+    toggle.classList.remove("active");
+  }
+
+  // 点击切换状态
+  toggle.addEventListener("click", async () => {
+    // 在当前 tab 执行显示/隐藏逻辑
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    if (
+      !tab.url.startsWith("https://x.com") &&
+      !tab.url.startsWith("https://twitter.com")
+    ) {
+      alert(langData.messages.TagGroupsAlert);
+      return;
+    }
+
+    const isActive = toggle.classList.toggle("active"); // 切换样式
+    chrome.storage.local.set({ tagGroupsVisible: isActive });
+
+    chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: (visible) => {
+        const wrapper = document.querySelector("[data-groups-nav]");
+        if (wrapper) {
+          wrapper.style.display = visible ? "flex" : "none";
+        } else {
+          chrome.runtime.sendMessage({ action: "initGroups" }, (resp) => {
+            chrome.storage.local.get(
+              ["twitterGroupsVisible"],
+              ({ twitterGroupsVisible }) => {
+                const w = document.querySelector("[data-groups-nav]");
+                if (w && !twitterGroupsVisible) w.style.display = "none";
+              }
+            );
+          });
+        }
+      },
+      args: [isActive],
+    });
+
+    showMessage(
+      isActive ? langData.messages.TagGroupsOn : langData.messages.TagGroupsOff,
+      isActive ? "" : "error"
+    );
+  });
+}
+
 // 添加标签面板
 function showAddTagDialog() {
   const existingDialog = document.querySelector(".tag-dialog");
@@ -2754,67 +2840,6 @@ async function persistOrder(tagList) {
 
   await loadTags();
   await loadAutoBackupSettings(); // 重新加载自动备份设置以更新标签选项
-}
-
-// 控制页面标签显示
-async function TagGroups() {
-  const toggle = document.getElementById("toggle-groups");
-
-  // 1️⃣ 初始化状态并设置样式
-  const res = await new Promise((resolve) => {
-    chrome.storage.local.get({ tagGroupsVisible: true }, resolve);
-  });
-
-  if (res.tagGroupsVisible) {
-    toggle.classList.add("active");
-  } else {
-    toggle.classList.remove("active");
-  }
-
-  // 2️⃣ 点击切换状态
-  toggle.addEventListener("click", async () => {
-    // 3️⃣ 在当前 tab 执行显示/隐藏逻辑
-    const [tab] = await chrome.tabs.query({
-      active: true,
-      currentWindow: true,
-    });
-    if (
-      !tab.url.startsWith("https://x.com") &&
-      !tab.url.startsWith("https://twitter.com")
-    ) {
-      alert("请在 Twitter/X 页面使用该功能");
-      return;
-    }
-
-    const isActive = toggle.classList.toggle("active"); // 切换样式
-    chrome.storage.local.set({ tagGroupsVisible: isActive });
-
-    chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: (visible) => {
-        const wrapper = document.querySelector("[data-groups-nav]");
-        if (wrapper) {
-          wrapper.style.display = visible ? "flex" : "none";
-        } else {
-          chrome.runtime.sendMessage({ action: "initGroups" }, (resp) => {
-            chrome.storage.local.get(
-              ["twitterGroupsVisible"],
-              ({ twitterGroupsVisible }) => {
-                const w = document.querySelector("[data-groups-nav]");
-                if (w && !twitterGroupsVisible) w.style.display = "none";
-              }
-            );
-          });
-        }
-      },
-      args: [isActive],
-    });
-
-    showMessage(
-      isActive ? langData.messages.TagGroupsOn : langData.messages.TagGroupsOff,
-      isActive ? "" : "error"
-    );
-  });
 }
 
 /* ==========================消息模块========================== */

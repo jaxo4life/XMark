@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>XMark Timeline</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- 本地 Tailwind CSS -->
+    <link rel="stylesheet" href="styles/tailwind.min.css" />
+    <link rel="stylesheet" href="styles/app.css" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  </head>
+  <body class="min-h-screen text-slate-800 selection:bg-blue-200/60">
+    <!-- Top Nav / Glass -->
+    <header
+      id="app-header"
+      class="sticky top-0 z-40 bg-white backdrop-blur-xl border-b border-white/40"
+    >
+      <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3 mb-6">
+        <div
+          class="w-20 rounded-2xl grid place-items-center text-white font-bold"
+        >
+          <img src="public/logo.png"/>
+        </div>
+        <h1 class="text-2xl sm:text-4xl font-semibold tracking-tight">
+          Timeline
+        </h1>
+
+        <div class="flex-1"></div>
+
+        <!-- Search & Filters -->
+        <div class="hidden md:flex items-center gap-2">
+          <div class="relative">
+            <input
+              id="kw"
+              type="search"
+              placeholder="搜索 userId / handle"
+              class="peer w-64 rounded-xl bg-white/70 border border-white/50 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400/60"
+            />
+            <kbd
+              class="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 opacity-0 peer-focus:opacity-100"
+              >Enter</kbd
+            >
+          </div>
+          <input
+            id="startDate"
+            type="date"
+            class="rounded-xl bg-white/70 border border-white/50 px-2 py-2"
+          />
+          <span class="text-slate-400">—</span>
+          <input
+            id="endDate"
+            type="date"
+            class="rounded-xl bg-white/70 border border-white/50 px-2 py-2"
+          />
+          <button
+            id="clearFilters"
+            class="rounded-xl px-3 py-2 bg-slate-100 hover:bg-slate-200"
+          >
+            清除
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div>
+        <div class="max-w-6xl mx-auto px-2 sm:px-4">
+          <nav class="flex gap-2 text-xl">
+            <button class="tab-button active" data-tab="timeline">
+              <span data-key="allTimeline">全部时间线</span>
+            </button>
+            <button class="tab-button" data-tab="stats">
+              <span data-key="timelineStats">数据统计</span>
+            </button>
+            <button class="tab-button" data-tab="ranking">
+              <span data-key="timelineRank">截图排行榜</span>
+            </button>
+          </nav>
+        </div>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <main class="max-w-6xl mx-auto px-4 pt-6 pb-24">
+      <!-- Filter summary / breadcrumb -->
+      <div id="filterBar" class="hidden mb-4">
+        <div class="glass flex items-center gap-2 px-3 py-2 rounded-xl text-sm">
+          <span class="text-slate-500">已筛选：</span>
+          <span id="filterText" class="font-medium text-slate-700"></span>
+          <button
+            id="clearUser"
+            class="ml-2 px-2 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs"
+          >
+            返回全部
+          </button>
+        </div>
+      </div>
+
+      <section id="tab-contents" class="space-y-6">
+        <!-- Timeline -->
+        <div
+          id="timeline"
+          class="tab-content flex w-full h-full overflow-hidden"
+        >
+          <!-- 左侧时间轴（仅在 >=sm 屏幕显示） -->
+          <div
+            id="timeline-axis"
+            class="hidden sm:flex flex-col items-center w-20 pr-4 text-sm text-slate-500 overflow-y-auto"
+          >
+            <!-- 动态生成日期节点 -->
+          </div>
+
+          <!-- 右侧卡片网格 -->
+          <div class="flex-1 flex flex-col overflow-hidden">
+            <div
+              id="timeline-grid"
+              class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto p-2"
+            ></div>
+
+            <div
+              id="sentinel"
+              class="h-12 flex items-center justify-center text-slate-400"
+            >
+              下拉加载更多…
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="tab-content hidden" id="stats">
+          <div class="glass p-4 rounded-2xl space-y-4">
+            <div
+              id="stats-cards"
+              class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4"
+            ></div>
+            <canvas id="dailyChart" height="220" class="w-full"></canvas>
+          </div>
+        </div>
+
+        <!-- Ranking -->
+        <div class="tab-content hidden" id="ranking">
+          <div id="ranking-content" class="glass p-4 rounded-2xl"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Lightbox -->
+    <div id="lightbox" class="fixed inset-0 z-50 hidden">
+      <div class="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
+      <button
+        id="lbClose"
+        class="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 text-white grid place-items-center"
+      >
+        ✕
+      </button>
+      <img
+        id="lbImg"
+        class="absolute max-w-[92vw] max-h-[86vh] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-xl shadow-2xl"
+      />
+    </div>
+
+    <!-- Back to top -->
+    <button
+      id="backTop"
+      class="fixed bottom-6 right-6 hidden rounded-2xl px-3 py-2 glass shadow-lg font-bold"
+    >
+      ↑ 返回顶部
+    </button>
+
+    <script type="module" src="timeline.js"></script>
+  </body>
+</html>

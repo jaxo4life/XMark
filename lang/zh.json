@@ -6,6 +6,8 @@
   "exportNotes": "📤 导出备注",
   "importNotes": "📥 导入备注",
   "clearNotes": "🗑️ 清空所有备注",
+  "TweetCapture": "启用推文截图",
+  "Timeline": "查看时间线",
   "webdavCloudBackup": "WebDAV 云备份",
   "webdavServerConfig": "⚙️WebDAV 服务器配置",
   "serverAddress": "服务器地址",
@@ -58,7 +60,7 @@
   "viewDetail": "查看详情",
   "noteDetail": "备注详情",
   "tagManagement": "🏷️标签管理",
-  "TagGroups": "切换页面标签显示",
+  "TagGroups": "启用标签面板",
   "addTag": "➕添加标签",
   "editTag": "编辑标签",
   "tagName": "标签名称:",
@@ -153,7 +155,8 @@
     "backupTaggedNotes": "成功备份标签筛选的备注：",
     "noNotesWithSelectedTags": "选定的标签下没有备注数据",
     "TagGroupsOn": "标签面板已显示",
-    "TagGroupsOff": "标签面板已隐藏"
+    "TagGroupsOff": "标签面板已隐藏",
+    "TagGroupsAlert": "请在 Twitter/X 页面使用该功能"
   },
   "dialog": {
     "webdavBackupList": "WebDAV 备份列表",
@@ -176,5 +179,8 @@
     "backing": "备份中...",
     "restoring": "恢复中...",
     "loading": "加载中..."
-  }
+  },
+  "allTimeline": "全部时间线",
+  "timelineStats": "数据统计",
+  "timelineRank": "截图排行榜"
 }

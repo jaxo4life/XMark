@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <link rel="stylesheet" type="text/css" href="popup.css" />
+    <link rel="stylesheet" type="text/css" href="styles/popup.css" />
   </head>
 
   <body>
@@ -27,9 +27,12 @@
       </div>
     </div>
 
-    <div class="auto-backup-header">
-      <span data-key="TweetCapture">启用推文截图</span>
-      <div class="toggle-switch" id="toggle-screenshot"></div>
+    <div class="section">
+      <div class="auto-backup-header">
+        <span data-key="TweetCapture">启用推文截图</span>
+        <div class="toggle-switch" id="toggle-screenshot"></div>
+      </div>
+      <button class="btn btn-primary hidden" style="background: rgb(5, 127, 44); color: white" id="showTimeline" data-key="Timeline">查看时间线</button>
     </div>
 
     <div class="section">
@@ -89,6 +92,7 @@
         </h4>
 
         <div id="cloudStatus" class="cloud-status hidden"></div>
+
         <div id="webdav">
           <!-- WebDAV 配置 - 始终显示在上方 -->
           <div class="webdav-config-header" id="webdavConfigHeader">
