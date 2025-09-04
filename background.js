@@ -195,8 +195,8 @@ async function performAutoBackup() {
 
     // 构建 WebDAV URL
     const webdavUrl = config.url.endsWith("/")
-      ? config.url + "Xmark/Backup/" + fileName
-      : config.url + "/Xmark/Backup/" + fileName;
+      ? config.url + "XMark/Backup/" + fileName
+      : config.url + "/XMark/Backup/" + fileName;
 
     // 准备认证头
     const headers = {
@@ -315,7 +315,7 @@ async function ensureThreeLevelDirExists(baseUrl, handle, headers) {
   const safeHandle = encodeURIComponent(handle);
 
   // 三级目录依次检查
-  const dirs = ["Xmark", "Screenshot", safeHandle];
+  const dirs = ["XMark", "Screenshot", safeHandle];
   let currentUrl = baseUrl.replace(/\/?$/, ""); // 确保 baseUrl 末尾没有多余斜杠
 
   for (const dir of dirs) {
@@ -633,7 +633,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 chrome.downloads.download(
                   {
                     url: reader.result,
-                    filename: `Xmark/Screenshot/${request.handle}/${request.filename}`,
+                    filename: `XMark/Screenshot/${request.handle}/${request.filename}`,
                     saveAs: false,
                   },
                   (downloadId) => {

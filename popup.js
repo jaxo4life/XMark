@@ -451,7 +451,7 @@ async function exportNotes() {
       type: "application/json",
     });
 
-    const filename = `Xmark/Backup/XMark-${
+    const filename = `XMark/Backup/XMark-${
       new Date().toISOString().split("T")[0]
     }.json`;
 
@@ -634,7 +634,7 @@ async function exportNotesByTags(selectedTagIds) {
       type: "application/json",
     });
 
-    const filename = `Xmark/Backup/XMark-tags-${
+    const filename = `XMark/Backup/XMark-tags-${
       new Date().toISOString().split("T")[0]
     }.json`;
 
@@ -985,7 +985,7 @@ async function testWebdavConnection() {
       );
     });
 
-    // 创建/Xmark/Backup/
+    // 创建/XMark/Backup/
     await makedir(config.url, headers);
 
     if (!testResult.success) {
@@ -1026,7 +1026,7 @@ async function testWebdavConnection() {
 
 async function makedir(baseUrl, headers) {
   // 二级目录依次检查
-  const dirs = ["Xmark", "Backup"];
+  const dirs = ["XMark", "Backup"];
   let currentUrl = baseUrl.replace(/\/?$/, ""); // 确保 baseUrl 末尾没有多余斜杠
 
   for (const dir of dirs) {
@@ -1594,8 +1594,8 @@ async function backupToWebDAV() {
 
     // 构建 WebDAV URL
     const webdavUrl = config.url.endsWith("/")
-      ? config.url + "Xmark/Backup/" + fileName
-      : config.url + "/Xmark/Backup/" + fileName;
+      ? config.url + "XMark/Backup/" + fileName
+      : config.url + "/XMark/Backup/" + fileName;
 
     // 准备认证头
     const headers = {
@@ -1678,8 +1678,8 @@ async function restoreFromWebDAV() {
     })[0];
 
     const webdavUrl = config.url.endsWith("/")
-      ? config.url + "Xmark/Backup/" + latestBackup.name
-      : config.url + "/Xmark/Backup/" + latestBackup.name;
+      ? config.url + "XMark/Backup/" + latestBackup.name
+      : config.url + "/XMark/Backup/" + latestBackup.name;
 
     // 准备认证头
     const headers = {};
@@ -1756,8 +1756,8 @@ async function restoreFromSpecificBackup(fileName) {
     }
 
     const webdavUrl = config.url.endsWith("/")
-      ? config.url + "Xmark/Backup/" + fileName
-      : config.url + "/Xmark/Backup/" + fileName;
+      ? config.url + "XMark/Backup/" + fileName
+      : config.url + "/XMark/Backup/" + fileName;
 
     const headers = {};
     if (config.username && config.password) {
@@ -1886,8 +1886,8 @@ async function backupToWebDAVByTags(selectedTagIds) {
 
     // 构建 WebDAV URL
     const webdavUrl = config.url.endsWith("/")
-      ? config.url + "Xmark/Backup/" + fileName
-      : config.url + "/Xmark/Backup/" + fileName;
+      ? config.url + "XMark/Backup/" + fileName
+      : config.url + "/XMark/Backup/" + fileName;
 
     // 准备认证头
     const headers = {
@@ -2107,8 +2107,8 @@ async function getWebDAVBackupList(config) {
 async function testFileExists(config, headers, fileName) {
   try {
     const fileUrl = config.url.endsWith("/")
-      ? config.url + "Xmark/Backup/" + fileName
-      : config.url + "/Xmark/Backup/" + fileName;
+      ? config.url + "XMark/Backup/" + fileName
+      : config.url + "/XMark/Backup/" + fileName;
 
     // 添加时间戳和缓存控制头
     const urlWithTimestamp = fileUrl + "?t=" + Date.now();
