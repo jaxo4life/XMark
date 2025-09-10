@@ -400,6 +400,7 @@ async function Screenshot() {
       sreenshotScale.classList.remove("hidden");
       saveBtn.classList.remove("hidden");
       showtimeline.classList.remove("hidden");
+      await showTimeline();
 
       // 恢复 SaveChoice 的状态
       const res = await new Promise((resolve) => {
