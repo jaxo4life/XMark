@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/version-5.0.0-blue.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-5.2.0-blue.svg" alt="Version"></a>
   <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Manifest-V3-green.svg" alt="Manifest"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Chrome%20Extension-orange.svg" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
@@ -12,6 +12,27 @@
 ---
 
 <summary>🕑 Changelog</summary>
+
+## v5.2.0
+
+- 全新扩展界面
+- 时间线数据管理
+- 长截图修复和优化
+- Brand new popup UI
+- Timeline Data Management
+- Long Screenshot fixed and optimized
+
+## v5.1.0
+
+- 时间流
+- 长截图
+- Time Flow
+- Long Screenshot
+
+## v5.0.0
+
+- XMark 时间线
+- XMark Timeline
 
 ## v5.0.0
 

@@ -1,49 +1,29 @@
 import { cryptoUtils } from "./utils/crypto-utils.js";
+import { getDBStats } from "../utils/db.js";
 
 const langBtn = document.getElementById("langBtn");
 let currentLang = localStorage.getItem("lang") || "zh";
 let langData = {};
 const Expires = "0";
 
-// 标签颜色库
-const colors = [
-  // 蓝色系
-  "#1565C0",
-  "#64B5F6",
-  // 青绿系
-  "#00695C",
-  "#1DE9B6",
-  // 橙色系
-  "#BF360C",
-  "#FF8A65",
-  // 红色系
-  "#B71C1C",
-  "#EF5350",
-  // 紫色系
-  "#4527A0",
-  "#B388FF",
-  // 粉色系
-  "#880E4F",
-  "#F48FB1",
-  // 金黄色系
-  "#FF6F00",
-  "#FFD54F",
-  // 草绿色系
-  "#33691E",
-  "#AED581",
-  // 湖蓝系
-  "#01579B",
-  "#4DD0E1",
-  // 桃/珊瑚系
-  "#AD1457",
-  "#F06292",
-  // 中性灰系
-  "#263238",
-  "#90A4AE",
-  // 补充色
-  "#283593",
-  "#00ACC1",
-];
+// 12 色系 × 3 = 36 色（深、中、浅）
+const tagColorsByFamily = {
+  Blue: ["#0D47A1", "#1565C0", "#64B5F6"],
+  Cyan: ["#006064", "#00ACC1", "#4DD0E1"],
+  Teal: ["#004D40", "#00796B", "#26A69A"],
+  Green: ["#1B5E20", "#2E7D32", "#66BB6A"],
+  Lime: ["#9E9D24", "#CDDC39", "#deeb61"],
+  Yellow: ["#FBC02D", "#FFD54F", "#ebdf72"],
+  Orange: ["#E65100", "#FB8C00", "#FFCC80"],
+  Red: ["#B71C1C", "#D32F2F", "#EF5350"],
+  Pink: ["#AD1457", "#C2185B", "#F48FB1"],
+  Purple: ["#6A1B9A", "#8E24AA", "#B388FF"],
+  Indigo: ["#283593", "#3949AB", "#7986CB"],
+  Brown: ["#4E342E", "#6D4C41", "#A1887F"],
+};
+
+// 平铺的一维数组
+const colors = [].concat(...Object.values(tagColorsByFamily));
 
 // 载入语言文件并更新文本
 async function loadLanguage(lang) {
@@ -145,7 +125,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   await loadStats();
 
   // 加载推文截图开关
-  await Screeshot();
+  await Screenshot();
 
   // 加载最近备注
   await loadRecentNotes();
@@ -158,6 +138,21 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   // 加载标签
   await loadTags();
+
+  // Tab 切换逻辑
+  document.querySelectorAll(".tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      document
+        .querySelectorAll(".tab")
+        .forEach((t) => t.classList.remove("active"));
+      document
+        .querySelectorAll(".tab-content")
+        .forEach((c) => c.classList.remove("active"));
+
+      tab.classList.add("active");
+      document.getElementById(tab.dataset.tab).classList.add("active");
+    });
+  });
 
   // 绑定其他事件
   document
@@ -334,48 +329,121 @@ async function loadStats() {
       (note) => new Date(note.createdAt).toDateString() === today
     ).length;
     document.getElementById("todayNotes").textContent = todayNotes;
+
+    // 时间线统计
+    const stats = await getDBStats();
+
+    // 如果是前端面板显示，可以直接更新 DOM
+    document.getElementById("totalCount").textContent = stats.totalCount;
+    document.getElementById("uniqueUserCount").textContent =
+      stats.uniqueUserCount;
+    document.getElementById("earliest").textContent = stats.earliest
+      ? stats.earliest.toLocaleString()
+      : "-";
+    document.getElementById("latest").textContent = stats.latest
+      ? stats.latest.toLocaleString()
+      : "-";
   } catch (error) {
     console.error("加载统计数据失败:", error);
   }
 }
 
 // 加载推文保存按钮
-async function Screeshot() {
-  const toggle = document.getElementById("toggle-screenshot");
+async function Screenshot() {
+  const toggleScreenshot = document.getElementById("toggle-screenshot");
+  const saveBtn = document.getElementById("SaveChoiceBtn");
+  const sreenshotScale = document.getElementById("SreenshotScale");
+  const scaleSelect = document.getElementById("scaleSelect");
+  const toggleSaveChoice = document.getElementById("toggle-saveChoice");
   const showtimeline = document.getElementById("showTimeline");
 
-  // 读取状态并初始化样式
+  // 读取截图开关状态
   const res = await new Promise((resolve) => {
-    chrome.storage.local.get({ enableScreenshot: true }, resolve);
+    chrome.storage.local.get(
+      { enableScreenshot: true, TimelineSaveChoice: true },
+      resolve
+    );
   });
 
+  // 读取scale
+  chrome.storage.local.get("screenshotScale", ({ screenshotScale }) => {
+    scaleSelect.value = screenshotScale || "2";
+  });
+
+  // 初始化 Screenshot 开关
   if (res.enableScreenshot) {
-    toggle.classList.add("active");
+    toggleScreenshot.classList.add("active");
+    sreenshotScale.classList.remove("hidden");
+    saveBtn.classList.remove("hidden");
+    showtimeline.classList.remove("hidden");
     await showTimeline();
   } else {
-    toggle.classList.remove("active");
+    toggleScreenshot.classList.remove("active");
+    sreenshotScale.classList.add("hidden");
+    saveBtn.classList.add("hidden");
     showtimeline.classList.add("hidden");
   }
 
-  // 点击切换状态
-  toggle.addEventListener("click", async () => {
-    const isActive = toggle.classList.toggle("active"); // 切换样式
-    chrome.storage.local.set({ enableScreenshot: isActive }); // 保存状态
+  // 初始化 SaveChoice 开关（只有在 Screenshot 开启时才生效）
+  if (res.enableScreenshot && res.TimelineSaveChoice) {
+    toggleSaveChoice.classList.add("active");
+  } else {
+    toggleSaveChoice.classList.remove("active");
+  }
+
+  // 绑定 Screenshot 点击
+  toggleScreenshot.addEventListener("click", async () => {
+    const isActive = toggleScreenshot.classList.toggle("active");
+    chrome.storage.local.set({ enableScreenshot: isActive });
+
     if (isActive) {
-      await showTimeline();
+      sreenshotScale.classList.remove("hidden");
+      saveBtn.classList.remove("hidden");
+      showtimeline.classList.remove("hidden");
+
+      // 恢复 SaveChoice 的状态
+      const res = await new Promise((resolve) => {
+        chrome.storage.local.get({ TimelineSaveChoice: true }, resolve);
+      });
+      if (res.TimelineSaveChoice) {
+        toggleSaveChoice.classList.add("active");
+      } else {
+        toggleSaveChoice.classList.remove("active");
+      }
     } else {
+      sreenshotScale.classList.add("hidden");
+      saveBtn.classList.add("hidden");
       showtimeline.classList.add("hidden");
+
+      // Screenshot 关闭时，强制关闭 SaveChoice
+      toggleSaveChoice.classList.remove("active");
+      chrome.storage.local.set({ TimelineSaveChoice: false });
     }
+  });
+
+  // 绑定 SaveChoice 点击（只绑定一次）
+  if (!toggleSaveChoice.dataset.bound) {
+    toggleSaveChoice.addEventListener("click", async () => {
+      const isActive = toggleSaveChoice.classList.toggle("active");
+      chrome.storage.local.set({ TimelineSaveChoice: isActive });
+    });
+    toggleSaveChoice.dataset.bound = "true";
+  }
+
+  // 用户修改时更新 storage
+  scaleSelect.addEventListener("change", () => {
+    const value = parseInt(scaleSelect.value, 10);
+    chrome.storage.local.set({ screenshotScale: value });
   });
 }
 
 // 加载推文截图时间线
 async function showTimeline() {
   const showtimeline = document.getElementById("showTimeline");
-  const result = await chrome.storage.local.get("ScreenshotTimeline");
-  const timeline = result.ScreenshotTimeline || [];
 
-  if (timeline) {
+  const stats = await getDBStats();
+
+  if (stats.totalCount > 0) {
     showtimeline.classList.remove("hidden");
   }
 
@@ -1011,7 +1079,8 @@ async function testWebdavConnection() {
     });
 
     // 创建/XMark/Backup/
-    await makedir(config.url, headers);
+    const dirStatus = await makedir(config.url, headers);
+    console.log("WebDAV 目录状态:", dirStatus);
 
     if (!testResult.success) {
       throw new Error(testResult.error);
@@ -1050,32 +1119,49 @@ async function testWebdavConnection() {
 }
 
 async function makedir(baseUrl, headers) {
-  // 二级目录依次检查
   const dirs = ["XMark", "Backup"];
-  let currentUrl = baseUrl.replace(/\/?$/, ""); // 确保 baseUrl 末尾没有多余斜杠
+  let currentUrl = baseUrl.replace(/\/+$/, ""); // 去掉末尾斜杠
+
+  const result = {
+    created: false, // 是否新建过目录
+    existed: false, // 是否发现已存在的目录
+  };
 
   for (const dir of dirs) {
     currentUrl += `/${dir}`;
 
-    // 检查目录是否存在
-    const res = await fetch(currentUrl, { method: "PROPFIND", headers });
-    if (!res.ok) {
-      // 如果不存在，就创建
-      try {
-        await fetch(currentUrl, {
-          method: "MKCOL",
-          headers,
-        });
-        console.log("MKCOL 创建成功:", currentUrl);
-      } catch (err) {
-        console.warn("MKCOL 创建失败（可能已存在）:", currentUrl, err);
+    try {
+      // 先检查目录是否存在
+      const res = await fetch(currentUrl, { method: "PROPFIND", headers });
+      if (res.ok) {
+        console.log("目录已存在:", currentUrl);
+        result.existed = true;
+        continue;
       }
-    } else {
-      console.log("目录已存在:", currentUrl);
+
+      // 不存在 -> 尝试创建
+      const mkcolRes = await fetch(currentUrl, { method: "MKCOL", headers });
+      if (mkcolRes.ok || mkcolRes.status === 201) {
+        console.log("MKCOL 创建成功:", currentUrl);
+        result.created = true;
+      } else if (mkcolRes.status === 405 || mkcolRes.status === 409) {
+        // 已存在或冲突
+        console.log("目录已存在或已创建:", currentUrl);
+        result.existed = true;
+      } else {
+        console.warn(
+          "MKCOL 创建失败:",
+          currentUrl,
+          mkcolRes.status,
+          mkcolRes.statusText
+        );
+      }
+    } catch (err) {
+      console.warn("目录检查/创建异常:", currentUrl, err);
     }
   }
 
-  return;
+  return result;
 }
 
 // 只更新配置状态，不改变折叠状态（用于输入变化时）
@@ -2097,7 +2183,7 @@ async function showBackupList() {
 
 // 获取 WebDAV 备份文件列表（只使用文件名模式匹配）
 async function getWebDAVBackupList(config) {
-  console.log("开始获取 WebDAV 备份列表（使用文件名模式匹配）...");
+  console.log("开始获取 WebDAV 备份列表...");
 
   // 构造请求头
   const headers = {};
@@ -2109,8 +2195,14 @@ async function getWebDAVBackupList(config) {
   headers["Pragma"] = "no-cache";
   headers["Expires"] = "0";
 
-  // 调用 tryCommonFilePatterns 获取所有 XMark-*.json 文件
-  const backupFiles = await tryCommonFilePatterns(config, headers);
+  // 先用 PROPFIND 获取
+  let backupFiles = await fetchBackupFilesWithPropfind(config, headers);
+
+  // 如果 PROPFIND 未获取到文件，fallback 到 tryCommonFilePatterns
+  if (backupFiles.length === 0) {
+    console.log("PROPFIND 未获取到文件，退回到按文件名模式匹配...");
+    backupFiles = await tryCommonFilePatterns(config, headers);
+  }
 
   if (backupFiles.length === 0) {
     console.warn("未找到任何备份文件！");
@@ -2125,6 +2217,81 @@ async function getWebDAVBackupList(config) {
   });
 
   console.log(`找到 ${backupFiles.length} 个备份文件，按最新排序完成`);
+  return backupFiles;
+}
+
+// PROPFIND 获取 /XMark/Backup/ 下的备份文件列表
+async function fetchBackupFilesWithPropfind(config, headers) {
+  const backupFiles = [];
+  const backupDir = config.url.replace(/\/+$/, "") + "/XMark/Backup/";
+
+  try {
+    const res = await fetch(backupDir, {
+      method: "PROPFIND",
+      headers: { ...headers, Depth: "1" },
+    });
+
+    if (!res.ok) {
+      console.warn("PROPFIND 请求失败，状态码:", res.status);
+      return backupFiles;
+    }
+
+    const text = await res.text();
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(text, "application/xml");
+
+    const responses = [...xml.getElementsByTagNameNS("*", "response")];
+
+    responses.forEach((resp) => {
+      const hrefNode = resp.getElementsByTagNameNS("*", "href")[0];
+      if (!hrefNode) return;
+
+      const hrefFull = decodeURIComponent(hrefNode.textContent);
+
+      // 跳过目录自身
+      if (hrefFull.replace(/\/+$/, "") === backupDir.replace(/\/+$/, ""))
+        return;
+
+      // 判断是否目录
+      const isCollection =
+        resp.getElementsByTagNameNS("*", "collection").length > 0;
+      if (isCollection) return;
+
+      // 文件名
+      const parts = hrefFull.replace(/\/+$/, "").split("/");
+      const fileName = parts[parts.length - 1];
+
+      // 获取 lastModified 和 size
+      let lastModified,
+        rawSize = 0;
+      const propstat = resp.getElementsByTagNameNS("*", "propstat")[0];
+      if (propstat) {
+        const prop = propstat.getElementsByTagNameNS("*", "prop")[0];
+        if (prop) {
+          const lmNode = prop.getElementsByTagNameNS("*", "getlastmodified")[0];
+          const sizeNode = prop.getElementsByTagNameNS(
+            "*",
+            "getcontentlength"
+          )[0];
+          if (lmNode) lastModified = lmNode.textContent;
+          if (sizeNode) rawSize = parseInt(sizeNode.textContent, 10) || 0;
+        }
+      }
+
+      backupFiles.push({
+        name: fileName,
+        href: fileName,
+        size: formatSize(rawSize),
+        lastModified: formatDate(lastModified),
+        rawSize,
+      });
+    });
+
+    console.log(`PROPFIND 获取到 ${backupFiles.length} 个备份文件`);
+  } catch (err) {
+    console.warn("PROPFIND 请求异常:", err);
+  }
+
   return backupFiles;
 }
 
@@ -2330,7 +2497,15 @@ async function TagGroups() {
 
   // 点击切换状态
   toggle.addEventListener("click", async () => {
-    // 在当前 tab 执行显示/隐藏逻辑
+    const isActive = toggle.classList.toggle("active"); // 切换样式
+    chrome.storage.local.set({ tagGroupsVisible: isActive });
+
+    showMessage(
+      isActive ? langData.messages.TagGroupsOn : langData.messages.TagGroupsOff,
+      isActive ? "" : "error"
+    );
+
+    // 不在推特页面
     const [tab] = await chrome.tabs.query({
       active: true,
       currentWindow: true,
@@ -2342,9 +2517,6 @@ async function TagGroups() {
       alert(langData.messages.TagGroupsAlert);
       return;
     }
-
-    const isActive = toggle.classList.toggle("active"); // 切换样式
-    chrome.storage.local.set({ tagGroupsVisible: isActive });
 
     chrome.scripting.executeScript({
       target: { tabId: tab.id },
@@ -2366,11 +2538,6 @@ async function TagGroups() {
       },
       args: [isActive],
     });
-
-    showMessage(
-      isActive ? langData.messages.TagGroupsOn : langData.messages.TagGroupsOff,
-      isActive ? "" : "error"
-    );
   });
 }
 

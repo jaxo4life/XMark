@@ -1,7 +1,7 @@
 // Twitter Notes Background Script
 
 import { cryptoUtils } from "./utils/crypto-utils.js";
-import { saveScreenshotToDB } from './utils/db.js';
+import { saveScreenshotToDB } from "./utils/db.js";
 
 // 扩展启动时，恢复自动备份
 chrome.runtime.onStartup.addListener(async () => {
@@ -418,10 +418,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           // 判断是否是默认头像
           if (contentType.includes("image/png") && blob.size < 5000) {
             attempt++;
-            ttl = Math.floor(Math.random() * 24) + 1; // 重新随机 TTL
+
+            // 动态修改 ttl，比如随机生成新的
+            ttl = Math.floor(Math.random() * 120) + 48;
+
             console.warn(
-              `Fallback avatar detected, retrying with new TTL (${attempt}/${maxRetries})...`
+              `Fallback avatar detected, retrying with new TTL: ${ttl} (${attempt}/${maxRetries})...`
             );
+
             // 通知 content script 更新 TTL
             chrome.tabs.sendMessage(sender.tab.id, {
               action: "updateTTL",
@@ -447,185 +451,323 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // 异步 sendResponse 必须返回 true
   }
 
-  // 处理推文快照
-  if (request.action === "saveTweet") {
+  if (request.action === "partialShot") {
     const windowId = sender.tab?.windowId ?? chrome.windows.WINDOW_ID_CURRENT;
 
     chrome.tabs.captureVisibleTab(
       windowId,
-      { format: "png", quality: 100 },
-      (dataUrl) => {
-        if (chrome.runtime.lastError) {
-          console.error(
-            "Error capturing screenshot:",
-            JSON.stringify(chrome.runtime.lastError, null, 2)
-          );
-          sendResponse({
-            success: false,
-            error:
-              chrome.runtime.lastError.message ||
-              JSON.stringify(chrome.runtime.lastError),
-          });
+      { format: "png" },
+      async (dataUrl) => {
+        if (!dataUrl) {
+          console.error("partialShot failed", chrome.runtime.lastError);
+          sendResponse(null);
           return;
         }
 
-        fetch(dataUrl)
+        try {
+          const res = await fetch(dataUrl);
+          const blob = await res.blob();
+          const bitmap = await createImageBitmap(blob);
+
+          const info = request.elementInfo || {};
+          const scale = info.scale || 1;
+          const dpr = info.devicePixelRatio || 1;
+          const elemLeft = info.x; // 元素在页面中的绝对 left (CSS px)
+          const elemTop = info.y; // 元素在页面中的绝对 top (CSS px)
+          const elemWidth = info.width; // CSS px
+          const elemTotalHeight = info.height; // CSS px (整条推文高度)
+          const captureTop = info.scrollY; // 这次 capture 的 viewport top（content 带来，CSS px）
+          const captureLeft = info.scrollX || 0;
+          const viewportHeight = info.viewportHeight || window.innerHeight || 0;
+          const headerHeight = info.headerHeight || 0;
+          const step = info.step || 0;
+
+          // 计算元素在当前 viewport 中的可见范围（CSS px，相对 viewport top）
+          let visibleTop = Math.max(0, elemTop - captureTop);
+          const visibleBottom = Math.min(
+            viewportHeight,
+            elemTop + elemTotalHeight - captureTop
+          );
+          let visibleHeight = Math.max(0, visibleBottom - visibleTop);
+
+          // 如果是后续段（step > 0）并且有 headerHeight，裁掉 header 部分（避免重复顶栏）
+          if (step > 0 && headerHeight) {
+            const cropStart = Math.max(visibleTop, headerHeight);
+            visibleHeight = Math.max(0, visibleBottom - cropStart);
+            visibleTop = cropStart;
+          }
+
+          if (visibleHeight <= 0) {
+            // 这张截图没有包含推文区域（可能越界），报告为失败（content 可选择跳过）
+            sendResponse({
+              success: false,
+              error: "no visible area in this capture",
+              step,
+            });
+            return;
+          }
+
+          // 源图上的像素坐标（device pixels）
+          const srcX = Math.round((elemLeft - captureLeft) * dpr);
+          const srcY = Math.round(visibleTop * dpr);
+          const srcW = Math.round(elemWidth * dpr);
+          const srcH = Math.round(visibleHeight * dpr);
+
+          // 边界保护（防止越界）
+          const safeSrcX = Math.max(0, Math.min(bitmap.width, srcX));
+          const safeSrcY = Math.max(0, Math.min(bitmap.height, srcY));
+          const safeSrcW = Math.max(0, Math.min(bitmap.width - safeSrcX, srcW));
+          const safeSrcH = Math.max(
+            0,
+            Math.min(bitmap.height - safeSrcY, srcH)
+          );
+
+          if (safeSrcW <= 0 || safeSrcH <= 0) {
+            sendResponse({
+              success: false,
+              error: "safe crop dims invalid",
+              step,
+            });
+            return;
+          }
+
+          // 裁切到一个新的 canvas（已是 element width x visibleHeight）
+          // —— 关键：输出 canvas 按 scale 放大（而不是改变 src） ——
+          const outputWidth = Math.round(safeSrcW * scale);
+          const outputHeight = Math.round(safeSrcH * scale);
+
+          const cropCanvas = new OffscreenCanvas(outputWidth, outputHeight);
+          const cctx = cropCanvas.getContext("2d");
+
+          // 提高缩放质量
+          cctx.imageSmoothingEnabled = true;
+          cctx.imageSmoothingQuality = "high";
+
+          cctx.drawImage(
+            bitmap,
+            safeSrcX,
+            safeSrcY,
+            safeSrcW,
+            safeSrcH,
+            0,
+            0,
+            outputWidth,
+            outputHeight
+          );
+
+          // 导出为 dataUrl 并返回（同时返回像素高度用于 merge）
+          const croppedBlob = await cropCanvas.convertToBlob({
+            type: "image/png",
+          });
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            // 保存调试
+            /*             chrome.downloads.download({
+              url: dataUrl,
+              filename: `partialShot_step${request.elementInfo?.step || 0}.png`,
+              saveAs: false,
+            }); */
+            sendResponse({ success: true, dataUrl: reader.result });
+          };
+          reader.readAsDataURL(croppedBlob);
+        } catch (err) {
+          console.error("partialShot crop error:", err);
+          sendResponse(null);
+        }
+      }
+    );
+
+    return true; // 异步
+  }
+
+  if (request.action === "mergeShot") {
+    const {
+      captures,
+      elementInfo,
+      totalHeight,
+      handle,
+      tweetlink,
+      userId,
+      filename,
+      save2Files,
+      choice,
+    } = request;
+    const dpr = elementInfo.devicePixelRatio || 1;
+    const cropWidth = elementInfo.width * dpr;
+    const totalHeightPx = totalHeight * dpr;
+
+    // 阴影设置
+    const shadowBlur = 16 * dpr;
+    const shadowOffset = 8 * dpr;
+    const radius = 20 * dpr;
+    const xOffset = shadowBlur;
+    const yOffset = shadowBlur;
+
+    const canvas = new OffscreenCanvas(
+      cropWidth + shadowBlur * 2,
+      totalHeightPx + shadowBlur * 2
+    );
+    const ctx = canvas.getContext("2d");
+
+    Promise.all(
+      captures.map((c) =>
+        fetch(c.dataUrl)
+          .then((r) => r.blob())
+          .then((b) => createImageBitmap(b))
+      )
+    )
+      .then((bitmaps) => {
+        // 使用每段位图的像素尺寸来决定最终画布
+        const cropWidthPx = Math.max(...bitmaps.map((b) => b.width));
+        const totalHeightPx = bitmaps.reduce((sum, b) => sum + b.height, 0);
+
+        const baseDpr = elementInfo.devicePixelRatio || 1;
+        const scale = elementInfo.scale || 1;
+        const scaledFactor = baseDpr * scale; // 用于决定阴影/圆角/Logo 等的像素级尺寸
+
+        const shadowBlur = Math.round(16 * scaledFactor);
+        const shadowOffset = Math.round(8 * scaledFactor);
+        const radius = Math.round(20 * scaledFactor);
+        const xOffset = shadowBlur;
+        const yOffset = shadowBlur;
+
+        const canvas = new OffscreenCanvas(
+          cropWidthPx + shadowBlur * 2,
+          totalHeightPx + shadowBlur * 2
+        );
+        const ctx = canvas.getContext("2d");
+
+        // 1. 绘制白色带阴影的圆角背景（使用 cropWidthPx & totalHeightPx）
+        ctx.save();
+        ctx.fillStyle = "white";
+        ctx.shadowColor = "rgba(0,0,0,0.25)";
+        ctx.shadowBlur = shadowBlur;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = shadowOffset;
+
+        ctx.beginPath();
+        ctx.moveTo(xOffset + radius, yOffset);
+        ctx.lineTo(xOffset + cropWidthPx - radius, yOffset);
+        ctx.quadraticCurveTo(
+          xOffset + cropWidthPx,
+          yOffset,
+          xOffset + cropWidthPx,
+          yOffset + radius
+        );
+        ctx.lineTo(xOffset + cropWidthPx, yOffset + totalHeightPx - radius);
+        ctx.quadraticCurveTo(
+          xOffset + cropWidthPx,
+          yOffset + totalHeightPx,
+          xOffset + cropWidthPx - radius,
+          yOffset + totalHeightPx
+        );
+        ctx.lineTo(xOffset + radius, yOffset + totalHeightPx);
+        ctx.quadraticCurveTo(
+          xOffset,
+          yOffset + totalHeightPx,
+          xOffset,
+          yOffset + totalHeightPx - radius
+        );
+        ctx.lineTo(xOffset, yOffset + radius);
+        ctx.quadraticCurveTo(xOffset, yOffset, xOffset + radius, yOffset);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        // 2. 剪切成圆角矩形路径（和上面一样）
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(xOffset + radius, yOffset);
+        ctx.lineTo(xOffset + cropWidthPx - radius, yOffset);
+        ctx.quadraticCurveTo(
+          xOffset + cropWidthPx,
+          yOffset,
+          xOffset + cropWidthPx,
+          yOffset + radius
+        );
+        ctx.lineTo(xOffset + cropWidthPx, yOffset + totalHeightPx - radius);
+        ctx.quadraticCurveTo(
+          xOffset + cropWidthPx,
+          yOffset + totalHeightPx,
+          xOffset + cropWidthPx - radius,
+          yOffset + totalHeightPx
+        );
+        ctx.lineTo(xOffset + radius, yOffset + totalHeightPx);
+        ctx.quadraticCurveTo(
+          xOffset,
+          yOffset + totalHeightPx,
+          xOffset,
+          yOffset + totalHeightPx - radius
+        );
+        ctx.lineTo(xOffset, yOffset + radius);
+        ctx.quadraticCurveTo(xOffset, yOffset, xOffset + radius, yOffset);
+        ctx.closePath();
+        ctx.clip();
+
+        // 3. 逐段按位图实际像素 1:1 绘制（**不要**再按 cropWidth 拉伸）
+        let currentY = 0;
+        for (const bmp of bitmaps) {
+          ctx.drawImage(
+            bmp,
+            0,
+            0,
+            bmp.width,
+            bmp.height,
+            xOffset,
+            yOffset + currentY,
+            bmp.width,
+            bmp.height
+          );
+          currentY += bmp.height;
+        }
+
+        // 4. 绘制右上角 Logo（按 scaledFactor 缩放）
+        const logoSize = Math.round(35 * scaledFactor);
+        const logoMargin = Math.round(5 * scaledFactor);
+        const logoUrl = chrome.runtime.getURL("public/128.png");
+
+        fetch(logoUrl)
           .then((res) => res.blob())
           .then((blob) => createImageBitmap(blob))
-          .then(async (imageBitmap) => {
-            const devicePixelRatio = request.elementInfo.devicePixelRatio || 1;
-            const cropX =
-              (request.elementInfo.x - request.elementInfo.scrollX) *
-              devicePixelRatio;
-            const cropY =
-              (request.elementInfo.y - request.elementInfo.scrollY) *
-              devicePixelRatio;
-            const cropWidth = request.elementInfo.width * devicePixelRatio;
-            const cropHeight = request.elementInfo.height * devicePixelRatio;
-
-            // 阴影扩展大小
-            const shadowBlur = 16 * devicePixelRatio;
-            const shadowOffset = 8 * devicePixelRatio;
-
-            const canvas = new OffscreenCanvas(
-              cropWidth + shadowBlur * 2,
-              cropHeight + shadowBlur * 2
-            );
-            const ctx = canvas.getContext("2d");
-
-            const xOffset = shadowBlur;
-            const yOffset = shadowBlur;
-
-            // 圆角半径
-            const radius = 20 * devicePixelRatio;
-
-            // 1. 绘制半透明阴影边框
-            ctx.save();
-            ctx.fillStyle = "white";
-            ctx.shadowColor = "rgba(0, 0, 0, 0.25)"; // 阴影颜色
-            ctx.shadowBlur = shadowBlur;
-            ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = shadowOffset;
-
-            ctx.beginPath();
-            ctx.moveTo(xOffset + radius, yOffset);
-            ctx.lineTo(xOffset + cropWidth - radius, yOffset);
-            ctx.quadraticCurveTo(
-              xOffset + cropWidth,
-              yOffset,
-              xOffset + cropWidth,
-              yOffset + radius
-            );
-            ctx.lineTo(xOffset + cropWidth, yOffset + cropHeight - radius);
-            ctx.quadraticCurveTo(
-              xOffset + cropWidth,
-              yOffset + cropHeight,
-              xOffset + cropWidth - radius,
-              yOffset + cropHeight
-            );
-            ctx.lineTo(xOffset + radius, yOffset + cropHeight);
-            ctx.quadraticCurveTo(
-              xOffset,
-              yOffset + cropHeight,
-              xOffset,
-              yOffset + cropHeight - radius
-            );
-            ctx.lineTo(xOffset, yOffset + radius);
-            ctx.quadraticCurveTo(xOffset, yOffset, xOffset + radius, yOffset);
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-
-            // 2. 裁剪路径（圆角矩形）
-            ctx.save();
-            ctx.beginPath();
-            ctx.moveTo(xOffset + radius, yOffset);
-            ctx.lineTo(xOffset + cropWidth - radius, yOffset);
-            ctx.quadraticCurveTo(
-              xOffset + cropWidth,
-              yOffset,
-              xOffset + cropWidth,
-              yOffset + radius
-            );
-            ctx.lineTo(xOffset + cropWidth, yOffset + cropHeight - radius);
-            ctx.quadraticCurveTo(
-              xOffset + cropWidth,
-              yOffset + cropHeight,
-              xOffset + cropWidth - radius,
-              yOffset + cropHeight
-            );
-            ctx.lineTo(xOffset + radius, yOffset + cropHeight);
-            ctx.quadraticCurveTo(
-              xOffset,
-              yOffset + cropHeight,
-              xOffset,
-              yOffset + cropHeight - radius
-            );
-            ctx.lineTo(xOffset, yOffset + radius);
-            ctx.quadraticCurveTo(xOffset, yOffset, xOffset + radius, yOffset);
-            ctx.closePath();
-            ctx.clip();
-
-            // 3. 绘制截图
+          .then((logoBitmap) => {
             ctx.drawImage(
-              imageBitmap,
-              cropX,
-              cropY,
-              cropWidth,
-              cropHeight,
-              xOffset,
-              yOffset,
-              cropWidth,
-              cropHeight
+              logoBitmap,
+              xOffset + cropWidthPx - logoSize - logoMargin,
+              yOffset + logoMargin,
+              logoSize,
+              logoSize
+            );
+          })
+          .then(async () => {
+            ctx.restore(); // 裁剪结束
+
+            // 5. 导出并下载
+            const mergedBlob = await canvas.convertToBlob({
+              type: "image/png",
+              quality: 1,
+            });
+
+            // 保存 Blob 到 IndexedDB
+            await saveScreenshotToDB(
+              mergedBlob,
+              handle,
+              userId,
+              filename,
+              tweetlink
             );
 
-            // 4. 绘制右上角 X logo
-            const logoSize = 40 * devicePixelRatio;
-            const logoMargin = 10 * devicePixelRatio;
-            const logoUrl = chrome.runtime.getURL("public/128.png");
-
-            try {
-              const res = await fetch(logoUrl);
-              const blob = await res.blob();
-              const logoBitmap = await createImageBitmap(blob);
-              ctx.drawImage(
-                logoBitmap,
-                xOffset + cropWidth - logoSize - logoMargin,
-                yOffset + logoMargin,
-                logoSize,
-                logoSize
-              );
-              ctx.restore();
-              return await canvas.convertToBlob({
-                type: "image/png",
-                quality: 1.0,
-              });
-            } catch (err) {
-              console.warn(
-                "Failed to load X logo, proceeding without it:",
-                err
-              );
-              ctx.restore();
-              return await canvas.convertToBlob({
-                type: "image/png",
-                quality: 1.0,
-              });
-            }
-          })
-          .then(async (blob) => {
-            // 保存 Blob 到 IndexedDB
-            await saveScreenshotToDB(blob, request.handle, request.userId, request.fileName);
-            console.log("截图已保存到 IndexedDB");
-
-            const reader = new FileReader();
-            reader.onload = async () => {
-              try {
-                if (request.choice) {
-                  uploadToWebDAV(blob, request.filename, request.handle)
+            if (save2Files) {
+              const reader = new FileReader();
+              reader.onload = () => {
+                if (choice) {
+                  uploadToWebDAV(mergedBlob, filename, handle)
                     .then((res) => {
                       if (res.ok) {
                         console.log("图片上传到 WebDAV 成功！");
-                        sendResponse({ success: true });
+                        sendResponse({
+                          success: true,
+                          text: "上传到 WebDAV 成功！",
+                        });
                       } else {
                         console.error("上传失败", res.statusText);
                         sendResponse({ success: false, error: res.statusText });
@@ -639,7 +781,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                   chrome.downloads.download(
                     {
                       url: reader.result,
-                      filename: `XMark/Screenshot/${request.handle}/${request.filename}`,
+                      filename: `XMark/Screenshot/${handle}/${filename}`,
                       saveAs: false,
                     },
                     (downloadId) => {
@@ -653,45 +795,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                           error: chrome.runtime.lastError.message,
                         });
                       } else {
-                        sendResponse({ success: true, downloadId });
+                        sendResponse({
+                          success: true,
+                          text: "成功保存到本地！",
+                        });
                       }
                     }
                   );
                 }
-
-                // 截图时间线
-                const result = await chrome.storage.local.get(
-                  "ScreenshotTimeline"
-                );
-                const timeline = result.ScreenshotTimeline || [];
-
-                timeline.push({
-                  userId: request.userId,
-                  path: `XMark/Screenshot/${request.handle}/${request.filename}`,
-                  date: new Date().toISOString(),
-                });
-
-                await chrome.storage.local.set({
-                  ScreenshotTimeline: timeline,
-                });
-              } catch (err) {
-                console.error("保存 ScreenshotTimeline 失败:", err);
-                sendResponse({ success: false, error: err.message });
-              }
-            };
-            reader.readAsDataURL(blob);
-          })
-          .catch((error) => {
-            console.error("Error processing screenshot:", error);
-            sendResponse({
-              success: false,
-              error: "Failed to process screenshot: " + error.message,
-            });
+              };
+              reader.readAsDataURL(mergedBlob);
+            }
           });
-      }
-    );
 
-    return true;
+        return canvas;
+      })
+      .catch((err) => {
+        console.error("mergeShot error:", err);
+        sendResponse({ success: false, error: err?.message || String(err) });
+      });
+
+    return true; // 异步响应
   }
 });
 
