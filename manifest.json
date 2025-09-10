@@ -10,8 +10,7 @@
       "matches": ["https://twitter.com/*", "https://x.com/*"],
       "js": ["content.js"],
       "css": ["styles/content.css"],
-      "run_at": "document_end",
-      "type": "module"
+      "run_at": "document_end"
     }
   ],
   "background": {
