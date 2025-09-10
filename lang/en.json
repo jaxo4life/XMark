@@ -198,6 +198,7 @@
   },
   "allTimeline": "Time Flow",
   "timelineStats": "Data",
+  "backTop": "Back to Top",
   "timelineRank": "Ranks",
   "inputNotice": "Support fuzzy search: : elon/elo/ELO -> elonmusk, 123 -> 91239...",
   "clearSearch": "Clear",

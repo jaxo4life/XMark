@@ -198,6 +198,7 @@
   },
   "allTimeline": "时间流",
   "timelineStats": "数据",
+  "backTop": "返回顶部",
   "screenshotCount": "张截图",
   "inputNotice": "支持模糊搜索: elon/elo/ELO -> elonmusk, 123 -> 91239...",
   "clearSearch": "清除",
