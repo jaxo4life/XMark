@@ -790,7 +790,7 @@ class TwitterNotes {
     }
   }
 
-  addTweetNoteElements(
+  async addTweetNoteElements(
     tweetContainer,
     userId,
     username,
@@ -828,6 +828,12 @@ class TwitterNotes {
     detailButton.title = "查看详情";
     detailButton.style.display = "none";
 
+    // 创建详情按钮
+    const sreenshotsButton = document.createElement("button");
+    sreenshotsButton.className = "view-screenshots-button";
+    sreenshotsButton.innerHTML = "📸";
+    sreenshotsButton.style.display = "none";
+
     // 获取备注数据
     const currentNote = this.getUserNote(username, userId);
 
@@ -863,6 +869,23 @@ class TwitterNotes {
       noteButton.dataset.titleKey = "addNote";
     }
 
+    // 获取截图数据
+    let finalId = "";
+    if (userId) {
+      finalId = userId;
+    } else {
+      finalId = await this.fetchUserIdinDB(username);
+    }
+
+    if (finalId) {
+      const count = await this.fetchUserScreenshotsNum(finalId);
+
+      if (count) {
+        sreenshotsButton.style.display = "inline";
+        sreenshotsButton.title = `${count} ${langData.screenshotCount}`;
+      }
+    }
+
     // 绑定事件
     noteButton.addEventListener("click", async (e) => {
       e.preventDefault();
@@ -895,14 +918,21 @@ class TwitterNotes {
       this.showNoteDetail(userId, username);
     });
 
+    sreenshotsButton.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      chrome.runtime.sendMessage({ action: "openTimelineWithUserId", finalId });
+    });
+
     // 按顺序添加：备注显示 -> 编辑按钮 -> 详情按钮
     noteContainer.appendChild(noteDisplay);
     noteContainer.appendChild(noteButton);
     noteContainer.appendChild(detailButton);
+    noteContainer.appendChild(sreenshotsButton);
     userNameContainer.appendChild(noteContainer);
   }
 
-  // 处理关注者/粉丝页面
+  /* ==========================处理关注者/粉丝页面========================== */
   processFollowingFollowersPage() {
     // 处理已存在的用户卡片
     this.processUserCards();
@@ -945,8 +975,8 @@ class TwitterNotes {
     });
   }
 
-  /* ==========================为用户卡片添加备注元素========================== */
-  addUserCardNoteElements(userCell, userNameContainer, username) {
+  // 在关注者/粉丝页面为用户卡片添加备注元素
+  async addUserCardNoteElements(userCell, userNameContainer, username) {
     // 检查是否已经添加过
     if (userCell.querySelector(".twitter-notes-inline")) return;
 
@@ -969,6 +999,12 @@ class TwitterNotes {
     detailButton.innerHTML = "ℹ️";
     detailButton.title = "查看详情";
     detailButton.style.display = "none";
+
+    // 创建详情按钮
+    const sreenshotsButton = document.createElement("button");
+    sreenshotsButton.className = "view-screenshots-button";
+    sreenshotsButton.innerHTML = "📸";
+    sreenshotsButton.style.display = "none";
 
     // 获取备注数据
     const currentNote = this.getUserNote(username);
@@ -1004,6 +1040,18 @@ class TwitterNotes {
       noteButton.dataset.titleKey = "addNote";
     }
 
+    // 获取截图数据
+    const finalId = await this.fetchUserIdinDB(username);
+
+    if (finalId) {
+      const count = await this.fetchUserScreenshotsNum(finalId);
+
+      if (count) {
+        sreenshotsButton.style.display = "inline";
+        sreenshotsButton.title = `${count} ${langData.screenshotCount}`;
+      }
+    }
+
     // 绑定事件
     noteButton.addEventListener("click", async (e) => {
       e.preventDefault();
@@ -1037,11 +1085,17 @@ class TwitterNotes {
       this.showNoteDetail(currentNote.userId, username);
     });
 
+    sreenshotsButton.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      chrome.runtime.sendMessage({ action: "openTimelineWithUserId", finalId });
+    });
+
     // 按顺序添加：备注显示 -> 编辑按钮 -> 详情按钮
     noteContainer.appendChild(noteDisplay);
     noteContainer.appendChild(noteButton);
     noteContainer.appendChild(detailButton);
-
+    noteContainer.appendChild(sreenshotsButton);
     userNameContainer.appendChild(noteContainer);
   }
 
@@ -2055,6 +2109,38 @@ class TwitterNotes {
     setTimeout(() => {
       notification.style.transform = "translate(-50%, -50%) scale(0)";
     }, 1500);
+  }
+
+  /* ==========================截图数据========================== */
+  fetchUserScreenshotsNum(userId) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(
+        { action: "getScreenshotCountByUserId", userId },
+        (response) => {
+          if (response.success) {
+            resolve(response.data);
+          } else {
+            reject(response.error);
+          }
+        }
+      );
+    });
+  }
+
+  fetchUserIdinDB(username) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(
+        { action: "getUserIdinDB", username },
+        (response) => {
+          if (response.success) {
+            resolve(response.data);
+          } else {
+            console.log("错误");
+            reject(response.error);
+          }
+        }
+      );
+    });
   }
 }
 

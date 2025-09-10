@@ -1,7 +1,12 @@
 // Twitter Notes Background Script
 
 import { cryptoUtils } from "./utils/crypto-utils.js";
-import { saveScreenshotToDB } from "./utils/db.js";
+import {
+  saveScreenshotToDB,
+  getScreenshotsByUserId,
+  getScreenshotCountByUserId,
+  getUserIdinDB,
+} from "./utils/db.js";
 
 // 扩展启动时，恢复自动备份
 chrome.runtime.onStartup.addListener(async () => {
@@ -816,6 +821,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       });
 
     return true; // 异步响应
+  }
+
+  if (request.action === "getScreenshotCountByUserId") {
+    getScreenshotCountByUserId(request.userId)
+      .then((res) => {
+        sendResponse({ success: true, data: res });
+      })
+      .catch((err) => {
+        sendResponse({ success: false, error: err.message });
+      });
+    return true; // 表示异步 sendResponse
+  }
+
+  if (request.action === "getUserIdinDB") {
+    getUserIdinDB(request.username)
+      .then((res) => {
+        sendResponse({ success: true, data: res });
+      })
+      .catch((err) => {
+        sendResponse({ success: false, error: err.message });
+      });
+    return true; // 表示异步 sendResponse
+  }
+
+  if (request.action === "openTimelineWithUserId") {
+    chrome.storage.local.set({ filterUserId: request.finalId }, () => {
+      chrome.tabs.create({ url: 'timeline.html' });
+    });
   }
 });
 

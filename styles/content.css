@@ -45,7 +45,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 12px;
   padding: 2px 3px;
   border-radius: 3px;
   transition: background-color 0.2s;
@@ -53,6 +53,22 @@
 }
 
 .twitter-notes-detail-button:hover {
+  background-color: rgba(29, 155, 240, 0.1);
+  opacity: 1;
+}
+
+.view-screenshots-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 3px 2px 3px;
+  border-radius: 3px;
+  transition: background-color 0.2s;
+  opacity: 0.6;
+}
+
+.view-screenshots-button:hover {
   background-color: rgba(29, 155, 240, 0.1);
   opacity: 1;
 }

@@ -3,7 +3,7 @@ import {
   getAllUserIds,
   getUserNote,
   deleteScreenshotById,
-  getScreenshotsByUserId,
+  deleteAllScreenshotsById,
   exportToJsonFile,
   importFromJsonFile,
   clearscreenshots,
@@ -793,6 +793,26 @@ document.getElementById("columnCount").addEventListener("change", () => {
   appendNextPage(); // 重新渲染
 });
 
+// 清空userId所有截图
+document
+  .getElementById("clearallbyuserId")
+  .addEventListener("click", async () => {
+    const confirmed = confirm("⚠️ 确认要清空所有截图吗？此操作不可恢复！");
+    if (!confirmed) return; // 用户取消
+
+    try {
+      await deleteAllScreenshotsById(filterUserId, true);
+
+      // ✅ 清空成功提示
+      showToast(`🗑️ ${getLang("clearSuccess")}`, "success", () =>
+        location.reload()
+      );
+    } catch (err) {
+      console.error("清空失败：", err);
+      showToast(`❌ ${getLang("clearFailed")}`, "failed");
+    }
+  });
+
 // ---------- export & import ----------
 // 导出截图备份
 document.getElementById("exportBtn").addEventListener("click", async () => {
@@ -827,7 +847,9 @@ document
       await importFromJsonFile(file);
 
       // ✅ 导入成功后显示 toast
-      showToast(`✅ ${getLang("timelineimportSuccess")}`, "success", () => location.reload());
+      showToast(`✅ ${getLang("timelineimportSuccess")}`, "success", () =>
+        location.reload()
+      );
     } catch (err) {
       console.error("导入失败：", err);
       showToast(`❌ ${getLang("timelineimportFailed")}`, "failed");
@@ -954,7 +976,9 @@ function createManualPanel() {
 
       panel.remove();
       // 可选：刷新 timeline
-      showToast(`✅ ${getLang("uploadSuccess")}`, "success", () => location.reload());
+      showToast(`✅ ${getLang("uploadSuccess")}`, "success", () =>
+        location.reload()
+      );
     } catch (err) {
       console.error("上传失败", err);
       showToast(`❌ ${getLang("uploadFailed")}`, "failed");
@@ -971,7 +995,9 @@ document.getElementById("clearBtn").addEventListener("click", async () => {
     await clearscreenshots();
 
     // ✅ 清空成功提示
-    showToast(`🗑️ ${getLang("clearSuccess")}`, "success", () => location.reload());
+    showToast(`🗑️ ${getLang("clearSuccess")}`, "success", () =>
+      location.reload()
+    );
   } catch (err) {
     console.error("清空失败：", err);
     showToast(`❌ ${getLang("clearFailed")}`, "failed");
@@ -1076,6 +1102,12 @@ function showToast(message, status = "success", callback) {
 // ---------- Init (lazy: only timeline first) ----------
 updateTexts();
 setActiveTab("timeline");
+const requestdata = await getStorage("filterUserId");
+if (requestdata.filterUserId) {
+  filterUserId = requestdata.filterUserId;
+  showFilterBar();
+  chrome.storage.local.remove("filterUserId");
+}
 await rebuildTimeline();
 
 // Cleanup
@@ -1090,3 +1122,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
     updateTexts();
   }
 });
+
+function getStorage(key) {
+  return new Promise((resolve) => {
+    chrome.storage.local.get(key, (data) => resolve(data));
+  });
+}

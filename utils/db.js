@@ -1,7 +1,7 @@
 // db.js
 export function openDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open("ScreenshotDB", 3);
+    const request = indexedDB.open("ScreenshotDB", 4);
     request.onupgradeneeded = (e) => {
       const db = e.target.result;
       let store;
@@ -275,7 +275,7 @@ export function importFromJsonFile(file) {
   });
 }
 
-// 根据 id 删除单条截图记录
+// 根据 userId 删除单条截图记录
 export async function deleteScreenshotById(id) {
   const db = await openDB();
   const tx = db.transaction("screenshots", "readwrite");
@@ -290,7 +290,7 @@ export async function deleteScreenshotById(id) {
 }
 
 // 根据 userId 删除 IndexedDB 里的截图记录
-export async function deleteScreenshotsByUserId(userId, deleteAll = false) {
+export async function deleteAllScreenshotsById(userId, deleteAll = false) {
   const db = await openDB();
   const tx = db.transaction("screenshots", "readwrite");
   const store = tx.objectStore("screenshots");
@@ -348,6 +348,12 @@ export async function getScreenshotsByUserId(userId) {
   });
 }
 
+// 查询某个 userId 的截图数量
+export async function getScreenshotCountByUserId(userId) {
+  const screenshots = await getScreenshotsByUserId(userId);
+  return screenshots.length;
+}
+
 // 高效获取所有 userId
 export async function getAllUserIds() {
   const db = await openDB();
@@ -397,6 +403,37 @@ export async function getDailyActivity() {
   });
 
   return counts;
+}
+
+// 只从db数据库查找userId
+export async function getUserIdinDB(handle) {
+  const db = await openDB();
+  const tx = db.transaction("screenshots", "readonly");
+  const store = tx.objectStore("screenshots");
+  const index = store.index("userId"); 
+  let userId = null;
+
+  // 遍历所有记录，找到匹配 handle 的 userId
+  await new Promise((resolve) => {
+    const req = store.openCursor();
+    req.onsuccess = (e) => {
+      const cursor = e.target.result;
+      if (cursor) {
+        const record = cursor.value;
+        if (record.handle === handle) {
+          userId = record.userId;
+          resolve(); // 找到就结束
+          return;
+        }
+        cursor.continue();
+      } else {
+        resolve(); // 遍历完也没找到
+      }
+    };
+    req.onerror = () => resolve();
+  });
+
+  if (userId) return userId;
 }
 
 // 根据 handle 获取 userId

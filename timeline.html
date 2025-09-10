@@ -94,19 +94,27 @@
     <main class="max-w-8xl mx-auto px-4 pt-6 pb-24">
       <!-- Filter summary / breadcrumb -->
       <div id="filterBar" class="max-w-sm hidden mb-4 ml-5">
-        <div class="glass flex items-center gap-2 px-3 py-2 rounded-xl text-sm">
+        <div class="glass flex items-center w-full gap-2 px-3 py-2 rounded-xl text-sm">
           <span class="text-slate-500 font-bold" data-key="filtered"
             >已筛选：</span
           >
           <span id="filterText" class="font-medium text-yellow-700"></span>
           <button
             id="clearUser"
-            class="rounded-xl px-4 py-1 bg-gradient-to-r from-blue-400 to-indigo-500 hover:from-blue-500 hover:to-indigo-600 text-white font-semibold shadow-md transition-all"
+            class="rounded-xl px-4 py-1 ml-6 bg-gradient-to-r from-blue-400 to-indigo-500 hover:from-blue-500 hover:to-indigo-600 text-white font-semibold shadow-md transition-all"
             data-key="clearSearch"
           >
             清除
           </button>
         </div>
+
+        <button
+          id="clearallbyuserId"
+          class="rounded-xl px-4 py-1 mt-4 ml-24 bg-gradient-to-r from-red-400 to-red-600 hover:from-red-600 hover:to-red-800 text-white font-semibold shadow-md transition-all"
+          data-key="clearAllbyuserId"
+        >
+          清空当前userId所有截图
+        </button>
       </div>
 
       <section id="tab-contents" class="space-y-6">
@@ -176,7 +184,12 @@
           <div class="max-w-7xl mx-auto space-y-10">
             <!-- 功能按钮区 -->
             <div class="glass p-6 rounded-2xl shadow-md">
-              <h2 class="text-xl font-bold mb-4 text-slate-700" data-key="dataManagement">数据管理</h2>
+              <h2
+                class="text-xl font-bold mb-4 text-slate-700"
+                data-key="dataManagement"
+              >
+                数据管理
+              </h2>
               <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <button
                   id="exportBtn"
@@ -224,12 +237,20 @@
             <!-- 图表区 -->
             <div class="grid lg:grid-cols-2 gap-8">
               <div class="glass p-6 rounded-2xl shadow-md">
-                <h2 class="text-xl font-bold mb-4 text-slate-700" data-key="dailyChart">每日趋势</h2>
+                <h2
+                  class="text-xl font-bold mb-4 text-slate-700"
+                  data-key="dailyChart"
+                >
+                  每日趋势
+                </h2>
                 <canvas id="dailyChart" height="260" class="w-full"></canvas>
               </div>
 
               <div class="glass p-6 rounded-2xl shadow-md">
-                <h2 class="text-xl font-bold mb-4 text-slate-700" data-key="heatmap">
+                <h2
+                  class="text-xl font-bold mb-4 text-slate-700"
+                  data-key="heatmap"
+                >
                   活跃度热力图
                 </h2>
                 <!-- 热力图容器 -->
