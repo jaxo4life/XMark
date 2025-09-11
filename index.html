@@ -126,7 +126,7 @@
         .then((manifest) => {
           document.getElementById(
             "version"
-          ).textContent = `v:${manifest.version}`;
+          ).textContent = `v${manifest.version}`;
         })
         .catch(() => {
           document.getElementById("version").textContent = "版本信息获取失败";
