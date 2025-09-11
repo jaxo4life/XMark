@@ -106,11 +106,11 @@
       <h2 id="readme-title" class="text-2xl font-semibold mb-6 text-center">
         📖 项目文档
       </h2>
-      <article id="readme" class="max-w-none">
-        <div
-          id="readme-content"
-          class="prose prose-slate max-w-none prose-pre:bg-gray-800 prose-pre:text-white prose-code:text-pink-600 prose-table:border prose-table:border-gray-300"
-        ></div>
+      <article
+        id="readme"
+        class="prose prose-slate max-w-none prose-pre:bg-gray-800 prose-pre:text-white prose-code:text-pink-600 prose-table:border prose-table:border-gray-300"
+      >
+        <div id="readme-content"></div>
       </article>
     </section>
 
@@ -207,15 +207,33 @@
         document.getElementById("footer-text").innerHTML = map.footerText;
         langToggle.textContent = map.button;
 
-        // 加载对应语言 README
+        // 加载 README
         fetch(map.readmeFile)
           .then((res) => res.text())
           .then((md) => {
-            // 只从 Changelog 开始显示
+            // 截取从 Changelog 开始
             const startIndex = md.indexOf("## 🕑 Changelog");
-            const content = startIndex !== -1 ? md.slice(startIndex) : md;
-            document.getElementById("readme-content").innerHTML =
-              marked.parse(content);
+            let content = startIndex !== -1 ? md.slice(startIndex) : md;
+            // 转成 HTML
+            const html = marked.parse(content);
+            const container = document.createElement("div");
+            container.innerHTML = html;
+
+            // 按语言隐藏不相关 <details>
+            container.querySelectorAll("details").forEach((d) => {
+              const summaryText = d.querySelector("summary")?.textContent || "";
+              if (lang === "zh" && summaryText.includes("🇨🇳")) {
+                d.style.display = "block";
+              } else if (lang === "en" && summaryText.includes("🇬🇧")) {
+                d.style.display = "block";
+              } else if (!summaryText.includes("Changelog")) {
+                d.style.display = "none";
+              }
+            });
+
+            const readmeContent = document.getElementById("readme-content");
+            readmeContent.innerHTML = "";
+            readmeContent.appendChild(container);
           })
           .catch(() => {
             document.getElementById("readme-content").innerHTML =
