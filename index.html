@@ -209,7 +209,8 @@
           .then((res) => res.text())
           .then((md) => {
             const startIndex = md.indexOf("## 🕑 Changelog");
-            const endIndex = md.indexOf("---", startIndex + 1); // 截取到下一个分隔线
+            // 截取到下一个 ## 开头的标题，这样不会截掉 Changelog 内部的 details
+            const endIndex = md.indexOf("\n## ", startIndex + 1);
             const changelogMd =
               startIndex !== -1
                 ? md.slice(startIndex, endIndex !== -1 ? endIndex : undefined)
