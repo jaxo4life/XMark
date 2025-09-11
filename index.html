@@ -106,7 +106,9 @@
       <h2 id="readme-title" class="text-2xl font-semibold mb-6 text-center">
         📖 项目文档
       </h2>
-      <article id="readme" class="prose prose-slate max-w-none"></article>
+      <article id="readme" class="max-w-none">
+        <div id="readme-content" class="prose prose-slate"></div>
+      </article>
     </section>
 
     <!-- 页脚 -->
@@ -206,7 +208,8 @@
         fetch("README.md")
           .then((res) => res.text())
           .then((md) => {
-            document.getElementById("readme").innerHTML = marked.parse(md);
+            document.getElementById("readme-content").innerHTML =
+              marked.parse(md);
           });
       }
 
