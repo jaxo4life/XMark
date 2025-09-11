@@ -7,24 +7,172 @@
     <link rel="icon" type="image/x-icon" href="public/favicon.ico" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+      /* ===== 背景层：星空 & 粒子 ===== */
+      body {
+        position: relative;
+        overflow-x: hidden;
+      }
+      #particles {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+      }
+
+      /* ===== 渐变文字 ===== */
+      .gradient-text {
+        background: linear-gradient(90deg, #3b82f6, #6366f1, #ec4899);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: shine 6s linear infinite;
+        background-size: 200% auto;
+      }
+      @keyframes shine {
+        0% {
+          background-position: 0% center;
+        }
+        100% {
+          background-position: 200% center;
+        }
+      }
+
+      /* ===== 打字机效果 ===== */
+      .typing {
+        border-right: 2px solid #666;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+
+      /* ===== Logo 动效 ===== */
+      .logo-animate {
+        opacity: 0;
+        transform: scale(0.8);
+        animation: logoFadeIn 1.5s ease forwards;
+      }
+      @keyframes logoFadeIn {
+        0% {
+          opacity: 0;
+          transform: scale(0.8);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+
+      /* ===== 滚动 Reveal ===== */
+      .reveal {
+        opacity: 0;
+        transform: translateY(40px);
+        transition: all 0.8s ease;
+      }
+      .reveal.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      /* ===== 卡片玻璃化 & 渐变边框 ===== */
+      .glass-card {
+        backdrop-filter: blur(10px);
+        border: 2px solid transparent;
+        background: rgba(255, 255, 255, 0.7);
+        border-image: linear-gradient(45deg, #3b82f6, #ec4899) 1;
+      }
+
+      /* ===== 发光按钮 + 波纹点击 ===== */
+      .glow-btn {
+        position: relative;
+        overflow: hidden;
+      }
+      .glow-btn::before {
+        content: "";
+        position: absolute;
+        inset: -2px;
+        background: linear-gradient(90deg, #3b82f6, #6366f1, #ec4899, #3b82f6);
+        border-radius: 1.25rem;
+        z-index: -1;
+        background-size: 300% 300%;
+        animation: borderMove 6s linear infinite;
+      }
+      @keyframes borderMove {
+        0% {
+          background-position: 0% 50%;
+        }
+        100% {
+          background-position: 200% 50%;
+        }
+      }
+      .glow-btn:active::after {
+        content: "";
+        position: absolute;
+        width: 200%;
+        height: 200%;
+        top: 50%;
+        left: 50%;
+        background: rgba(255, 255, 255, 0.4);
+        border-radius: 50%;
+        transform: translate(-50%, -50%) scale(0);
+        animation: ripple 0.6s ease;
+        pointer-events: none;
+      }
+      @keyframes ripple {
+        to {
+          transform: translate(-50%, -50%) scale(1);
+          opacity: 0;
+        }
+      }
+
+      /* ===== 签名动画 ===== */
+      .signature {
+        font-family: "Pacifico", cursive;
+        font-size: 1.2rem;
+        display: inline-block;
+        white-space: nowrap;
+        overflow: hidden;
+        border-right: 2px solid transparent;
+        animation: typingSig 3s steps(20, end), blink 0.75s step-end infinite;
+      }
+      @keyframes typingSig {
+        from {
+          width: 0;
+        }
+        to {
+          width: 100%;
+        }
+      }
+      @keyframes blink {
+        50% {
+          border-color: transparent;
+        }
+        100% {
+          border-color: transparent;
+        }
+      }
+    </style>
   </head>
   <body
-    class="bg-gradient-to-b from-slate-50 to-slate-100 text-slate-800 font-sans"
+    class="bg-gradient-to-b from-slate-50 to-slate-100 text-slate-800 font-sans transition-colors duration-500"
   >
+    <!-- 背景粒子 -->
+    <canvas id="particles"></canvas>
+
     <!-- 顶部 -->
     <header class="text-center py-10 relative">
-      <img src="public/logo.png" alt="XMark Logo" class="w-48 mx-auto mb-6" />
-      <p id="subtitle" class="text-lg text-slate-600">
-        简洁高效的推特备注与截图管理工具
-      </p>
+      <img
+        src="public/logo.png"
+        alt="XMark Logo"
+        class="w-48 mx-auto mb-6 logo-animate"
+      />
+      <p id="subtitle" class="text-lg text-slate-600 typing"></p>
       <a
         id="github-link"
         href="https://github.com/jaxo4life/XMark"
         target="_blank"
-        class="mt-6 inline-block bg-blue-600 text-white px-6 py-2 rounded-2xl shadow hover:scale-105 transition"
+        class="mt-6 inline-block bg-blue-600 text-white px-6 py-2 rounded-2xl shadow hover:scale-105 transition glow-btn"
       >
         在 GitHub 上查看
       </a>
+
       <!-- 语言切换按钮 -->
       <button
         id="lang-toggle"
@@ -36,51 +184,55 @@
 
     <!-- 功能介绍 -->
     <section class="max-w-4xl mx-auto px-6 py-12">
-      <h2 id="features-title" class="text-2xl font-semibold mb-6 text-center">
+      <h2
+        id="features-title"
+        class="text-2xl font-semibold mb-6 text-center gradient-text"
+      >
         ✨ 功能特色
       </h2>
       <div class="grid md:grid-cols-2 gap-8">
-        <div class="bg-white rounded-2xl shadow p-6 hover:shadow-lg transition">
+        <div
+          class="glass-card rounded-2xl shadow p-6 hover:shadow-lg transition card-hover reveal"
+        >
           <h3 id="feature1-title" class="text-xl font-bold mb-3">
             📝 自定义备注
           </h3>
-          <p id="feature1-desc" class="text-slate-600">
-            XMark
-            的核心功能。你可以为任意推特用户添加备注，例如「潜在合作对象」「重点关注」或「存疑账号」。
-            备注会在界面中醒目展示，方便快速识别和管理，形成你个人的推特知识库。
-          </p>
+          <p id="feature1-desc" class="text-slate-600"></p>
         </div>
-        <div class="bg-white rounded-2xl shadow p-6 hover:shadow-lg transition">
+        <div
+          class="glass-card rounded-2xl shadow p-6 hover:shadow-lg transition card-hover reveal"
+        >
           <h3 id="feature2-title" class="text-xl font-bold mb-3">
             📸 推文截图
           </h3>
-          <p id="feature2-desc" class="text-slate-600">
-            一键截取推文内容，高分辨率保存原始信息，适合存档、分析与分享。支持分辨率调节，保证细节清晰。
-          </p>
+          <p id="feature2-desc" class="text-slate-600"></p>
         </div>
-        <div class="bg-white rounded-2xl shadow p-6 hover:shadow-lg transition">
+        <div
+          class="glass-card rounded-2xl shadow p-6 hover:shadow-lg transition card-hover reveal"
+        >
           <h3 id="feature3-title" class="text-xl font-bold mb-3">
             📊 数据可视化
           </h3>
-          <p id="feature3-desc" class="text-slate-600">
-            内置趋势图与热力图，直观展示用户活跃时间与截图分布，让你轻松洞察互动模式。
-          </p>
+          <p id="feature3-desc" class="text-slate-600"></p>
         </div>
-        <div class="bg-white rounded-2xl shadow p-6 hover:shadow-lg transition">
+        <div
+          class="glass-card rounded-2xl shadow p-6 hover:shadow-lg transition card-hover reveal"
+        >
           <h3 id="feature4-title" class="text-xl font-bold mb-3">
             🔍 智能筛选
           </h3>
-          <p id="feature4-desc" class="text-slate-600">
-            按用户、时间、关键词快速过滤截图，配合备注功能，帮你高效定位关键信息。
-          </p>
+          <p id="feature4-desc" class="text-slate-600"></p>
         </div>
       </div>
     </section>
 
     <!-- 版本信息 -->
-    <section class="bg-blue-50 py-12">
+    <section class="bg-blue-50 py-12 dark:bg-slate-800">
       <div class="max-w-3xl mx-auto text-center px-6">
-        <h2 id="version-title" class="text-2xl font-semibold mb-4">
+        <h2
+          id="version-title"
+          class="text-2xl font-semibold mb-4 gradient-text"
+        >
           📦 当前版本
         </h2>
         <p class="text-lg mb-4">
@@ -90,7 +242,7 @@
           id="release-link"
           href="https://github.com/jaxo4life/XMark/releases"
           target="_blank"
-          class="inline-block bg-blue-600 text-white px-6 py-2 rounded-2xl shadow hover:scale-105 transition"
+          class="inline-block bg-blue-600 text-white px-6 py-2 rounded-2xl shadow hover:scale-105 transition glow-btn"
         >
           查看更新日志
         </a>
@@ -99,39 +251,126 @@
 
     <!-- 页脚 -->
     <footer class="text-center text-slate-500 text-sm py-8 leading-relaxed">
-      <p>
-        By
-        <a
-          href="https://x.com/realjaxo"
-          target="_blank"
-          class="hover:text-blue-600 hover:scale-110 transition-transform inline-block"
-          >jaxo</a
-        >
+      <p class="flex justify-center items-center gap-2">
+        <span class="text-sm">By</span>
+        <span class="signature">jaxo</span>
       </p>
       <p>© 2025 XMark.</p>
-      <p id="footer-text">
-        项目开源于
-        <a
-          href="https://github.com/jaxo4life/XMark"
-          target="_blank"
-          class="underline hover:text-blue-600"
-          >GitHub</a
-        >
-      </p>
+      <p id="footer-text"></p>
     </footer>
 
+    <!-- ===== 脚本 ===== -->
     <script>
-      fetch("manifest.json")
-        .then((res) => res.json())
-        .then((manifest) => {
-          document.getElementById(
-            "version"
-          ).textContent = `v${manifest.version}`;
-        })
-        .catch(() => {
-          document.getElementById("version").textContent = "版本信息获取失败";
-        });
+      // ========== 打字机副标题 ==========
+function typeWriter(el, text, speed = 60) {
+  el.textContent = "";
+  let i = 0;
+  function typing() {
+    if (i < text.length) {
+      el.textContent = text.substring(0, i + 1);
+      i++;
+      setTimeout(typing, speed);
+    }
+  }
+  typing();
+}
 
+
+      // ========== 粒子背景 ==========
+      const canvas = document.getElementById("particles");
+      const ctx = canvas.getContext("2d");
+      let particlesArray;
+
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      window.addEventListener("resize", function () {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        init();
+      });
+
+      class Particle {
+        constructor(x, y, size, speedX, speedY) {
+          this.x = x;
+          this.y = y;
+          this.size = size;
+          this.speedX = speedX;
+          this.speedY = speedY;
+        }
+        update() {
+          this.x += this.speedX;
+          this.y += this.speedY;
+          if (this.x < 0 || this.x > canvas.width) this.speedX *= -1;
+          if (this.y < 0 || this.y > canvas.height) this.speedY *= -1;
+        }
+        draw() {
+          ctx.fillStyle = "rgba(99, 102, 241, 0.7)";
+          ctx.beginPath();
+          ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+
+      function init() {
+        particlesArray = [];
+        const numberOfParticles = 60;
+        for (let i = 0; i < numberOfParticles; i++) {
+          const size = Math.random() * 3 + 1;
+          const x = Math.random() * canvas.width;
+          const y = Math.random() * canvas.height;
+          const speedX = Math.random() * 1 - 0.5;
+          const speedY = Math.random() * 1 - 0.5;
+          particlesArray.push(new Particle(x, y, size, speedX, speedY));
+        }
+      }
+
+      function connect() {
+        for (let a = 0; a < particlesArray.length; a++) {
+          for (let b = a; b < particlesArray.length; b++) {
+            let dx = particlesArray[a].x - particlesArray[b].x;
+            let dy = particlesArray[a].y - particlesArray[b].y;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance < 120) {
+              ctx.strokeStyle = "rgba(99, 102, 241, 0.1)";
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.moveTo(particlesArray[a].x, particlesArray[a].y);
+              ctx.lineTo(particlesArray[b].x, particlesArray[b].y);
+              ctx.stroke();
+            }
+          }
+        }
+      }
+
+      function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (let i = 0; i < particlesArray.length; i++) {
+          particlesArray[i].update();
+          particlesArray[i].draw();
+        }
+        connect();
+        requestAnimationFrame(animate);
+      }
+      init();
+      animate();
+
+      // ========== 滚动 Reveal ==========
+      const revealElements = document.querySelectorAll(".reveal");
+      function handleScroll() {
+        const trigger = window.innerHeight * 0.85;
+        revealElements.forEach((el, index) => {
+          const rect = el.getBoundingClientRect().top;
+          if (rect < trigger) {
+            setTimeout(() => el.classList.add("show"), index * 150);
+          }
+        });
+      }
+      window.addEventListener("scroll", handleScroll);
+      handleScroll();
+
+      // ========== 语言切换 ==========
       const langToggle = document.getElementById("lang-toggle");
       let currentLang = "zh";
 
@@ -185,7 +424,7 @@
 
       function switchLang(lang) {
         const map = textMap[lang];
-        document.getElementById("subtitle").textContent = map.subtitle;
+        typeWriter(document.getElementById("subtitle"), map.subtitle);
         document.getElementById("github-link").textContent = map.githubLink;
         document.getElementById("features-title").textContent =
           map.featuresTitle;
@@ -207,13 +446,20 @@
         langToggle.textContent = map.button;
       }
 
-      // 初始化中文
-      switchLang("zh");
-
       langToggle.addEventListener("click", () => {
         currentLang = currentLang === "zh" ? "en" : "zh";
         switchLang(currentLang);
       });
+
+      // 默认中文 + 打字机
+      switchLang("zh");
+
+      // ========== 版本号读取 ==========
+      fetch("manifest.json")
+        .then((response) => response.json())
+        .then((data) => {
+          document.getElementById("version").textContent = "v" + data.version;
+        });
     </script>
   </body>
 </html>
