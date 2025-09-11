@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>XMark – Snap, Note, Dominate Twitter</title>
+    <link rel="icon" type="image/x-icon" href="public/favicon.ico" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  </head>
+  <body
+    class="bg-gradient-to-b from-slate-50 to-slate-100 text-slate-800 font-sans"
+  >
+    <!-- 顶部 -->
+    <header class="text-center py-10 relative">
+      <img src="public/logo.png" alt="XMark Logo" class="w-48 mx-auto mb-6" />
+      <p id="subtitle" class="text-lg text-slate-600">
+        简洁高效的推特备注与截图管理工具
+      </p>
+      <a
+        id="github-link"
+        href="https://github.com/jaxo4life/XMark"
+        target="_blank"
+        class="mt-6 inline-block bg-blue-600 text-white px-6 py-2 rounded-2xl shadow hover:scale-105 transition"
+      >
+        在 GitHub 上查看
+      </a>
+      <!-- 语言切换按钮 -->
+      <button
+        id="lang-toggle"
+        class="absolute top-4 right-6 bg-slate-200 px-3 py-1 rounded-xl text-sm hover:bg-slate-300 transition"
+      >
+        English
+      </button>
+    </header>
+
+    <!-- 功能介绍 -->
+    <section class="max-w-4xl mx-auto px-6 py-12">
+      <h2 id="features-title" class="text-2xl font-semibold mb-6 text-center">
+        ✨ 功能特色
+      </h2>
+      <div class="grid md:grid-cols-2 gap-8">
+        <div class="bg-white rounded-2xl shadow p-6 hover:shadow-lg transition">
+          <h3 id="feature1-title" class="text-xl font-bold mb-3">
+            📝 自定义备注
+          </h3>
+          <p id="feature1-desc" class="text-slate-600">
+            XMark
+            的核心功能。你可以为任意推特用户添加备注，例如「潜在合作对象」「重点关注」或「存疑账号」。
+            备注会在界面中醒目展示，方便快速识别和管理，形成你个人的推特知识库。
+          </p>
+        </div>
+        <div class="bg-white rounded-2xl shadow p-6 hover:shadow-lg transition">
+          <h3 id="feature2-title" class="text-xl font-bold mb-3">
+            📸 推文截图
+          </h3>
+          <p id="feature2-desc" class="text-slate-600">
+            一键截取推文内容，高分辨率保存原始信息，适合存档、分析与分享。支持分辨率调节，保证细节清晰。
+          </p>
+        </div>
+        <div class="bg-white rounded-2xl shadow p-6 hover:shadow-lg transition">
+          <h3 id="feature3-title" class="text-xl font-bold mb-3">
+            📊 数据可视化
+          </h3>
+          <p id="feature3-desc" class="text-slate-600">
+            内置趋势图与热力图，直观展示用户活跃时间与截图分布，让你轻松洞察互动模式。
+          </p>
+        </div>
+        <div class="bg-white rounded-2xl shadow p-6 hover:shadow-lg transition">
+          <h3 id="feature4-title" class="text-xl font-bold mb-3">
+            🔍 智能筛选
+          </h3>
+          <p id="feature4-desc" class="text-slate-600">
+            按用户、时间、关键词快速过滤截图，配合备注功能，帮你高效定位关键信息。
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 版本信息 -->
+    <section class="bg-blue-50 py-12">
+      <div class="max-w-3xl mx-auto text-center px-6">
+        <h2 id="version-title" class="text-2xl font-semibold mb-4">
+          📦 当前版本
+        </h2>
+        <p class="text-lg mb-4">
+          XMark <span class="font-bold text-blue-600">v5.2.1</span>
+        </p>
+        <a
+          id="release-link"
+          href="https://github.com/jaxo4life/XMark/releases"
+          target="_blank"
+          class="inline-block bg-blue-600 text-white px-6 py-2 rounded-2xl shadow hover:scale-105 transition"
+        >
+          查看更新日志
+        </a>
+      </div>
+    </section>
+
+    <!-- README 渲染区 -->
+    <section class="max-w-4xl mx-auto px-6 py-12">
+      <h2 id="readme-title" class="text-2xl font-semibold mb-6 text-center">
+        📖 项目文档
+      </h2>
+      <article id="readme" class="prose prose-slate max-w-none"></article>
+    </section>
+
+    <!-- 页脚 -->
+    <footer class="text-center text-slate-500 text-sm py-8">
+      <p id="footer-text">
+        © 2025 XMark. 项目开源于
+        <a
+          href="https://github.com/jaxo4life/XMark"
+          target="_blank"
+          class="underline hover:text-blue-600"
+          >GitHub</a
+        >
+      </p>
+    </footer>
+
+    <script>
+      const langToggle = document.getElementById("lang-toggle");
+      let currentLang = "zh";
+
+      const textMap = {
+        zh: {
+          subtitle: "简洁高效的推特备注与截图管理工具",
+          githubLink: "在 GitHub 上查看",
+          featuresTitle: "✨ 功能特色",
+          feature1Title: "📝 自定义备注",
+          feature1Desc:
+            "XMark 的核心功能。你可以为任意推特用户添加备注，例如「潜在合作对象」「重点关注」或「存疑账号」。备注会在界面中醒目展示，方便快速识别和管理，形成你个人的推特知识库。",
+          feature2Title: "📸 推文截图",
+          feature2Desc:
+            "一键截取推文内容，高分辨率保存原始信息，适合存档、分析与分享。支持分辨率调节，保证细节清晰。",
+          feature3Title: "📊 数据可视化",
+          feature3Desc:
+            "内置趋势图与热力图，直观展示用户活跃时间与截图分布，让你轻松洞察互动模式。",
+          feature4Title: "🔍 智能筛选",
+          feature4Desc:
+            "按用户、时间、关键词快速过滤截图，配合备注功能，帮你高效定位关键信息。",
+          versionTitle: "📦 当前版本",
+          releaseLink: "查看更新日志",
+          readmeTitle: "📖 项目文档",
+          footerText:
+            "© 2025 XMark. 项目开源于 <a href='https://github.com/jaxo4life/XMark' target='_blank' class='underline hover:text-blue-600'>GitHub</a>",
+          button: "English",
+          readmeFile: "README.md",
+        },
+        en: {
+          subtitle:
+            "A simple and efficient tool for Twitter notes & screenshot management",
+          githubLink: "View on GitHub",
+          featuresTitle: "✨ Features",
+          feature1Title: "📝 Custom Notes",
+          feature1Desc:
+            "The core of XMark. Add personal notes to any Twitter user, such as 'Potential Partner', 'Key Account', or 'Suspicious'. Notes are clearly displayed in the interface, helping you build your own Twitter knowledge base.",
+          feature2Title: "📸 Tweet Screenshots",
+          feature2Desc:
+            "Capture tweets in one click with high resolution. Perfect for archiving, analysis, or sharing. Supports resolution scaling for crisp details.",
+          feature3Title: "📊 Data Visualization",
+          feature3Desc:
+            "Built-in charts and heatmaps show user activity and screenshot distribution, giving you clear insights at a glance.",
+          feature4Title: "🔍 Smart Filtering",
+          feature4Desc:
+            "Quickly filter screenshots by user, date, or keyword. Combined with notes, it helps you locate key information efficiently.",
+          versionTitle: "📦 Current Version",
+          releaseLink: "View Changelog",
+          readmeTitle: "📖 Documentation",
+          footerText:
+            "© 2025 XMark. Open-sourced on <a href='https://github.com/jaxo4life/XMark' target='_blank' class='underline hover:text-blue-600'>GitHub</a>",
+          button: "中文",
+          readmeFile: "README.en.md",
+        },
+      };
+
+      function switchLang(lang) {
+        const map = textMap[lang];
+        document.getElementById("subtitle").textContent = map.subtitle;
+        document.getElementById("github-link").textContent = map.githubLink;
+        document.getElementById("features-title").textContent =
+          map.featuresTitle;
+        document.getElementById("feature1-title").textContent =
+          map.feature1Title;
+        document.getElementById("feature1-desc").textContent = map.feature1Desc;
+        document.getElementById("feature2-title").textContent =
+          map.feature2Title;
+        document.getElementById("feature2-desc").textContent = map.feature2Desc;
+        document.getElementById("feature3-title").textContent =
+          map.feature3Title;
+        document.getElementById("feature3-desc").textContent = map.feature3Desc;
+        document.getElementById("feature4-title").textContent =
+          map.feature4Title;
+        document.getElementById("feature4-desc").textContent = map.feature4Desc;
+        document.getElementById("version-title").textContent = map.versionTitle;
+        document.getElementById("release-link").textContent = map.releaseLink;
+        document.getElementById("readme-title").textContent = map.readmeTitle;
+        document.getElementById("footer-text").innerHTML = map.footerText;
+        langToggle.textContent = map.button;
+
+        // 加载对应语言的 README
+        fetch(map.readmeFile)
+          .then((res) => res.text())
+          .then((md) => {
+            document.getElementById("readme").innerHTML = marked.parse(md);
+          })
+          .catch(() => {
+            document.getElementById("readme").innerHTML =
+              "<p class='text-red-500'>README 加载失败</p>";
+          });
+      }
+
+      // 初始化中文
+      switchLang("zh");
+
+      langToggle.addEventListener("click", () => {
+        currentLang = currentLang === "zh" ? "en" : "zh";
+        switchLang(currentLang);
+      });
+    </script>
+  </body>
+</html>
