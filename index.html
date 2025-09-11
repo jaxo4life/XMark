@@ -103,14 +103,12 @@
 
     <!-- README 渲染区 -->
     <section class="max-w-4xl mx-auto px-6 py-12">
-      <h2 id="readme-title" class="text-2xl font-semibold mb-6 text-center">
-        📖 项目文档
-      </h2>
+      <h2 class="text-2xl font-semibold mb-6 text-center">📖 Changelog</h2>
       <article
-        id="readme"
+        id="changelog"
         class="prose prose-slate max-w-none prose-pre:bg-gray-800 prose-pre:text-white prose-code:text-pink-600 prose-table:border prose-table:border-gray-300"
       >
-        <div id="readme-content"></div>
+        <div id="changelog-content"></div>
       </article>
     </section>
 
@@ -207,37 +205,22 @@
         document.getElementById("footer-text").innerHTML = map.footerText;
         langToggle.textContent = map.button;
 
-        // 加载 README
-        fetch(map.readmeFile)
+        // 直接抽取 README.md 中的 Changelog
+        fetch("README.md")
           .then((res) => res.text())
           .then((md) => {
-            // 截取从 Changelog 开始
             const startIndex = md.indexOf("## 🕑 Changelog");
-            let content = startIndex !== -1 ? md.slice(startIndex) : md;
-            // 转成 HTML
-            const html = marked.parse(content);
-            const container = document.createElement("div");
-            container.innerHTML = html;
-
-            // 按语言隐藏不相关 <details>
-            container.querySelectorAll("details").forEach((d) => {
-              const summaryText = d.querySelector("summary")?.textContent || "";
-              if (lang === "zh" && summaryText.includes("🇨🇳")) {
-                d.style.display = "block";
-              } else if (lang === "en" && summaryText.includes("🇬🇧")) {
-                d.style.display = "block";
-              } else if (!summaryText.includes("Changelog")) {
-                d.style.display = "none";
-              }
-            });
-
-            const readmeContent = document.getElementById("readme-content");
-            readmeContent.innerHTML = "";
-            readmeContent.appendChild(container);
+            const endIndex = md.indexOf("---", startIndex + 1); // 截取到下一个分隔线
+            const changelogMd =
+              startIndex !== -1
+                ? md.slice(startIndex, endIndex !== -1 ? endIndex : undefined)
+                : "";
+            document.getElementById("changelog-content").innerHTML =
+              marked.parse(changelogMd);
           })
           .catch(() => {
-            document.getElementById("readme-content").innerHTML =
-              "<p class='text-red-500'>README 加载失败</p>";
+            document.getElementById("changelog-content").innerHTML =
+              "<p class='text-red-500'>Changelog 加载失败</p>";
           });
       }
 
