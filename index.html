@@ -84,7 +84,7 @@
           📦 当前版本
         </h2>
         <p class="text-lg mb-4">
-          XMark <span class="font-bold text-blue-600">v5.2.1</span>
+          XMark <span class="font-bold text-blue-600">v<span id="version">1</span></span>
         </p>
         <a
           id="release-link"
@@ -121,6 +121,17 @@
     </footer>
 
     <script>
+      fetch("manifest.json")
+        .then((res) => res.json())
+        .then((manifest) => {
+          document.getElementById(
+            "version"
+          ).textContent = `版本：${manifest.version}`;
+        })
+        .catch(() => {
+          document.getElementById("version").textContent = "版本信息获取失败";
+        });
+
       const langToggle = document.getElementById("lang-toggle");
       let currentLang = "zh";
 
