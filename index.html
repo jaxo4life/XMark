@@ -253,7 +253,9 @@
     <footer class="text-center text-slate-500 text-sm py-8 leading-relaxed">
       <p class="flex justify-center items-center gap-2">
         <span class="text-sm">By</span>
-        <span class="signature">jaxo</span>
+        <a href="https://x.com/realjaxo" target="_blank" class="signature"
+          >jaxo</a
+        >
       </p>
       <p>© 2025 XMark.</p>
       <p id="footer-text"></p>
@@ -262,19 +264,18 @@
     <!-- ===== 脚本 ===== -->
     <script>
       // ========== 打字机副标题 ==========
-function typeWriter(el, text, speed = 60) {
-  el.textContent = "";
-  let i = 0;
-  function typing() {
-    if (i < text.length) {
-      el.textContent = text.substring(0, i + 1);
-      i++;
-      setTimeout(typing, speed);
-    }
-  }
-  typing();
-}
-
+      function typeWriter(el, text, speed = 60) {
+        el.textContent = "";
+        let i = 0;
+        function typing() {
+          if (i < text.length) {
+            el.textContent = text.substring(0, i + 1);
+            i++;
+            setTimeout(typing, speed);
+          }
+        }
+        typing();
+      }
 
       // ========== 粒子背景 ==========
       const canvas = document.getElementById("particles");
