@@ -203,14 +203,10 @@
         langToggle.textContent = map.button;
 
         // 加载对应语言的 README
-        fetch(map.readmeFile)
+        fetch("README.md")
           .then((res) => res.text())
           .then((md) => {
             document.getElementById("readme").innerHTML = marked.parse(md);
-          })
-          .catch(() => {
-            document.getElementById("readme").innerHTML =
-              "<p class='text-red-500'>README 加载失败</p>";
           });
       }
 
