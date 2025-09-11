@@ -6,12 +6,6 @@
     <title>XMark – Snap, Note, Dominate Twitter</title>
     <link rel="icon" type="image/x-icon" href="public/favicon.ico" />
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {},
-        plugins: [(tailwind) => tailwind.typography],
-      };
-    </script>
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/@tailwindcss/typography@0.5.3/dist/typography.min.css"
@@ -113,7 +107,10 @@
         📖 项目文档
       </h2>
       <article id="readme" class="max-w-none">
-        <div id="readme-content" class="prose prose-slate"></div>
+        <div
+          id="readme-content"
+          class="prose prose-slate max-w-none prose-pre:bg-gray-800 prose-pre:text-white prose-code:text-pink-600 prose-table:border prose-table:border-gray-300"
+        ></div>
       </article>
     </section>
 
@@ -210,12 +207,19 @@
         document.getElementById("footer-text").innerHTML = map.footerText;
         langToggle.textContent = map.button;
 
-        // 加载对应语言的 README
-        fetch("README.md")
+        // 加载对应语言 README
+        fetch(map.readmeFile)
           .then((res) => res.text())
           .then((md) => {
+            // 只从 Changelog 开始显示
+            const startIndex = md.indexOf("## 🕑 Changelog");
+            const content = startIndex !== -1 ? md.slice(startIndex) : md;
             document.getElementById("readme-content").innerHTML =
-              marked.parse(md);
+              marked.parse(content);
+          })
+          .catch(() => {
+            document.getElementById("readme-content").innerHTML =
+              "<p class='text-red-500'>README 加载失败</p>";
           });
       }
 
