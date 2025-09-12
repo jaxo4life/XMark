@@ -1,9 +1,16 @@
 {
   "manifest_version": 3,
   "name": "XMark",
-  "version": "5.2.1",
+  "version": "5.2.2",
   "description": "XMark is a note-taking tool designed specifically for X (formerly Twitter)",
-  "permissions": ["storage", "tabs", "activeTab", "scripting", "downloads", "alarms"],
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "scripting",
+    "downloads",
+    "alarms"
+  ],
   "host_permissions": ["<all_urls>"],
   "content_scripts": [
     {

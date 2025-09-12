@@ -847,7 +847,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === "openTimelineWithUserId") {
     chrome.storage.local.set({ filterUserId: request.finalId }, () => {
-      chrome.tabs.create({ url: 'timeline.html' });
+      chrome.tabs.create({ url: "timeline.html" });
     });
   }
 });

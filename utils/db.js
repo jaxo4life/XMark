@@ -1,21 +1,39 @@
 // db.js
 export function openDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open("ScreenshotDB", 4);
+    const request = indexedDB.open("ScreenshotDB", 5); // 版本号 +1
     request.onupgradeneeded = (e) => {
       const db = e.target.result;
+
+      // ---- screenshots ----
       let store;
       if (!db.objectStoreNames.contains("screenshots")) {
         store = db.createObjectStore("screenshots", { keyPath: "id" });
       } else {
         store = e.target.transaction.objectStore("screenshots");
       }
-
       if (!store.indexNames.contains("userId")) {
         store.createIndex("userId", "userId", { unique: false });
       }
       if (!store.indexNames.contains("dateIdx")) {
         store.createIndex("dateIdx", "date", { unique: false });
+      }
+
+      // ---- categories ----
+      if (!db.objectStoreNames.contains("categories")) {
+        db.createObjectStore("categories", {
+          keyPath: "id",
+          autoIncrement: true,
+        });
+      }
+
+      // ---- screenshotCategories (映射表) ----
+      if (!db.objectStoreNames.contains("screenshotCategories")) {
+        const scStore = db.createObjectStore("screenshotCategories", {
+          keyPath: ["screenshotId", "categoryId"],
+        });
+        scStore.createIndex("screenshotId", "screenshotId", { unique: false });
+        scStore.createIndex("categoryId", "categoryId", { unique: false });
       }
     };
 
@@ -275,7 +293,7 @@ export function importFromJsonFile(file) {
   });
 }
 
-// 根据 userId 删除单条截图记录
+// 根据 id 删除单条截图记录
 export async function deleteScreenshotById(id) {
   const db = await openDB();
   const tx = db.transaction("screenshots", "readwrite");
@@ -410,7 +428,7 @@ export async function getUserIdinDB(handle) {
   const db = await openDB();
   const tx = db.transaction("screenshots", "readonly");
   const store = tx.objectStore("screenshots");
-  const index = store.index("userId"); 
+  const index = store.index("userId");
   let userId = null;
 
   // 遍历所有记录，找到匹配 handle 的 userId
@@ -480,50 +498,271 @@ export async function getUserId(handle) {
 // 通过 tab 提取
 async function fetchUserIdByOpeningTab(handle) {
   return new Promise((resolve) => {
-    chrome.tabs.create({ url: `https://x.com/${handle}`, active: true }, (tab) => {
-      const tabId = tab.id;
-      let timedOut = false;
+    chrome.tabs.create(
+      { url: `https://x.com/${handle}`, active: true },
+      (tab) => {
+        const tabId = tab.id;
+        let timedOut = false;
 
-      const timeout = setTimeout(() => {
-        timedOut = true;
-        chrome.tabs.remove(tabId, () => resolve(null));
-      }, 10000); // 10秒超时
+        const timeout = setTimeout(() => {
+          timedOut = true;
+          chrome.tabs.remove(tabId, () => resolve(null));
+        }, 10000); // 10秒超时
 
-      function listener(updatedTabId, changeInfo) {
-        if (updatedTabId !== tabId) return;
-        if (changeInfo.status === "complete") {
-          // 页面 HTML 加载完成后，再等 1s 让 JS 执行
-          setTimeout(() => {
-            chrome.scripting.executeScript(
-              {
-                target: { tabId },
-                func: (username) => {
-                  const scripts = document.querySelectorAll("script");
-                  for (const script of scripts) {
-                    if (script.textContent.includes(`"additionalName":"${username}"`)) {
-                      const match = script.textContent.match(/"identifier":"(\d+)"/);
-                      if (match) return match[1];
+        function listener(updatedTabId, changeInfo) {
+          if (updatedTabId !== tabId) return;
+          if (changeInfo.status === "complete") {
+            // 页面 HTML 加载完成后，再等 1s 让 JS 执行
+            setTimeout(() => {
+              chrome.scripting.executeScript(
+                {
+                  target: { tabId },
+                  func: (username) => {
+                    const scripts = document.querySelectorAll("script");
+                    for (const script of scripts) {
+                      if (
+                        script.textContent.includes(
+                          `"additionalName":"${username}"`
+                        )
+                      ) {
+                        const match =
+                          script.textContent.match(/"identifier":"(\d+)"/);
+                        if (match) return match[1];
+                      }
+                      const restMatch =
+                        script.textContent.match(/"rest_id":"(\d+)"/);
+                      if (restMatch) return restMatch[1];
                     }
-                    const restMatch = script.textContent.match(/"rest_id":"(\d+)"/);
-                    if (restMatch) return restMatch[1];
-                  }
-                  return null;
+                    return null;
+                  },
+                  args: [handle],
                 },
-                args: [handle],
-              },
-              (results) => {
-                clearTimeout(timeout);
-                chrome.tabs.onUpdated.removeListener(listener);
-                chrome.tabs.remove(tabId, () => {
-                  resolve(results[0]?.result || null);
-                });
-              }
-            );
-          }, 1500); // 等 1.5s
+                (results) => {
+                  clearTimeout(timeout);
+                  chrome.tabs.onUpdated.removeListener(listener);
+                  chrome.tabs.remove(tabId, () => {
+                    resolve(results[0]?.result || null);
+                  });
+                }
+              );
+            }, 1500); // 等 1.5s
+          }
         }
-      }
 
-      chrome.tabs.onUpdated.addListener(listener);
-    });
+        chrome.tabs.onUpdated.addListener(listener);
+      }
+    );
   });
+}
+
+// 添加分类（如果存在则返回已有 id）
+export async function addCategory(name) {
+  const db = await openDB();
+  const tx = db.transaction("categories", "readwrite");
+  const store = tx.objectStore("categories");
+
+  // 用 Promise 包装 getAll
+  const all = await new Promise((resolve, reject) => {
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+
+  // 查找是否存在
+  const existing = all.find((c) => c.name === name);
+  if (existing) {
+    await tx.done;
+    return existing.id;
+  }
+
+  // 添加新分类
+  const req = store.add({ name });
+  const id = await new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+
+  await tx.done;
+  return id;
+}
+
+// 删除分类（并解绑所有截图）
+export async function deleteCategory(categoryId) {
+  const db = await openDB();
+
+  // 1. 删除 categories 表里的分类
+  const tx1 = db.transaction("categories", "readwrite");
+  const catStore = tx1.objectStore("categories");
+  await catStore.delete(categoryId);
+  await tx1.done;
+
+  // 2. 删除 screenshotCategories 表中绑定了这个分类的记录
+  const tx2 = db.transaction("screenshotCategories", "readwrite");
+  const scStore = tx2.objectStore("screenshotCategories");
+
+  const allMappings = await promisifyRequest(scStore.getAll());
+  for (const m of allMappings) {
+    if (m.categoryId == categoryId) {
+      await scStore.delete([m.screenshotId, m.categoryId]);
+    }
+  }
+  await tx2.done;
+}
+
+// 清空所有分类
+export async function clearAllCategories() {
+  const db = await openDB();
+
+  // 1. 清空 categories 表
+  const tx1 = db.transaction("categories", "readwrite");
+  const catStore = tx1.objectStore("categories");
+  await catStore.clear();
+  await tx1.done;
+
+  // 2. 清空 screenshotCategories 表中所有绑定
+  const tx2 = db.transaction("screenshotCategories", "readwrite");
+  const scStore = tx2.objectStore("screenshotCategories");
+  await scStore.clear();
+  await tx2.done;
+}
+
+// 获取所有分类
+export async function getAllCategories() {
+  const db = await openDB();
+  const tx = db.transaction("categories", "readonly");
+  const store = tx.objectStore("categories");
+  return await promisifyRequest(store.getAll()); // ✅ 确保返回数组
+}
+
+// 绑定分类（会自动清除旧分类）
+export async function bindCategoryToScreenshot(screenshotId, categoryName) {
+  const db = await openDB();
+  const categoryId = await addCategory(categoryName);
+
+  // 先解绑旧的分类
+  await unbindCategoryFromScreenshot(screenshotId);
+
+  // 再绑定新的分类
+  const tx = db.transaction("screenshotCategories", "readwrite");
+  const store = tx.objectStore("screenshotCategories");
+  await store.put({ screenshotId, categoryId });
+  await tx.done;
+
+  return true;
+}
+
+// 获取截图分类（单个）
+export async function getCategoryForScreenshot(screenshotId) {
+  const db = await openDB();
+  const tx1 = db.transaction("screenshotCategories", "readonly");
+  const scStore = tx1.objectStore("screenshotCategories");
+  const idx = scStore.index("screenshotId");
+  const mapping = await promisifyRequest(idx.get(screenshotId));
+
+  if (!mapping) return null;
+
+  const tx2 = db.transaction("categories", "readonly");
+  const catStore = tx2.objectStore("categories");
+  return await promisifyRequest(catStore.get(mapping.categoryId));
+}
+
+// 移除截图的唯一分类（不需要 categoryId 参数）
+export async function unbindCategoryFromScreenshot(screenshotId) {
+  const db = await openDB();
+  const tx = db.transaction("screenshotCategories", "readwrite");
+  const store = tx.objectStore("screenshotCategories");
+
+  // 通过索引找到该截图的唯一分类
+  const idx = store.index("screenshotId");
+  const mapping = await promisifyRequest(idx.get(screenshotId));
+
+  if (mapping) {
+    await store.delete([screenshotId, mapping.categoryId]);
+  }
+
+  await tx.done;
+}
+
+// 统一功能函数
+function promisifyRequest(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function updateScreenshotNote(id, note) {
+  const db = await openDB();
+  const tx = db.transaction("screenshots", "readwrite");
+  const store = tx.objectStore("screenshots");
+
+  // 获取现有记录
+  const item = await new Promise((resolve, reject) => {
+    const req = store.get(id);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+
+  if (!item) throw new Error("截图不存在");
+
+  // 只更新可序列化字段
+  const newItem = {
+    id: item.id,
+    handle: item.handle,
+    userId: item.userId,
+    blob: item.blob,
+    filename: item.filename,
+    tweetlink: item.tweetlink,
+    date: item.date,
+    note: note,
+  };
+
+  // put 到对象存储
+  await new Promise((resolve, reject) => {
+    const req = store.put(newItem);
+    req.onsuccess = () => resolve(true);
+    req.onerror = () => reject(req.error);
+  });
+
+  // 等待事务完成
+  await new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function getScreenshotIdsByCategory(categoryId) {
+  const db = await openDB();
+  const tx = db.transaction("screenshotCategories", "readonly");
+  const store = tx.objectStore("screenshotCategories");
+  const idx = store.index("categoryId");
+  return new Promise((resolve, reject) => {
+    const request = idx.getAllKeys(categoryId);
+    request.onsuccess = () => resolve(request.result); // 返回 [screenshotId1, screenshotId2, ...]
+    request.onerror = (e) => reject(e.target.error);
+  });
+}
+
+export async function getScreenshotsByCategory(categoryId) {
+  const keyPairs = await getScreenshotIdsByCategory(categoryId);
+  // keyPairs 每项是 [screenshotId, categoryId]
+
+  if (!keyPairs || keyPairs.length === 0) return [];
+
+  const db = await openDB();
+  const tx = db.transaction("screenshots", "readonly");
+  const store = tx.objectStore("screenshots");
+
+  const results = [];
+  for (const pair of keyPairs) {
+    const screenshotId = pair[0]; // 取第一个元素
+    const screenshot = await new Promise((resolve, reject) => {
+      const req = store.get(screenshotId);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = (e) => reject(e.target.error);
+    });
+    if (screenshot) results.push(screenshot);
+  }
+
+  return results;
 }

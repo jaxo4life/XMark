@@ -1,6 +1,5 @@
 import {
   getAllScreenshots,
-  getAllUserIds,
   getUserNote,
   deleteScreenshotById,
   deleteAllScreenshotsById,
@@ -10,6 +9,14 @@ import {
   getDailyActivity,
   addManualScreenshot,
   getUserId,
+  addCategory,
+  deleteCategory,
+  clearAllCategories,
+  getAllCategories,
+  getCategoryForScreenshot,
+  bindCategoryToScreenshot,
+  updateScreenshotNote,
+  getScreenshotsByCategory,
 } from "../utils/db.js";
 import { updateTexts, getLang, resetLangData } from "../utils/lang.js";
 
@@ -270,13 +277,13 @@ async function renderRanking(items) {
 
   // 只绑定一次点击事件（防止重复绑定）
   if (!root.dataset.listenerAttached) {
-    root.addEventListener("click", (e) => {
+    root.addEventListener("click", async (e) => {
       const btn = e.target.closest("button[data-userid]");
       if (!btn) return;
       filterUserId = btn.dataset.userid;
       setActiveTab("timeline");
       showFilterBar();
-      rebuildTimeline();
+      await rebuildTimeline();
       window.scrollTo({ top: 0, behavior: "smooth" });
     });
     root.dataset.listenerAttached = "1";
@@ -292,6 +299,8 @@ let _filtered = [];
 let _page = 0;
 let _observer = null;
 let _scrollObserver = null;
+let _allCats = [];
+let _categoryId = null;
 
 function clearTimeline() {
   $("#timeline-grid").innerHTML = "";
@@ -299,16 +308,17 @@ function clearTimeline() {
   revokeAllURLs();
 }
 
-function renderCard(item) {
+async function renderCard(item) {
   const wrap = document.createElement("article");
   wrap.className = "timeline-card glass rounded-2xl p-3 space-y-2";
+  wrap.style.position = "relative";
 
   // 给卡片打上 data-date 属性，用来和时间轴对应
   const d = new Date(item.date); // 自动转换到本地时区
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  wrap.dataset.date = `${yyyy}-${mm}-${dd}`;
+  wrap.dataset.date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getDate()).padStart(2, "0")}`;
 
   wrap.innerHTML = `
     <div class="text-sm text-slate-700">
@@ -333,6 +343,7 @@ function renderCard(item) {
     </div>
   `;
 
+  // 插入图片
   const img = document.createElement("img");
   img.className = "thumb rounded-xl w-full h-auto";
   img.loading = "lazy";
@@ -341,6 +352,210 @@ function renderCard(item) {
   img.alt = `screenshot of ${item.handle}`;
   wrap.appendChild(img);
 
+  // 分类标签
+  const catLabel = document.createElement("span");
+  catLabel.textContent = "分类:";
+  catLabel.className = "py-1 text-sm font-bold text-slate-500";
+  wrap.appendChild(catLabel);
+
+  // 分类下拉
+  const catSelect = document.createElement("select");
+  catSelect.className =
+    "w-auto border rounded ml-2 text-center text-xs text-slate-600 hover:bg-slate-50 cursor-pointer";
+  wrap.appendChild(catSelect);
+
+  // 管理分类按钮
+  const manageCatBtn = document.createElement("button");
+  manageCatBtn.textContent = "管理分类";
+  manageCatBtn.className =
+    "ml-2 px-2 py-1 text-xs rounded bg-gray-200 hover:bg-gray-300";
+  wrap.appendChild(manageCatBtn);
+
+  // 函数：刷新下拉选项
+  function refreshCatOptions(selectedId) {
+    catSelect.innerHTML = `<option value="">未分类</option>`;
+    _allCats.forEach((c) => {
+      const opt = document.createElement("option");
+      opt.value = c.id;
+      opt.textContent = c.name;
+      if (c.id == selectedId) opt.selected = true;
+      catSelect.appendChild(opt);
+    });
+
+    // 新增分类选项
+    const newOpt = document.createElement("option");
+    newOpt.value = "NEW";
+    newOpt.textContent = "新增分类…";
+    catSelect.appendChild(newOpt);
+  }
+
+  const firstCat = await getCategoryForScreenshot(item.id);
+  refreshCatOptions(firstCat?.id);
+  wrap.dataset.categoryId = firstCat?.id || "";
+
+  // 初始化下拉
+  catSelect.addEventListener("focus", async () => {
+    const firstCat = await getCategoryForScreenshot(item.id);
+    refreshCatOptions(firstCat?.id);
+  });
+
+  // 分类选择变更
+  catSelect.addEventListener("change", async (e) => {
+    const val = e.target.value;
+    if (val === "NEW") {
+      // 新增分类弹窗
+      const modal = document.createElement("div");
+      modal.className =
+        "fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50";
+      modal.innerHTML = `
+      <div class="bg-white rounded-2xl p-6 w-72 shadow-xl space-y-4">
+        <h2 class="text-lg font-semibold text-slate-700">新增分类</h2>
+        <input id="newCatInput" class="w-full border rounded-lg p-2 text-sm" placeholder="分类名称" />
+        <div class="flex justify-end gap-2">
+          <button id="catCancel" class="px-3 py-1 rounded bg-gray-200">取消</button>
+          <button id="catSave" class="px-3 py-1 rounded bg-blue-600 text-white">保存</button>
+        </div>
+      </div>
+    `;
+      document.body.appendChild(modal);
+
+      const input = modal.querySelector("#newCatInput");
+      modal
+        .querySelector("#catCancel")
+        .addEventListener("click", () => modal.remove());
+      modal.querySelector("#catSave").addEventListener("click", async () => {
+        const newName = input.value.trim();
+        if (!newName) return;
+
+        // 写入数据库
+        const newId = await addCategory(newName);
+        _allCats.push({ id: newId, name: newName });
+
+        // 自动绑定到当前截图
+        await bindCategoryToScreenshot(item.id, newName);
+
+        // 刷新下拉并选中新分类
+        refreshCatOptions(newId);
+        renderCategoryFilterBar();
+
+        modal.remove();
+        showToast("分类已创建并绑定", "success");
+      });
+    } else if (val === "") {
+      // 解绑分类
+      await getCategoryForScreenshot(item.id);
+      refreshCatOptions(null);
+      wrap.dataset.categoryId = "";
+    } else {
+      // 选择已有分类
+      const catName = _allCats.find((c) => c.id == val).name;
+      await bindCategoryToScreenshot(item.id, catName);
+      refreshCatOptions(val);
+      wrap.dataset.categoryId = val;
+    }
+  });
+
+  // 管理分类按钮点击事件
+  manageCatBtn.addEventListener("click", async () => {
+    // 弹窗容器
+    const modal = document.createElement("div");
+    modal.className =
+      "fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50";
+    modal.innerHTML = `
+      <div class="bg-white rounded-2xl p-6 w-80 shadow-xl space-y-4">
+        <h2 class="text-lg font-semibold text-slate-700">管理分类</h2>
+        <div id="categoryList" class="space-y-2 max-h-60 overflow-y-auto border p-2 rounded"></div>
+        <div class="flex gap-2">
+          <input id="newCatInput" class="flex-1 border rounded-lg p-2 text-sm" placeholder="新增分类" />
+          <button id="addCatBtn" class="px-3 py-1 rounded bg-blue-600 text-white text-sm">新增</button>
+        </div>
+        <div class="flex justify-between gap-2">
+          <button id="clearCatBtn" class="px-3 py-1 rounded bg-red-500 text-white text-sm hover:bg-red-600">清空分类</button>
+          <button id="closeCatModal" class="px-3 py-1 rounded bg-gray-200 text-sm">关闭</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const listDiv = modal.querySelector("#categoryList");
+    const input = modal.querySelector("#newCatInput");
+
+    // 渲染分类列表
+    function renderList() {
+      listDiv.innerHTML = _allCats
+        .map(
+          (c) => `
+      <div class="flex justify-between items-center p-1 border-b text-sm">
+        <span>${c.name}</span>
+        <button data-id="${c.id}" class="text-red-500 hover:text-red-700 text-xs">删除</button>
+      </div>
+    `
+        )
+        .join("");
+
+      // 绑定删除事件
+      listDiv.querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const id = btn.dataset.id;
+          const name = _allCats.find((c) => c.id == id).name;
+          if (confirm(`确认删除分类 "${name}"？`)) {
+            await deleteCategory(id); // 删除数据库及解绑截图
+            _allCats = _allCats.filter((c) => c.id != id); // 前端 _allCats 同步
+            renderList(); // 重新渲染列表
+            refreshCatOptions(null); // 刷新下拉框
+            renderCategoryFilterBar();
+            showToast("分类已删除", "success");
+          }
+        });
+      });
+    }
+
+    renderList();
+
+    // 新增分类
+    modal.querySelector("#addCatBtn").addEventListener("click", async () => {
+      const name = input.value.trim();
+      if (!name) return;
+      const newId = await addCategory(name);
+      _allCats.push({ id: newId, name });
+      renderList();
+      input.value = "";
+      refreshCatOptions(newId); // 下拉框选中新分类
+      renderCategoryFilterBar(); // <-- 顶部分类过滤条刷新
+      showToast("分类已创建", "success");
+    });
+
+    // 清空分类
+    modal.querySelector("#clearCatBtn").addEventListener("click", async () => {
+      if (confirm("确认要清空所有分类吗？这会解绑所有截图的分类！")) {
+        await clearAllCategories();
+        showToast("所有分类已清空", "success", () => location.reload());
+      }
+    });
+
+    // 关闭弹窗
+    modal.querySelector("#closeCatModal").addEventListener("click", () => {
+      modal.remove();
+    });
+  });
+
+  const noteBtn = document.createElement("button");
+  noteBtn.textContent = item.note ? "编辑备注" : "添加备注";
+  noteBtn.className =
+    "block px-2 py-1 rounded bg-green-500 text-white text-xs hover:bg-green-600";
+  wrap.appendChild(noteBtn);
+
+  // 备注显示区
+  const noteLabel = document.createElement("span");
+  noteLabel.className = "block text-sm font-bold text-slate-500";
+  if (item.note) noteLabel.textContent = "备注:";
+  wrap.appendChild(noteLabel);
+
+  const noteDiv = document.createElement("div");
+  noteDiv.className = "block text-xs text-slate-700 break-all note-area";
+  if (item.note) noteDiv.textContent = item.note;
+  wrap.appendChild(noteDiv);
+
   // 删除按钮
   const delBtn = document.createElement("button");
   delBtn.innerHTML = `
@@ -348,8 +563,6 @@ function renderCard(item) {
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5-4h4m-4 0a1 1 0 00-1 1v1h6V4a1 1 0 00-1-1m-4 0h4" />
     </svg>
   `;
-
-  // 右上角样式
   delBtn.className = `
     absolute top-0 right-2
     p-0
@@ -360,22 +573,21 @@ function renderCard(item) {
     ease-in-out
     cursor-pointer
   `;
-  // 确保 wrap 是相对定位
-  wrap.style.position = "relative";
-
   wrap.appendChild(delBtn);
 
-  // click: lightbox
+  // ==== 事件绑定 ====
+
+  // 点击图片放大
   img.addEventListener("click", () => openLightbox(img.src));
 
-  // click user
-  wrap.querySelector(".timeline-user").addEventListener("click", (e) => {
+  // 点击 user 过滤
+  wrap.querySelector(".timeline-user").addEventListener("click", async (e) => {
     filterUserId = e.currentTarget.dataset.userid;
     showFilterBar();
-    rebuildTimeline();
+    await rebuildTimeline();
   });
 
-  // click delete
+  // 删除截图
   delBtn.addEventListener("click", async () => {
     const text = getLang("deleteScreenshot");
     if (confirm(text)) {
@@ -392,10 +604,51 @@ function renderCard(item) {
     }
   });
 
+  // ==== 备注弹窗 ====
+  noteBtn.addEventListener("click", () => {
+    const shownote = noteDiv.textContent;
+    const modal = document.createElement("div");
+    modal.className =
+      "fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50";
+    modal.innerHTML = `
+      <div class="bg-white rounded-2xl p-6 w-80 shadow-xl space-y-4">
+        <h2 class="text-lg font-semibold text-slate-700">添加备注</h2>
+        <textarea id="noteInput" class="w-full border rounded-lg p-2 text-sm" rows="4">${shownote}</textarea>
+        <div class="flex justify-end gap-2">
+          <button id="noteCancel" class="px-3 py-1 rounded bg-gray-200">取消</button>
+          <button id="noteSave" class="px-3 py-1 rounded bg-blue-600 text-white">保存</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const input = modal.querySelector("#noteInput");
+    modal
+      .querySelector("#noteCancel")
+      .addEventListener("click", () => modal.remove());
+    modal.querySelector("#noteSave").addEventListener("click", async () => {
+      const note = input.value.trim();
+      await updateScreenshotNote(item.id, note);
+      noteLabel.textContent = note ? "备注:" : "";
+      noteDiv.textContent = note ? note : "";
+      noteBtn.textContent = note ? "编辑备注" : "添加备注";
+      modal.remove();
+      showToast("备注已保存", "success");
+    });
+  });
+
+  // ==== 初始化显示分类 ====
+  const cat = await getCategoryForScreenshot(item.id); // ✅ 单分类
+  if (cat) {
+    // 如果已有分类，设置下拉选中
+    const opt = Array.from(catSelect.options).find((o) => o.value == cat.id);
+    if (opt) opt.selected = true;
+  }
+
   return wrap;
 }
 
-function appendNextPage() {
+async function appendNextPage() {
   const grid = $("#timeline-grid");
   const start = _page * PAGE_SIZE;
   const end = Math.min(start + PAGE_SIZE, _filtered.length);
@@ -414,7 +667,7 @@ function appendNextPage() {
 
   // 行优先插入
   for (let i = start; i < end; i++) {
-    const card = renderCard(_filtered[i]);
+    const card = await renderCard(_filtered[i]);
 
     // 按照顺序放到对应列 (左到右)
     const colIndex = i % cols.length;
@@ -448,11 +701,13 @@ function getColumnCount() {
 }
 
 async function rebuildTimeline() {
+  _allCats = await getAllCategories(); // 加载全局分类数组
   _all = await getScreenshots();
   _filtered = applyFilters(_all);
   clearTimeline();
-  renderRanking(_filtered);
-  appendNextPage();
+  await renderRanking(_filtered);
+  renderCategoryFilterBar();
+  await appendNextPage();
   setupInfiniteScroll();
 }
 
@@ -465,6 +720,66 @@ function setupInfiniteScroll() {
     { rootMargin: "600px 0px" }
   );
   _observer.observe($("#sentinel"));
+}
+
+// 渲染顶部分类
+function renderCategoryFilterBar() {
+  const bar = document.getElementById("categoryFilterBar");
+  if (!bar) return;
+  bar.innerHTML = "";
+
+  // “全部”按钮
+  const allBtn = document.createElement("button");
+  allBtn.textContent = "全部";
+  allBtn.className =
+    "px-3 py-1 rounded bg-slate-200 text-sm hover:bg-slate-300";
+  setActiveFilter(allBtn);
+  allBtn.addEventListener("click", async () => {
+    _categoryId = null;
+    await rebuildTimeline();
+    setActiveFilter(allBtn);
+  });
+  bar.appendChild(allBtn);
+
+  // 遍历所有分类
+  _allCats.forEach(async (c) => {
+    const btn = document.createElement("button");
+    btn.textContent = c.name;
+    btn.className = "px-3 py-1 rounded bg-slate-100 text-sm hover:bg-slate-300";
+    btn.addEventListener("click", async () => {
+      _categoryId = c.id;
+      _filtered = await getScreenshotsByCategory(c.id);
+      console.log(_filtered);
+      _page = 0;
+      clearTimeline(); // 清空原有瀑布流
+      await appendNextPage(); // 渲染新的分页
+      setActiveFilter(btn);
+    });
+    bar.appendChild(btn);
+  });
+}
+
+// 高亮当前选中分类
+function setActiveFilter(activeBtn) {
+  console.log("1");
+  document.querySelectorAll("#categoryFilterBar button").forEach((b) => {
+    b.classList.remove("bg-blue-600", "text-white");
+    b.classList.add("bg-slate-100");
+  });
+  activeBtn.classList.add("bg-blue-600", "text-white");
+  activeBtn.classList.remove("bg-slate-100");
+}
+
+// 筛选分类显示
+function filterByCategory(categoryId) {
+  document.querySelectorAll(".timeline-card").forEach((card) => {
+    const cardCatId = card.dataset.categoryId || "";
+    if (!categoryId || cardCatId == categoryId) {
+      card.style.display = "";
+    } else {
+      card.style.display = "none";
+    }
+  });
 }
 
 // 生成左侧时间节点
@@ -750,13 +1065,13 @@ document.querySelectorAll(".tab-button").forEach((tab) => {
   });
 });
 
-document.getElementById("clearUser").addEventListener("click", () => {
+document.getElementById("clearUser").addEventListener("click", async () => {
   filterUserId = null;
   showFilterBar();
-  rebuildTimeline();
+  await rebuildTimeline();
 });
 
-document.getElementById("clearFilters").addEventListener("click", () => {
+document.getElementById("clearFilters").addEventListener("click", async () => {
   filterUserId = null;
   kw = "";
   startDate = null;
@@ -766,24 +1081,24 @@ document.getElementById("clearFilters").addEventListener("click", () => {
   document.getElementById("startDate").value = "";
   document.getElementById("endDate").value = "";
   showFilterBar();
-  rebuildTimeline();
+  await rebuildTimeline();
 });
 
-document.getElementById("kw").addEventListener("keydown", (e) => {
+document.getElementById("kw").addEventListener("keydown", async (e) => {
   if (e.key === "Enter") {
     kw = e.currentTarget.value.trim();
-    rebuildTimeline();
+    await rebuildTimeline();
   }
 });
-document.getElementById("startDate").addEventListener("change", (e) => {
+document.getElementById("startDate").addEventListener("change", async (e) => {
   const v = e.currentTarget.value;
   startDate = v ? new Date(v).setHours(0, 0, 0, 0) : null;
-  rebuildTimeline();
+  await rebuildTimeline();
 });
-document.getElementById("endDate").addEventListener("change", (e) => {
+document.getElementById("endDate").addEventListener("change", async (e) => {
   const v = e.currentTarget.value;
   endDate = v ? new Date(v).setHours(0, 0, 0, 0) : null;
-  rebuildTimeline();
+  await rebuildTimeline();
 });
 
 document.getElementById("columnCount").addEventListener("change", () => {

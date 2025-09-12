@@ -373,7 +373,7 @@
 
       // ========== 语言切换 ==========
       const langToggle = document.getElementById("lang-toggle");
-      let currentLang = "zh";
+      let currentLang = localStorage.getItem("lang") || "zh";
 
       const textMap = {
         zh: {
@@ -445,6 +445,8 @@
         document.getElementById("release-link").textContent = map.releaseLink;
         document.getElementById("footer-text").innerHTML = map.footerText;
         langToggle.textContent = map.button;
+
+        localStorage.setItem("lang", lang);
       }
 
       langToggle.addEventListener("click", () => {
@@ -452,8 +454,7 @@
         switchLang(currentLang);
       });
 
-      // 默认中文 + 打字机
-      switchLang("zh");
+      switchLang(currentLang);
 
       // ========== 版本号读取 ==========
       fetch("manifest.json")
