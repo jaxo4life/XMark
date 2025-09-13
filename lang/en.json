@@ -231,5 +231,21 @@
   "timelineimportSuccess": "Import Success",
   "timelineimportFailed": "Import Failed",
   "clearSuccess": "Clear Success",
-  "clearFailed": "Clear Failed"
+  "clearFailed": "Clear Failed",
+  "sentinel": "Pull down to load more...",
+  "allCats": "All",
+  "catLabel": "Category:",
+  "CategoryManagement": "CatSettings",
+  "newCat": "New Category",
+  "catName": "Category Name",
+  "addCat": "Add",
+  "newcatDone": "Category has been set!",
+  "catDeleted": "Category has been deleted!",
+  "confirmDeleteCat": "Are you sure to delete",
+  "ClearAllCats": "Clear all categories",
+  "confirmClearAllCats": "Are you sure you want to clear all categories? This will unbind all screenshot categories!",
+  "allCatsCleared": "All categories have been cleared!",
+  "noteLabel": "Note:",
+  "save": "Save",
+  "noteSaved": "Note has been saved"
 }

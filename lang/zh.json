@@ -231,5 +231,21 @@
   "timelineimportSuccess": "导入成功",
   "timelineimportFailed": "导入失败",
   "clearSuccess": "清空成功",
-  "clearFailed": "清空失败"
+  "clearFailed": "清空失败",
+  "sentinel": "下拉加载更多…",
+  "allCats":"全部",
+  "catLabel": "分类:",
+  "CategoryManagement": "管理分类",
+  "newCat": "新增分类",
+  "catName": "分类名称",
+  "addCat":"新增",
+  "newcatDone": "分类已创建！",
+  "catDeleted": "分类已删除！",
+  "confirmDeleteCat": "确定删除分类",
+  "ClearAllCats": "清空分类",
+  "confirmClearAllCats": "确认要清空所有分类吗？这会解绑所有截图的分类！",
+  "allCatsCleared": "所有分类已清空",
+  "noteLabel": "备注:",
+  "save": "保存",
+  "noteSaved": "备注已保存"
 }

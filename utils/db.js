@@ -1,7 +1,7 @@
 // db.js
 export function openDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open("ScreenshotDB", 5); // 版本号 +1
+    const request = indexedDB.open("ScreenshotDB", 6); // 版本号 +1
     request.onupgradeneeded = (e) => {
       const db = e.target.result;
 
@@ -593,6 +593,8 @@ export async function deleteCategory(categoryId) {
   // 1. 删除 categories 表里的分类
   const tx1 = db.transaction("categories", "readwrite");
   const catStore = tx1.objectStore("categories");
+    const item = await catStore.get(categoryId);
+  console.log("待删除分类:", categoryId, item);
   await catStore.delete(categoryId);
   await tx1.done;
 
@@ -603,6 +605,7 @@ export async function deleteCategory(categoryId) {
   const allMappings = await promisifyRequest(scStore.getAll());
   for (const m of allMappings) {
     if (m.categoryId == categoryId) {
+            console.log("删除绑定:", m);
       await scStore.delete([m.screenshotId, m.categoryId]);
     }
   }

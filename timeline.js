@@ -354,7 +354,7 @@ async function renderCard(item) {
 
   // 分类标签
   const catLabel = document.createElement("span");
-  catLabel.textContent = "分类:";
+  catLabel.dataset.key = "catLabel";
   catLabel.className = "py-1 text-sm font-bold text-slate-500";
   wrap.appendChild(catLabel);
 
@@ -366,7 +366,7 @@ async function renderCard(item) {
 
   // 管理分类按钮
   const manageCatBtn = document.createElement("button");
-  manageCatBtn.textContent = "管理分类";
+  manageCatBtn.dataset.key = "CategoryManagement";
   manageCatBtn.className =
     "ml-2 px-2 py-1 text-xs rounded bg-gray-200 hover:bg-gray-300";
   wrap.appendChild(manageCatBtn);
@@ -409,15 +409,17 @@ async function renderCard(item) {
         "fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50";
       modal.innerHTML = `
       <div class="bg-white rounded-2xl p-6 w-72 shadow-xl space-y-4">
-        <h2 class="text-lg font-semibold text-slate-700">新增分类</h2>
-        <input id="newCatInput" class="w-full border rounded-lg p-2 text-sm" placeholder="分类名称" />
+        <h2 class="text-lg font-semibold text-slate-700" data-key="newCat">新增分类</h2>
+        <input id="newCatInput" class="w-full border rounded-lg p-2 text-sm" data-placeholder-key="catName" />
         <div class="flex justify-end gap-2">
-          <button id="catCancel" class="px-3 py-1 rounded bg-gray-200">取消</button>
-          <button id="catSave" class="px-3 py-1 rounded bg-blue-600 text-white">保存</button>
+          <button id="catCancel" class="px-3 py-1 rounded bg-gray-200" data-key="cancelAdd">取消</button>
+          <button id="catSave" class="px-3 py-1 rounded bg-blue-600 text-white" data-key="save">保存</button>
         </div>
       </div>
     `;
       document.body.appendChild(modal);
+
+      updateTexts(modal);
 
       const input = modal.querySelector("#newCatInput");
       modal
@@ -439,7 +441,8 @@ async function renderCard(item) {
         renderCategoryFilterBar();
 
         modal.remove();
-        showToast("分类已创建并绑定", "success");
+        const newcatDone = getLang("newcatDone");
+        showToast(newcatDone, "success");
       });
     } else if (val === "") {
       // 解绑分类
@@ -463,15 +466,15 @@ async function renderCard(item) {
       "fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50";
     modal.innerHTML = `
       <div class="bg-white rounded-2xl p-6 w-80 shadow-xl space-y-4">
-        <h2 class="text-lg font-semibold text-slate-700">管理分类</h2>
+        <h2 class="text-lg font-semibold text-slate-700" data-key="CategoryManagement">管理分类</h2>
         <div id="categoryList" class="space-y-2 max-h-60 overflow-y-auto border p-2 rounded"></div>
         <div class="flex gap-2">
-          <input id="newCatInput" class="flex-1 border rounded-lg p-2 text-sm" placeholder="新增分类" />
-          <button id="addCatBtn" class="px-3 py-1 rounded bg-blue-600 text-white text-sm">新增</button>
+          <input id="newCatInput" class="flex-1 border rounded-lg p-2 text-sm" data-placeholder-key="catName" />
+          <button id="addCatBtn" class="px-3 py-1 rounded bg-blue-600 text-white text-sm" data-key="addCat">新增</button>
         </div>
         <div class="flex justify-between gap-2">
-          <button id="clearCatBtn" class="px-3 py-1 rounded bg-red-500 text-white text-sm hover:bg-red-600">清空分类</button>
-          <button id="closeCatModal" class="px-3 py-1 rounded bg-gray-200 text-sm">关闭</button>
+          <button id="clearCatBtn" class="px-3 py-1 rounded bg-red-500 text-white text-sm hover:bg-red-600" data-key="ClearAllCats">清空分类</button>
+          <button id="closeCatModal" class="px-3 py-1 rounded bg-gray-200 text-sm" data-key="closenotice">关闭</button>
         </div>
       </div>
     `;
@@ -487,7 +490,7 @@ async function renderCard(item) {
           (c) => `
       <div class="flex justify-between items-center p-1 border-b text-sm">
         <span>${c.name}</span>
-        <button data-id="${c.id}" class="text-red-500 hover:text-red-700 text-xs">删除</button>
+        <button data-id="${c.id}" class="text-red-500 hover:text-red-700 text-xs">x</button>
       </div>
     `
         )
@@ -498,19 +501,23 @@ async function renderCard(item) {
         btn.addEventListener("click", async () => {
           const id = btn.dataset.id;
           const name = _allCats.find((c) => c.id == id).name;
-          if (confirm(`确认删除分类 "${name}"？`)) {
-            await deleteCategory(id); // 删除数据库及解绑截图
+
+          const confirmDeleteCat = getLang("confirmDeleteCat");
+          if (confirm(`${confirmDeleteCat} "${name}"？`)) {
+            await deleteCategory(Number(id)); // 删除数据库及解绑截图
             _allCats = _allCats.filter((c) => c.id != id); // 前端 _allCats 同步
             renderList(); // 重新渲染列表
             refreshCatOptions(null); // 刷新下拉框
             renderCategoryFilterBar();
-            showToast("分类已删除", "success");
+            const catDeleted = getLang("catDeleted");
+            showToast(catDeleted, "success");
           }
         });
       });
     }
 
     renderList();
+    updateTexts();
 
     // 新增分类
     modal.querySelector("#addCatBtn").addEventListener("click", async () => {
@@ -522,14 +529,17 @@ async function renderCard(item) {
       input.value = "";
       refreshCatOptions(newId); // 下拉框选中新分类
       renderCategoryFilterBar(); // <-- 顶部分类过滤条刷新
-      showToast("分类已创建", "success");
+      const newcatDone = getLang("newcatDone");
+      showToast(newcatDone, "success");
     });
 
     // 清空分类
     modal.querySelector("#clearCatBtn").addEventListener("click", async () => {
-      if (confirm("确认要清空所有分类吗？这会解绑所有截图的分类！")) {
+      const confirmClearAllCats = getLang("confirmClearAllCats");
+      if (confirm(confirmClearAllCats)) {
         await clearAllCategories();
-        showToast("所有分类已清空", "success", () => location.reload());
+        const allCatsCleared = getLang("allCatsCleared");
+        showToast(allCatsCleared, "success", () => location.reload());
       }
     });
 
@@ -540,7 +550,7 @@ async function renderCard(item) {
   });
 
   const noteBtn = document.createElement("button");
-  noteBtn.textContent = item.note ? "编辑备注" : "添加备注";
+  noteBtn.dataset.key = item.note ? "editNote" : "viewNote";
   noteBtn.className =
     "block px-2 py-1 rounded bg-green-500 text-white text-xs hover:bg-green-600";
   wrap.appendChild(noteBtn);
@@ -548,7 +558,7 @@ async function renderCard(item) {
   // 备注显示区
   const noteLabel = document.createElement("span");
   noteLabel.className = "block text-sm font-bold text-slate-500";
-  if (item.note) noteLabel.textContent = "备注:";
+  if (item.note) noteLabel.dataset.key = "noteLabel";
   wrap.appendChild(noteLabel);
 
   const noteDiv = document.createElement("div");
@@ -612,15 +622,16 @@ async function renderCard(item) {
       "fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50";
     modal.innerHTML = `
       <div class="bg-white rounded-2xl p-6 w-80 shadow-xl space-y-4">
-        <h2 class="text-lg font-semibold text-slate-700">添加备注</h2>
+        <h2 class="text-lg font-semibold text-slate-700" data-key="addNote">添加备注</h2>
         <textarea id="noteInput" class="w-full border rounded-lg p-2 text-sm" rows="4">${shownote}</textarea>
         <div class="flex justify-end gap-2">
-          <button id="noteCancel" class="px-3 py-1 rounded bg-gray-200">取消</button>
-          <button id="noteSave" class="px-3 py-1 rounded bg-blue-600 text-white">保存</button>
+          <button id="noteCancel" class="px-3 py-1 rounded bg-gray-200" data-key="cancelAdd">取消</button>
+          <button id="noteSave" class="px-3 py-1 rounded bg-blue-600 text-white" data-key="save">保存</button>
         </div>
       </div>
     `;
     document.body.appendChild(modal);
+    updateTexts(modal);
 
     const input = modal.querySelector("#noteInput");
     modal
@@ -629,11 +640,12 @@ async function renderCard(item) {
     modal.querySelector("#noteSave").addEventListener("click", async () => {
       const note = input.value.trim();
       await updateScreenshotNote(item.id, note);
-      noteLabel.textContent = note ? "备注:" : "";
+      noteLabel.dataset.key = note ? "noteLabel" : "";
       noteDiv.textContent = note ? note : "";
-      noteBtn.textContent = note ? "编辑备注" : "添加备注";
+      noteBtn.dataset.key = note ? "editNote" : "addNote";
       modal.remove();
-      showToast("备注已保存", "success");
+      const noteSaved = getLang("noteSaved");
+      showToast(noteSaved, "success");
     });
   });
 
@@ -730,7 +742,7 @@ function renderCategoryFilterBar() {
 
   // “全部”按钮
   const allBtn = document.createElement("button");
-  allBtn.textContent = "全部";
+  allBtn.dataset.key = "allCats";
   allBtn.className =
     "px-3 py-1 rounded bg-slate-200 text-sm hover:bg-slate-300";
   setActiveFilter(allBtn);
@@ -761,7 +773,6 @@ function renderCategoryFilterBar() {
 
 // 高亮当前选中分类
 function setActiveFilter(activeBtn) {
-  console.log("1");
   document.querySelectorAll("#categoryFilterBar button").forEach((b) => {
     b.classList.remove("bg-blue-600", "text-white");
     b.classList.add("bg-slate-100");
@@ -1369,6 +1380,7 @@ function showToast(message, status = "success", callback) {
   `;
 
   document.body.appendChild(toast);
+  updateTexts(toast);
 
   // 弹出动画（轻微弹跳）
   requestAnimationFrame(() => {
@@ -1415,7 +1427,6 @@ function showToast(message, status = "success", callback) {
 }
 
 // ---------- Init (lazy: only timeline first) ----------
-updateTexts();
 setActiveTab("timeline");
 const requestdata = await getStorage("filterUserId");
 if (requestdata.filterUserId) {
@@ -1424,6 +1435,7 @@ if (requestdata.filterUserId) {
   chrome.storage.local.remove("filterUserId");
 }
 await rebuildTimeline();
+updateTexts();
 
 // Cleanup
 window.addEventListener("beforeunload", revokeAllURLs);
