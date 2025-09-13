@@ -5,7 +5,7 @@ import {
   deleteAllScreenshotsById,
   exportToJsonFile,
   importFromJsonFile,
-  clearscreenshots,
+  clearAllStores,
   getDailyActivity,
   addManualScreenshot,
   getUserId,
@@ -368,7 +368,7 @@ async function renderCard(item) {
   const manageCatBtn = document.createElement("button");
   manageCatBtn.dataset.key = "CategoryManagement";
   manageCatBtn.className =
-    "ml-2 px-2 py-1 text-xs rounded bg-gray-200 hover:bg-gray-300";
+    "ml-2 px-2 py-1 text-white text-xs rounded bg-blue-500 hover:bg-blue-600";
   wrap.appendChild(manageCatBtn);
 
   // 函数：刷新下拉选项
@@ -470,7 +470,7 @@ async function renderCard(item) {
         <div id="categoryList" class="space-y-2 max-h-60 overflow-y-auto border p-2 rounded"></div>
         <div class="flex gap-2">
           <input id="newCatInput" class="flex-1 border rounded-lg p-2 text-sm" data-placeholder-key="catName" />
-          <button id="addCatBtn" class="px-3 py-1 rounded bg-blue-600 text-white text-sm" data-key="addCat">新增</button>
+          <button id="addCatBtn" class="px-3 py-1 rounded bg-blue-500 text-white text-sm" data-key="addCat">新增</button>
         </div>
         <div class="flex justify-between gap-2">
           <button id="clearCatBtn" class="px-3 py-1 rounded bg-red-500 text-white text-sm hover:bg-red-600" data-key="ClearAllCats">清空分类</button>
@@ -550,7 +550,7 @@ async function renderCard(item) {
   });
 
   const noteBtn = document.createElement("button");
-  noteBtn.dataset.key = item.note ? "editNote" : "viewNote";
+  noteBtn.dataset.key = item.note ? "editNote" : "addNote";
   noteBtn.className =
     "block px-2 py-1 rounded bg-green-500 text-white text-xs hover:bg-green-600";
   wrap.appendChild(noteBtn);
@@ -562,7 +562,9 @@ async function renderCard(item) {
   wrap.appendChild(noteLabel);
 
   const noteDiv = document.createElement("div");
-  noteDiv.className = "block text-xs text-slate-700 break-all note-area";
+  if (item.note)
+    noteDiv.className =
+      "block text-xs text-slate-700 break-all note-area border border-slate-200 rounded px-2 py-2";
   if (item.note) noteDiv.textContent = item.note;
   wrap.appendChild(noteDiv);
 
@@ -622,11 +624,13 @@ async function renderCard(item) {
       "fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50";
     modal.innerHTML = `
       <div class="bg-white rounded-2xl p-6 w-80 shadow-xl space-y-4">
-        <h2 class="text-lg font-semibold text-slate-700" data-key="addNote">添加备注</h2>
+        <h2 class="text-lg font-semibold text-slate-700" data-key="${
+          shownote ? "editNote" : "addNote"
+        }">添加备注</h2>
         <textarea id="noteInput" class="w-full border rounded-lg p-2 text-sm" rows="4">${shownote}</textarea>
         <div class="flex justify-end gap-2">
           <button id="noteCancel" class="px-3 py-1 rounded bg-gray-200" data-key="cancelAdd">取消</button>
-          <button id="noteSave" class="px-3 py-1 rounded bg-blue-600 text-white" data-key="save">保存</button>
+          <button id="noteSave" class="px-3 py-1 rounded bg-green-600 text-white" data-key="save">保存</button>
         </div>
       </div>
     `;
@@ -641,6 +645,12 @@ async function renderCard(item) {
       const note = input.value.trim();
       await updateScreenshotNote(item.id, note);
       noteLabel.dataset.key = note ? "noteLabel" : "";
+      if (!note) {
+        noteLabel.textContent = "";
+      }
+      noteDiv.className = note
+        ? "block text-xs text-slate-700 break-all note-area border border-slate-200 rounded px-2 py-2"
+        : "";
       noteDiv.textContent = note ? note : "";
       noteBtn.dataset.key = note ? "editNote" : "addNote";
       modal.remove();
@@ -749,6 +759,7 @@ function renderCategoryFilterBar() {
   allBtn.addEventListener("click", async () => {
     _categoryId = null;
     await rebuildTimeline();
+    updateTexts();
     setActiveFilter(allBtn);
   });
   bar.appendChild(allBtn);
@@ -765,6 +776,7 @@ function renderCategoryFilterBar() {
       _page = 0;
       clearTimeline(); // 清空原有瀑布流
       await appendNextPage(); // 渲染新的分页
+      updateTexts();
       setActiveFilter(btn);
     });
     bar.appendChild(btn);
@@ -779,18 +791,6 @@ function setActiveFilter(activeBtn) {
   });
   activeBtn.classList.add("bg-blue-600", "text-white");
   activeBtn.classList.remove("bg-slate-100");
-}
-
-// 筛选分类显示
-function filterByCategory(categoryId) {
-  document.querySelectorAll(".timeline-card").forEach((card) => {
-    const cardCatId = card.dataset.categoryId || "";
-    if (!categoryId || cardCatId == categoryId) {
-      card.style.display = "";
-    } else {
-      card.style.display = "none";
-    }
-  });
 }
 
 // 生成左侧时间节点
@@ -1318,7 +1318,7 @@ document.getElementById("clearBtn").addEventListener("click", async () => {
   if (!confirmed) return; // 用户取消
 
   try {
-    await clearscreenshots();
+    await clearAllStores();
 
     // ✅ 清空成功提示
     showToast(`🗑️ ${getLang("clearSuccess")}`, "success", () =>

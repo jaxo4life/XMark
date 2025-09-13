@@ -42,20 +42,46 @@ export function openDB() {
   });
 }
 
-// 清空screenshots数据库
-export async function clearscreenshots() {
-  const db = await openDB(); // 你的 openDB 方法
-  const tx = db.transaction("screenshots", "readwrite");
-  const store = tx.objectStore("screenshots");
+// -------- 清空screenshots数据库 --------
+// 清空指定 store
+export async function clearStore(storeName) {
+  const db = await openDB();
+  const tx = db.transaction(storeName, "readwrite");
+  const store = tx.objectStore(storeName);
 
-  store.clear(); // 清空所有记录
+  store.clear();
 
   await new Promise((resolve, reject) => {
     tx.oncomplete = resolve;
     tx.onerror = (e) => reject(e.target.error);
   });
 
-  console.log("screenshots 对象存储已清空");
+  console.log(`${storeName} 已清空`);
+}
+
+// 单独清空 screenshots
+export async function clearScreenshots() {
+  await clearStore("screenshots");
+}
+
+// 清空 categories
+export async function clearCategories() {
+  await clearStore("categories");
+}
+
+// 清空 screenshotCategories
+export async function clearScreenshotCategories() {
+  await clearStore("screenshotCategories");
+}
+
+// 一次性清空所有表
+export async function clearAllStores() {
+  await Promise.all([
+    clearScreenshots(),
+    clearCategories(),
+    clearScreenshotCategories(),
+  ]);
+  console.log("所有数据表已清空");
 }
 
 // 保存截图 Blob 到 IndexedDB
@@ -244,16 +270,36 @@ export async function importScreenshots(dataArray, options = { merge: true }) {
   });
 }
 
-// 导出到json文件
+// ---------- 导出到 JSON 文件 ----------
 export async function exportToJsonFile() {
-  // 先获取全部数据
-  const allScreenshots = await exportScreenshots();
-  console.log(allScreenshots);
-  // 转成 JSON 字符串
-  const jsonStr = JSON.stringify(allScreenshots, null, 2);
-  console.log(jsonStr);
+  const db = await openDB();
 
-  // 创建 Blob 并生成下载链接
+  // 1. 导出 screenshots（包含 blob -> base64）
+  const screenshots = await exportScreenshots();
+
+  // 2. 导出 categories
+  const categories = await new Promise((resolve, reject) => {
+    const tx = db.transaction("categories", "readonly");
+    const store = tx.objectStore("categories");
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = (e) => reject(e.target.error);
+  });
+
+  // 3. 导出 screenshotCategories（映射表）
+  const screenshotCategories = await new Promise((resolve, reject) => {
+    const tx = db.transaction("screenshotCategories", "readonly");
+    const store = tx.objectStore("screenshotCategories");
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = (e) => reject(e.target.error);
+  });
+
+  // 4. 打包成一个对象
+  const allData = { screenshots, categories, screenshotCategories };
+
+  // 5. 转成 JSON 并下载
+  const jsonStr = JSON.stringify(allData, null, 2);
   const blob = new Blob([jsonStr], { type: "application/json" });
   const url = URL.createObjectURL(blob);
 
@@ -265,25 +311,56 @@ export async function exportToJsonFile() {
   const filename = `XMark/Timeline/XMark-Timeline-export-${timestamp}.json`;
 
   chrome.downloads.download({
-    url: url,
-    filename: filename,
+    url,
+    filename,
     saveAs: false,
   });
 
-  // 释放对象 URL
   URL.revokeObjectURL(url);
 }
 
-// 从jason文件导入
+// ---------- 从 JSON 文件导入 ----------
 export function importFromJsonFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = async (e) => {
       try {
-        const data = JSON.parse(e.target.result);
-        // 导入数据库并合并
-        const count = await importScreenshots(data, { merge: true });
-        resolve(count);
+        const {
+          screenshots = [],
+          categories = [],
+          screenshotCategories = [],
+        } = JSON.parse(e.target.result);
+
+        const db = await openDB();
+
+        // 1. 导入 screenshots
+        const countScreenshots = await importScreenshots(screenshots, {
+          merge: true,
+        });
+
+        // 2. 导入 categories
+        const txCat = db.transaction("categories", "readwrite");
+        const catStore = txCat.objectStore("categories");
+        categories.forEach((c) => catStore.put(c));
+        await new Promise((resolve, reject) => {
+          txCat.oncomplete = resolve;
+          txCat.onerror = (e) => reject(e.target.error);
+        });
+
+        // 3. 导入 screenshotCategories
+        const txSc = db.transaction("screenshotCategories", "readwrite");
+        const scStore = txSc.objectStore("screenshotCategories");
+        screenshotCategories.forEach((sc) => scStore.put(sc));
+        await new Promise((resolve, reject) => {
+          txSc.oncomplete = resolve;
+          txSc.onerror = (e) => reject(e.target.error);
+        });
+
+        resolve({
+          screenshots: countScreenshots,
+          categories: categories.length,
+          screenshotCategories: screenshotCategories.length,
+        });
       } catch (err) {
         reject(err);
       }
@@ -593,7 +670,7 @@ export async function deleteCategory(categoryId) {
   // 1. 删除 categories 表里的分类
   const tx1 = db.transaction("categories", "readwrite");
   const catStore = tx1.objectStore("categories");
-    const item = await catStore.get(categoryId);
+  const item = await catStore.get(categoryId);
   console.log("待删除分类:", categoryId, item);
   await catStore.delete(categoryId);
   await tx1.done;
@@ -605,7 +682,7 @@ export async function deleteCategory(categoryId) {
   const allMappings = await promisifyRequest(scStore.getAll());
   for (const m of allMappings) {
     if (m.categoryId == categoryId) {
-            console.log("删除绑定:", m);
+      console.log("删除绑定:", m);
       await scStore.delete([m.screenshotId, m.categoryId]);
     }
   }

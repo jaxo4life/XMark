@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/version-5.2.2-blue.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-5.2.3-blue.svg" alt="Version"></a>
   <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Manifest-V3-green.svg" alt="Manifest"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Chrome%20Extension-orange.svg" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
@@ -15,6 +15,12 @@
 
 <details open>
 <summary><b>v5.x</b></summary>
+
+### v5.2.3
+| 中文 | English |
+|------|----------|
+| 更新数据管理 | Update Data Management |
+| 修复若干 bug | Bug fixes |
 
 ### v5.2.2
 | 中文 | English |
