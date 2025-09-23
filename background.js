@@ -6,6 +6,7 @@ import {
   getScreenshotsByUserId,
   getScreenshotCountByUserId,
   getUserIdinDB,
+  getAvatar,
 } from "./utils/db.js";
 
 // 扩展启动时，恢复自动备份
@@ -338,7 +339,7 @@ async function ensureThreeLevelDirExists(baseUrl, handle, headers) {
         });
         console.log("MKCOL 创建成功:", currentUrl);
       } catch (err) {
-        console.warn("MKCOL 创建失败（可能已存在）:", currentUrl, err);
+        console.log("MKCOL 创建失败（可能已存在）:", currentUrl, err);
       }
     } else {
       console.log("目录已存在:", currentUrl);
@@ -408,52 +409,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // 获取头像
   if (request.action === "fetchAvatar") {
     (async () => {
-      const maxRetries = 3;
-      let attempt = 0;
-      let ttl = request.ttl; // 第一次传进来的 TTL
-      let blob = null;
-
       try {
-        while (attempt < maxRetries) {
-          const url = `https://unavatar.io/x/${request.username}?ttl=${ttl}h`;
-          const res = await fetch(url);
-          blob = await res.blob();
-          const contentType = res.headers.get("content-type") || "";
-
-          // 判断是否是默认头像
-          if (contentType.includes("image/png") && blob.size < 5000) {
-            attempt++;
-
-            // 动态修改 ttl，比如随机生成新的
-            ttl = Math.floor(Math.random() * 120) + 48;
-
-            console.warn(
-              `Fallback avatar detected, retrying with new TTL: ${ttl} (${attempt}/${maxRetries})...`
-            );
-
-            // 通知 content script 更新 TTL
-            chrome.tabs.sendMessage(sender.tab.id, {
-              action: "updateTTL",
-              username: request.username,
-              ttl,
-            });
-          } else {
-            break; // 正常头像，跳出循环
-          }
-        }
-
-        // Blob 转 Base64
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          sendResponse({ src: reader.result });
-        };
-        reader.readAsDataURL(blob);
+        // 直接调用 getAvatar 获取 base64
+        const base64 = await getAvatar(request.username);
+        sendResponse({ src: base64 });
       } catch (err) {
-        console.error("fetchAvatar error", err);
+        console.error("fetchAvatar error:", err);
         sendResponse({ src: null });
       }
     })();
-    return true; // 异步 sendResponse 必须返回 true
+
+    return true;
   }
 
   if (request.action === "partialShot") {

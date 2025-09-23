@@ -17,6 +17,7 @@ import {
   bindCategoryToScreenshot,
   updateScreenshotNote,
   getScreenshotsByCategory,
+  getAvatar,
 } from "../utils/db.js";
 import { updateTexts, getLang, resetLangData } from "../utils/lang.js";
 
@@ -183,10 +184,6 @@ async function renderRanking(items) {
   const list = document.createElement("div");
   list.className = "flex flex-wrap gap-4 justify-center";
 
-  // 只读一次 avatarTTLMap（避免循环内频繁读写）
-  const storageRes = await chrome.storage.local.get("avatarTTLMap");
-  const avatarTTLMap = storageRes.avatarTTLMap || {};
-
   // 先同步创建并 append 占位卡片（保证顺序）
   arr.forEach(({ userId, count, handle }, idx) => {
     const card = document.createElement("div");
@@ -200,9 +197,6 @@ async function renderRanking(items) {
       card.className +=
         " bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50";
 
-    // 计算临时 ttl（若没有，则生成一个，但暂不写回 storage）
-    const initTtl =
-      avatarTTLMap[handle] || Math.floor(Math.random() * 120) + 48;
     card.innerHTML = `
       <div class="absolute top-2 left-2 text-xl font-extrabold drop-shadow-md">#${
         idx + 1
@@ -216,7 +210,7 @@ async function renderRanking(items) {
       <div class="flex mt-6 h-28">
         <div class="flex-shrink-0 w-16 h-16">
           <img class="w-16 h-16 rounded-full object-cover border-2 border-white shadow-md avatar-img"
-               src="https://unavatar.io/x/${handle}?ttl=${initTtl}h" alt="${handle}">
+               src="" alt="${handle}">
         </div>
         <div class="flex-1 flex flex-col ml-3">
           <div class="flex-1 flex flex-col items-center justify-center text-left truncate">
@@ -244,36 +238,29 @@ async function renderRanking(items) {
   const updatePromises = arr.map(async ({ userId, handle }, idx) => {
     const card = list.children[idx];
     try {
+      // 更新用户备注名
       const noteObj = await getUserNote(userId);
       const nameText = noteObj?.name || "";
       const nameSpan = card.querySelector(".name-text");
       if (nameSpan) nameSpan.textContent = nameText;
 
-      // TTL 检查与可能替换（并仅在内存中更新 avatarTTLMap）
-      if (!avatarTTLMap[handle])
-        avatarTTLMap[handle] = Math.floor(Math.random() * 120) + 48;
-      let url = `https://unavatar.io/x/${handle}?ttl=${avatarTTLMap[handle]}h`;
-
-      // fetch 用于判断是否为默认头像
-      const res = await fetch(url);
-      const contentType = res.headers.get("content-type") || "";
-      const blob = await res.blob();
-      if (contentType.includes("image/png") && blob.size < 5000) {
-        // 可能是默认头像 -> 更新 ttl（内存）并刷新 img src
-        avatarTTLMap[handle] = Math.floor(Math.random() * 120) + 48;
-        url = `https://unavatar.io/x/${handle}?ttl=${avatarTTLMap[handle]}h`;
-      }
-
+      // 加载头像
       const img = card.querySelector(".avatar-img");
-      if (img) img.src = url;
+      if (img) {
+        try {
+          const base64 = await getAvatar(handle); // ✅ 从 IndexedDB 或网络获取
+          img.src = base64;
+        } catch (err) {
+          console.warn("头像获取失败:", handle, err);
+          img.src = "default-avatar.png"; // fallback
+        }
+      }
     } catch (err) {
       console.error("更新排名卡片失败：", err);
     }
   });
 
-  // 等待全部更新完成后，再一次性写回 storage（减少竞态）
   await Promise.all(updatePromises);
-  await chrome.storage.local.set({ avatarTTLMap });
 
   // 只绑定一次点击事件（防止重复绑定）
   if (!root.dataset.listenerAttached) {
@@ -343,14 +330,21 @@ async function renderCard(item) {
     </div>
   `;
 
+  // 插入图片 (加 wrapper 来控制高度)
+  const imgWrapper = document.createElement("div");
+  imgWrapper.className = "overflow-hidden rounded-xl"; // 超出部分裁掉
+  imgWrapper.style.maxHeight = "60vh";
+
   // 插入图片
   const img = document.createElement("img");
-  img.className = "thumb rounded-xl w-full h-auto";
+  img.className = "thumb w-full object-cover";
   img.loading = "lazy";
   img.decoding = "async";
   img.src = createObjURL(item.blob);
   img.alt = `screenshot of ${item.handle}`;
-  wrap.appendChild(img);
+
+  imgWrapper.appendChild(img);
+  wrap.appendChild(imgWrapper);
 
   // 分类标签
   const catLabel = document.createElement("span");
@@ -503,7 +497,10 @@ async function renderCard(item) {
           const name = _allCats.find((c) => c.id == id).name;
 
           const confirmDeleteCat = getLang("confirmDeleteCat");
-          if (confirm(`${confirmDeleteCat} "${name}"？`)) {
+          const confirmed = await showConfirm(
+            `${confirmDeleteCat} "${name}"？`
+          );
+          if (confirmed) {
             await deleteCategory(Number(id)); // 删除数据库及解绑截图
             _allCats = _allCats.filter((c) => c.id != id); // 前端 _allCats 同步
             renderList(); // 重新渲染列表
@@ -536,7 +533,8 @@ async function renderCard(item) {
     // 清空分类
     modal.querySelector("#clearCatBtn").addEventListener("click", async () => {
       const confirmClearAllCats = getLang("confirmClearAllCats");
-      if (confirm(confirmClearAllCats)) {
+      const confirmed = await showConfirm(confirmClearAllCats);
+      if (confirmed) {
         await clearAllCategories();
         const allCatsCleared = getLang("allCatsCleared");
         showToast(allCatsCleared, "success", () => location.reload());
@@ -602,7 +600,8 @@ async function renderCard(item) {
   // 删除截图
   delBtn.addEventListener("click", async () => {
     const text = getLang("deleteScreenshot");
-    if (confirm(text)) {
+    const confirmed = await showConfirm(text);
+    if (confirmed) {
       try {
         await deleteScreenshotById(item.id);
         wrap.remove(); // 从 DOM 移除
@@ -727,7 +726,7 @@ async function rebuildTimeline() {
   _all = await getScreenshots();
   _filtered = applyFilters(_all);
   clearTimeline();
-  await renderRanking(_filtered);
+  renderRanking(_filtered);
   renderCategoryFilterBar();
   await appendNextPage();
   setupInfiniteScroll();
@@ -753,14 +752,13 @@ function renderCategoryFilterBar() {
   // “全部”按钮
   const allBtn = document.createElement("button");
   allBtn.dataset.key = "allCats";
-  allBtn.className =
-    "px-3 py-1 rounded bg-slate-200 text-sm hover:bg-slate-300";
+  allBtn.className = "px-3 py-1 rounded text-base font-bold hover:bg-blue-300";
+
   setActiveFilter(allBtn);
   allBtn.addEventListener("click", async () => {
     _categoryId = null;
     await rebuildTimeline();
     updateTexts();
-    setActiveFilter(allBtn);
   });
   bar.appendChild(allBtn);
 
@@ -768,15 +766,15 @@ function renderCategoryFilterBar() {
   _allCats.forEach(async (c) => {
     const btn = document.createElement("button");
     btn.textContent = c.name;
-    btn.className = "px-3 py-1 rounded bg-slate-100 text-sm hover:bg-slate-300";
+    btn.className = "px-3 py-1 rounded text-sm hover:bg-blue-300";
+
     btn.addEventListener("click", async () => {
       _categoryId = c.id;
       _filtered = await getScreenshotsByCategory(c.id);
-      console.log(_filtered);
       _page = 0;
       clearTimeline(); // 清空原有瀑布流
       await appendNextPage(); // 渲染新的分页
-      updateTexts();
+      await updateTexts();
       setActiveFilter(btn);
     });
     bar.appendChild(btn);
@@ -1112,18 +1110,20 @@ document.getElementById("endDate").addEventListener("change", async (e) => {
   await rebuildTimeline();
 });
 
-document.getElementById("columnCount").addEventListener("change", () => {
+document.getElementById("columnCount").addEventListener("change", async () => {
   const grid = $("#timeline-grid");
   grid.innerHTML = ""; // 清空已有的列
   _page = 0; // 重置分页
-  appendNextPage(); // 重新渲染
+  await appendNextPage(); // 重新渲染
+  await updateTexts();
 });
 
 // 清空userId所有截图
 document
   .getElementById("clearallbyuserId")
   .addEventListener("click", async () => {
-    const confirmed = confirm("⚠️ 确认要清空所有截图吗？此操作不可恢复！");
+    const confirmClearAllScreenshots = getLang("confirmClearAllScreenshots");
+    const confirmed = await showConfirm(confirmClearAllScreenshots);
     if (!confirmed) return; // 用户取消
 
     try {
@@ -1314,7 +1314,8 @@ function createManualPanel() {
 
 // 清空所有截图
 document.getElementById("clearBtn").addEventListener("click", async () => {
-  const confirmed = confirm("⚠️ 确认要清空所有截图吗？此操作不可恢复！");
+  const confirmClearAllScreenshots = getLang("confirmClearAllScreenshots");
+  const confirmed = await showConfirm(confirmClearAllScreenshots);
   if (!confirmed) return; // 用户取消
 
   try {
@@ -1424,6 +1425,67 @@ function showToast(message, status = "success", callback) {
 
   // 2000ms 自动消失
   setTimeout(removeToast, 2000);
+}
+
+// 确认函数
+function showConfirm(message) {
+  return new Promise((resolve) => {
+    // 创建遮罩层
+    const modal = document.createElement("div");
+    modal.className =
+      "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 opacity-0 transition-opacity duration-300";
+
+    // 创建内容
+    modal.innerHTML = `
+      <div class="bg-red-700 rounded-2xl shadow-2xl p-6 w-90 text-center transform scale-95 transition-transform duration-300">
+        <h2 class="text-lg font-semibold text-white mb-3" data-key="confirmTitle">确认操作</h2>
+        <p class="text-base text-white mb-6">${message}</p>
+        <div class="flex justify-center gap-8">
+          <button class="confirm-cancel px-5 py-2 rounded-xl bg-gray-200 text-gray-700 hover:text-white hover:bg-green-600 transition-colors" data-key="NO">
+            取消
+          </button>
+          <button class="confirm-ok px-5 py-2 rounded-xl bg-gray-200 text-gray-700 hover:text-white hover:bg-black shadow-md transition-colors" data-key="YES">
+            确认
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    updateTexts();
+
+    // 强制触发一次 reflow 以启动动画
+    requestAnimationFrame(() => {
+      modal.classList.remove("opacity-0");
+      const content = modal.querySelector("div");
+      content.classList.remove("scale-95");
+      content.classList.add("scale-100");
+    });
+
+    // 找按钮
+    const okBtn = modal.querySelector(".confirm-ok");
+    const cancelBtn = modal.querySelector(".confirm-cancel");
+
+    // 关闭动画 & 清理
+    const cleanup = () => {
+      modal.classList.add("opacity-0");
+      const content = modal.querySelector("div");
+      content.classList.remove("scale-100");
+      content.classList.add("scale-95");
+
+      setTimeout(() => modal.remove(), 300); // 等动画结束再移除
+    };
+
+    okBtn.addEventListener("click", () => {
+      cleanup();
+      resolve(true);
+    });
+
+    cancelBtn.addEventListener("click", () => {
+      cleanup();
+      resolve(false);
+    });
+  });
 }
 
 // ---------- Init (lazy: only timeline first) ----------

@@ -1150,7 +1150,7 @@ async function makedir(baseUrl, headers) {
         console.log("目录已存在或已创建:", currentUrl);
         result.existed = true;
       } else {
-        console.warn(
+        console.log(
           "MKCOL 创建失败:",
           currentUrl,
           mkcolRes.status,
@@ -1158,7 +1158,7 @@ async function makedir(baseUrl, headers) {
         );
       }
     } catch (err) {
-      console.warn("目录检查/创建异常:", currentUrl, err);
+      console.log("目录检查/创建异常:", currentUrl, err);
     }
   }
 
@@ -2206,7 +2206,7 @@ async function getWebDAVBackupList(config) {
   }
 
   if (backupFiles.length === 0) {
-    console.warn("未找到任何备份文件！");
+    console.log("未找到任何备份文件！");
     return [];
   }
 
@@ -2233,7 +2233,7 @@ async function fetchBackupFilesWithPropfind(config, headers) {
     });
 
     if (!res.ok) {
-      console.warn("PROPFIND 请求失败，状态码:", res.status);
+      console.log("PROPFIND 请求失败，状态码:", res.status);
       return backupFiles;
     }
 
@@ -2290,7 +2290,7 @@ async function fetchBackupFilesWithPropfind(config, headers) {
 
     console.log(`PROPFIND 获取到 ${backupFiles.length} 个备份文件`);
   } catch (err) {
-    console.warn("PROPFIND 请求异常:", err);
+    console.log("PROPFIND 请求异常:", err);
   }
 
   return backupFiles;

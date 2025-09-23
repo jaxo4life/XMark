@@ -1,7 +1,7 @@
 // db.js
 export function openDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open("ScreenshotDB", 6); // 版本号 +1
+    const request = indexedDB.open("ScreenshotDB", 7); // 版本号 +1
     request.onupgradeneeded = (e) => {
       const db = e.target.result;
 
@@ -34,6 +34,15 @@ export function openDB() {
         });
         scStore.createIndex("screenshotId", "screenshotId", { unique: false });
         scStore.createIndex("categoryId", "categoryId", { unique: false });
+      }
+
+      // ---- avatars ----
+      if (!db.objectStoreNames.contains("avatars")) {
+        const avatarStore = db.createObjectStore("avatars", {
+          keyPath: "username",
+        });
+        avatarStore.createIndex("username", "username", { unique: true });
+        avatarStore.createIndex("timestamp", "timestamp", { unique: false });
       }
     };
 
@@ -845,4 +854,93 @@ export async function getScreenshotsByCategory(categoryId) {
   }
 
   return results;
+}
+
+// ---------- 头像 ----------
+// 保存头像（base64）
+export async function setAvatar(username, base64) {
+  const db = await openDB();
+  const tx = db.transaction("avatars", "readwrite");
+  const store = tx.objectStore("avatars");
+
+  const record = {
+    username,
+    base64, // 存储 base64
+    timestamp: Date.now(),
+  };
+
+  store.put(record);
+
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve(record);
+    tx.onerror = (e) => reject(e.target.error);
+  });
+}
+
+// 获取头像（优先缓存）
+export async function getAvatar(username, maxAge = 7 * 24 * 60 * 60 * 1000) {
+  const db = await openDB();
+  const tx = db.transaction("avatars", "readonly");
+  const store = tx.objectStore("avatars");
+
+  // 读取缓存
+  const cached = await new Promise((resolve) => {
+    const req = store.get(username);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+  });
+
+  // 有缓存且没过期 → 返回
+  if (cached && Date.now() - cached.timestamp < maxAge) {
+    return cached.base64;
+  }
+
+  // 拉取 unavatar
+  try {
+    const maxRetries = 3;
+    let blob = null;
+    let base64 = null;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const ttl = Math.floor(Math.random() * 48) + 12; // 随机 12~60 小时
+      const url = `https://unavatar.io/x/${encodeURIComponent(
+        username
+      )}?ttl=${ttl}h`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("fetch failed");
+
+      const tempBlob = await res.blob();
+      const contentType = res.headers.get("content-type") || "";
+
+      // 检查是否 fallback
+      if (contentType.includes("image/png") && tempBlob.size < 5000) {
+        console.log(`Fallback avatar for ${username}, retry ${attempt + 1}`);
+        continue; // 尝试下一次
+      }
+
+      blob = tempBlob;
+      break; // 成功获取到合格头像
+    }
+
+    if (!blob) {
+      console.log(`Failed to get valid avatar for ${username}`);
+      return cached ? cached.base64 : null; // 回退旧缓存
+    }
+
+    // Blob 转 base64
+    base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+    // 存缓存（只保存合格头像）
+    await setAvatar(username, base64);
+
+    return base64;
+  } catch (err) {
+    console.log("getAvatar error:", err);
+    return cached ? cached.base64 : null; // 回退旧缓存
+  }
 }

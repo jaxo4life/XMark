@@ -283,21 +283,10 @@ class TwitterNotes {
       img.style.borderRadius = "50%";
       img.style.marginRight = "10px";
 
-      // 获取缓存
-      const result = await chrome.storage.local.get("avatarTTLMap");
-      this.avatarTTLMap = result.avatarTTLMap || {};
-
-      // 如果没有TTL就新随机
-      if (!this.avatarTTLMap[user.username]) {
-        await this.updateUserTTL(user.username);
-      }
-      const initialTTL = this.avatarTTLMap[user.username];
-
       chrome.runtime.sendMessage(
         {
           action: "fetchAvatar",
           username: user.username,
-          ttl: initialTTL,
         },
         (res) => {
           if (res && res.src) {
@@ -320,11 +309,6 @@ class TwitterNotes {
 
     // 滑入面板
     requestAnimationFrame(() => (panel.style.right = "0"));
-  }
-
-  async updateUserTTL(username, ttl = null) {
-    this.avatarTTLMap[username] = ttl ?? Math.floor(Math.random() * 120) + 48;
-    await chrome.storage.local.set({ avatarTTLMap: this.avatarTTLMap });
   }
 
   observeGroups() {
@@ -2169,12 +2153,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         .then(() => sendResponse({ ok: true }))
         .catch((err) => sendResponse({ ok: false, error: err.message }));
       return true; // 表示异步响应
-    }
-  }
-
-  if (message?.action === "updateTTL") {
-    if (twitterNotes.initGroups) {
-      twitterNotes.updateUserTTL(message.username, message.ttl);
     }
   }
 });
