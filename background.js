@@ -39,7 +39,7 @@ async function reportInstall(uuid) {
   // 获取地区信息（语言+时区）
   const language = navigator.language;
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-console.log(language,timezone)
+
   try {
     await fetch("https://xmark.jaxo.workers.dev/report", {
       method: "POST",
@@ -52,10 +52,7 @@ console.log(language,timezone)
         timezone,
       }),
     });
-    console.log("安装上报成功");
-  } catch (err) {
-    console.error("安装上报失败:", err);
-  }
+  } catch (err) {}
 }
 
 chrome.runtime.onInstalled.addListener(async (details) => {
