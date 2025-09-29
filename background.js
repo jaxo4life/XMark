@@ -18,8 +18,58 @@ chrome.runtime.onStartup.addListener(async () => {
   }
 });
 
-chrome.runtime.onInstalled.addListener(async () => {
+// 生成或获取 UUID
+async function getOrCreateUUID() {
+  return new Promise((resolve) => {
+    chrome.storage.local.get("uuid", (data) => {
+      if (data.uuid) {
+        resolve(data.uuid);
+      } else {
+        const uuid = crypto.randomUUID();
+        chrome.storage.local.set({ uuid }, () => resolve(uuid));
+      }
+    });
+  });
+}
+
+// 封装上报函数
+async function reportInstall(uuid) {
+  const installTime = new Date().toISOString();
+
+  // 获取地区信息（语言+时区）
+  const language = navigator.language;
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+console.log(language,timezone)
+  try {
+    await fetch("https://xmark.jaxo.workers.dev/report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        uuid,
+        installedAt: installTime,
+        extensionId: chrome.runtime.id,
+        language,
+        timezone,
+      }),
+    });
+    console.log("安装上报成功");
+  } catch (err) {
+    console.error("安装上报失败:", err);
+  }
+}
+
+chrome.runtime.onInstalled.addListener(async (details) => {
   console.log("Twitter Notes 扩展已安装/更新");
+
+  // 确保用户有 UUID
+  const uuid = await getOrCreateUUID();
+
+  // 尝试用 storage 标记是否已上报过
+  const data = await chrome.storage.local.get("reported");
+  if (!data.reported) {
+    await reportInstall(uuid);
+    await chrome.storage.local.set({ reported: true });
+  }
 
   // 初始化默认设置
   const result = await chrome.storage.local.get(["autoBackupSettings"]);
