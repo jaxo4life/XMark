@@ -164,6 +164,23 @@ document.addEventListener("DOMContentLoaded", async function () {
   document.getElementById("fileInput").addEventListener("change", importNotes);
   document.getElementById("clearBtn").addEventListener("click", clearAllNotes);
 
+  document
+    .getElementById("deleteUserNote")
+    .addEventListener("click", async () => {
+      const username = document.getElementById("usernameInput").value.trim();
+      if (!username) {
+        alert("请输入要删除的用户名！");
+        return;
+      }
+      const success = await deleteUserNote(username);
+
+      if (success) {
+        alert(`✅ 已删除用户「${username}」的备注`);
+      } else {
+        alert(`⚠️ 未找到用户「${username}」的备注`);
+      }
+    });
+
   // WebDAV 备份事件
   document
     .getElementById("webdavBackup")
@@ -911,6 +928,32 @@ async function clearAllNotes() {
   } catch (error) {
     showMessage(langData.clearFail, "error");
   }
+}
+
+// 删除特定用户备注
+async function deleteUserNote(username) {
+  // 先取出
+  const result = await chrome.storage.local.get("twitterNotes");
+  const notes = result.twitterNotes || {};
+
+  let targetKey = null;
+  for (const id in notes) {
+    const note = notes[id];
+    if (note.username === username) {
+      targetKey = id;
+      break;
+    }
+  }
+
+  if (!targetKey) {
+    return false; // 没找到
+  }
+
+  // 删除并写回
+  delete notes[targetKey];
+  await chrome.storage.local.set({ twitterNotes: notes });
+
+  return true;
 }
 
 /* ==========================WebDAV模块========================== */

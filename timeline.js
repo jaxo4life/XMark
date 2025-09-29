@@ -355,7 +355,7 @@ async function renderCard(item) {
   // 分类下拉
   const catSelect = document.createElement("select");
   catSelect.className =
-    "w-auto border rounded ml-2 text-center text-xs text-slate-600 hover:bg-slate-50 cursor-pointer";
+    "w-1/3 border rounded ml-2 text-center text-xs text-slate-600 hover:bg-slate-50 cursor-pointer";
   wrap.appendChild(catSelect);
 
   // 管理分类按钮

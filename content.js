@@ -1112,8 +1112,15 @@ class TwitterNotes {
       noteButton.setAttribute("data-user-id", userId);
     }
 
-    noteButton.addEventListener("click", (e) => {
+    noteButton.addEventListener("click", async (e) => {
       e.preventDefault();
+
+      if (!userId) {
+        userId = await this.fetchUserIdFromProfile(username);
+        // 缓存用户名到ID的映射
+        this.userIdCache.set(username, userId);
+      }
+
       this.showNoteDialog(userId, username);
     });
 
