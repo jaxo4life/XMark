@@ -223,6 +223,14 @@
           </h3>
           <p id="feature4-desc" class="text-slate-600"></p>
         </div>
+        <div
+          class="glass-card rounded-2xl shadow p-6 hover:shadow-lg transition card-hover reveal"
+        >
+          <h3 id="feature5-title" class="text-xl font-bold mb-3">
+            🚫 广告过滤
+          </h3>
+          <p id="feature5-desc" class="text-slate-600"></p>
+        </div>
       </div>
     </section>
 
@@ -392,6 +400,9 @@
           feature4Title: "🔍 智能筛选",
           feature4Desc:
             "按用户、时间、关键词快速过滤截图，配合备注功能，帮你高效定位关键信息。",
+          feature5Title: "🚫 广告过滤",
+          feature5Desc:
+            "自动识别并隐藏时间线中的广告推文，中英文界面均支持，让你的信息流更清爽。",
           versionTitle: "📦 当前版本",
           releaseLink: "查看更新日志",
           footerText:
@@ -415,6 +426,9 @@
           feature4Title: "🔍 Smart Filtering",
           feature4Desc:
             "Quickly filter screenshots by user, date, or keyword. Combined with notes, it helps you locate key information efficiently.",
+          feature5Title: "🚫 Ad Filtering",
+          feature5Desc:
+            "Automatically detects and hides promoted tweets in your timeline. Works in both Chinese and English for a cleaner feed.",
           versionTitle: "📦 Current Version",
           releaseLink: "View Changelog",
           footerText:
@@ -441,6 +455,9 @@
         document.getElementById("feature4-title").textContent =
           map.feature4Title;
         document.getElementById("feature4-desc").textContent = map.feature4Desc;
+        document.getElementById("feature5-title").textContent =
+          map.feature5Title;
+        document.getElementById("feature5-desc").textContent = map.feature5Desc;
         document.getElementById("version-title").textContent = map.versionTitle;
         document.getElementById("release-link").textContent = map.releaseLink;
         document.getElementById("footer-text").innerHTML = map.footerText;
