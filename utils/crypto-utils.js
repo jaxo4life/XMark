@@ -105,8 +105,8 @@ export class CryptoUtils {
   }
 
   // 加密WebDAV配置
-  async encryptWebDAVConfig(config, chrome) {
-    const key = await this.getMasterKey(chrome);
+  async encryptWebDAVConfig(config) {
+    const key = await this.getMasterKey();
 
     const encryptedConfig = {
       url: config.url, // URL不加密，便于调试
@@ -123,13 +123,13 @@ export class CryptoUtils {
   }
 
   // 解密WebDAV配置
-  async decryptWebDAVConfig(encryptedConfig, chrome) {
+  async decryptWebDAVConfig(encryptedConfig) {
     if (!encryptedConfig.encrypted) {
       // 如果不是加密的配置，直接返回
       return encryptedConfig;
     }
 
-    const key = await this.getMasterKey(chrome);
+    const key = await this.getMasterKey();
 
     const config = {
       url: encryptedConfig.url,

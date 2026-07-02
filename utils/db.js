@@ -1,7 +1,7 @@
 // db.js
 export function openDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open("ScreenshotDB", 7); // 版本号 +1
+    const request = indexedDB.open("ScreenshotDB", 8); // 版本号 +1
     request.onupgradeneeded = (e) => {
       const db = e.target.result;
 
@@ -48,6 +48,9 @@ export function openDB() {
 
     request.onsuccess = (e) => resolve(e.target.result);
     request.onerror = (e) => reject(e.target.error);
+    request.onblocked = () => {
+      console.warn("IndexedDB 升级被阻塞，请关闭其他使用该数据库的标签页");
+    };
   });
 }
 
@@ -323,9 +326,9 @@ export async function exportToJsonFile() {
     url,
     filename,
     saveAs: false,
+  }, () => {
+    URL.revokeObjectURL(url);
   });
-
-  URL.revokeObjectURL(url);
 }
 
 // ---------- 从 JSON 文件导入 ----------
@@ -452,10 +455,17 @@ export async function getScreenshotsByUserId(userId) {
   });
 }
 
-// 查询某个 userId 的截图数量
+// 查询某个 userId 的截图数量（仅用 count，不加载 blob）
 export async function getScreenshotCountByUserId(userId) {
-  const screenshots = await getScreenshotsByUserId(userId);
-  return screenshots.length;
+  const db = await openDB();
+  const tx = db.transaction("screenshots", "readonly");
+  const store = tx.objectStore("screenshots");
+  const index = store.index("userId");
+  return new Promise((resolve, reject) => {
+    const req = index.count(userId);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = (e) => reject(e.target.error);
+  });
 }
 
 // 高效获取所有 userId
@@ -878,7 +888,7 @@ export async function setAvatar(username, base64) {
 }
 
 // 获取头像（优先缓存）
-export async function getAvatar(username, maxAge = 7 * 24 * 60 * 60 * 1000) {
+export async function getAvatar(username, maxAge = 30 * 24 * 60 * 60 * 1000) {
   const db = await openDB();
   const tx = db.transaction("avatars", "readonly");
   const store = tx.objectStore("avatars");

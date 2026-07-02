@@ -57,6 +57,8 @@ class TwitterNotes {
     this._profileProcessStatus = new Map();
     this.extensionEnabled = true;
     this.notificationElement = null;
+    this._followingObserver = null;
+    this._userTweetsObserver = null;
   }
 
   async init() {
@@ -381,6 +383,11 @@ class TwitterNotes {
         "width=1,height=1,left=-2000,top=" + window.screen.height + ""
       );
 
+      if (!tempWindow) {
+        reject("弹窗被浏览器拦截，无法获取用户 ID");
+        return;
+      }
+
       const checkInterval = setInterval(async () => {
         try {
           const id = await this.extractUserIdFromDocument(
@@ -626,6 +633,9 @@ class TwitterNotes {
   }
 
   processPage() {
+    // 清理页面切换前的临时 Observer
+    this._disconnectPageObservers();
+
     // 加载语言
     let langData = null;
     updateTexts();
@@ -639,6 +649,17 @@ class TwitterNotes {
     } else {
       // 在主页等其他页面，基于用户名显示备注
       this.processHomePage();
+    }
+  }
+
+  _disconnectPageObservers() {
+    if (this._followingObserver) {
+      this._followingObserver.disconnect();
+      this._followingObserver = null;
+    }
+    if (this._userTweetsObserver) {
+      this._userTweetsObserver.disconnect();
+      this._userTweetsObserver = null;
     }
   }
 
@@ -709,6 +730,18 @@ class TwitterNotes {
     tweets.forEach((tweet) => {
       if (tweet.hasAttribute("data-twitter-notes-processed")) return;
 
+      const hintKeywords = ["广告", "推荐", "Promoted", "Recommended", "Ad"];
+
+      const isAd = [...tweet.querySelectorAll('div[dir="ltr"] span')].some(
+        (span) => hintKeywords.includes((span.innerText || "").trim())
+      );
+
+      if (isAd) {
+        tweet.setAttribute("data-twitter-notes-processed", "true");
+        tweet.style.display = "none";
+        return;
+      }
+
       const userNameElement = tweet.querySelector(
         '[data-testid="User-Name"] a[href*="/"]'
       );
@@ -724,7 +757,10 @@ class TwitterNotes {
 
   // 在用户页面的推文中也显示备注
   displayNotesInUserTweets(userId, username) {
-    const observer = new MutationObserver(() => {
+    if (this._userTweetsObserver) {
+      this._userTweetsObserver.disconnect();
+    }
+    this._userTweetsObserver = new MutationObserver(() => {
       const tweets = document.querySelectorAll('[data-testid="tweet"]');
       tweets.forEach((tweet) => {
         if (tweet.hasAttribute("data-twitter-notes-user-processed")) return;
@@ -745,7 +781,7 @@ class TwitterNotes {
       });
     });
 
-    observer.observe(document.body, {
+    this._userTweetsObserver.observe(document.body, {
       childList: true,
       subtree: true,
     });
@@ -786,134 +822,9 @@ class TwitterNotes {
     );
     if (!userNameContainer) return;
 
-    // 检查是否已经添加过
-    if (userNameContainer.querySelector(".twitter-notes-inline")) return;
-
-    const noteContainer = document.createElement("span");
-    noteContainer.className = "twitter-notes-inline";
-    noteContainer.setAttribute("data-username", username);
-    if (userId) {
-      noteContainer.setAttribute("data-user-id", userId);
-    }
-
-    // 创建备注显示元素（放在前面）
-    const noteDisplay = document.createElement("span");
-    noteDisplay.className = "twitter-notes-display";
-
-    // 创建备注按钮（放在后面）
-    const noteButton = document.createElement("button");
-    noteButton.className = "twitter-notes-inline-button";
-    noteButton.innerHTML = "📝";
-
-    // 创建详情按钮
-    const detailButton = document.createElement("button");
-    detailButton.className = "twitter-notes-detail-button";
-    detailButton.innerHTML = "ℹ️";
-    detailButton.title = "查看详情";
-    detailButton.style.display = "none";
-
-    // 创建详情按钮
-    const sreenshotsButton = document.createElement("button");
-    sreenshotsButton.className = "view-screenshots-button";
-    sreenshotsButton.innerHTML = "📸";
-    sreenshotsButton.style.display = "none";
-
-    // 获取备注数据
-    const currentNote = this.getUserNote(username, userId);
-
-    if (currentNote) {
-      const noteName = currentNote.name || "";
-      const noteDescription = currentNote.description || "";
-
-      noteButton.classList.add("has-note");
-      noteDisplay.textContent = `${noteName}`;
-      noteDisplay.style.display = "inline";
-
-      // 添加标签颜色显示
-      if (currentNote.tagId) {
-        chrome.storage.local.get(["noteTags"]).then((result) => {
-          const tags = result.noteTags || {};
-          const tag = tags[currentNote.tagId];
-          if (tag) {
-            noteDisplay.style.backgroundColor = tag.color;
-            noteDisplay.style.color = "white";
-          }
-        });
-      }
-
-      // 如果有描述，显示详情按钮
-      if (noteDescription) {
-        detailButton.style.display = "inline";
-        detailButton.dataset.titleKey = "viewDetail";
-      }
-
-      noteButton.dataset.titleKey = "editNote";
-    } else {
-      noteDisplay.style.display = "none";
-      noteButton.dataset.titleKey = "addNote";
-    }
-
-    // 获取截图数据
-    let finalId = "";
-    if (userId) {
-      finalId = userId;
-    } else {
-      finalId = await this.fetchUserIdinDB(username);
-    }
-
-    if (finalId) {
-      const count = await this.fetchUserScreenshotsNum(finalId);
-
-      if (count) {
-        sreenshotsButton.style.display = "inline";
-        sreenshotsButton.title = `${count} ${langData.screenshotCount}`;
-      }
-    }
-
-    // 绑定事件
-    noteButton.addEventListener("click", async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      if (isHomePage) {
-        if (currentNote) {
-          // 已经有备注，直接编辑
-          this.showNoteDialog(currentNote.userId, username);
-        } else {
-          // 没有备注，通过用户名获取 userId
-          const userId =
-            this.userIdCache.get(username) ||
-            (await this.fetchUserIdFromProfile(username));
-
-          // 缓存用户名到ID的映射
-          this.userIdCache.set(username, userId);
-
-          this.showNoteDialog(userId, username);
-        }
-      } else {
-        // 用户页面直接编辑
-        this.showNoteDialog(userId, username);
-      }
-    });
-
-    detailButton.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.showNoteDetail(userId, username);
-    });
-
-    sreenshotsButton.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      chrome.runtime.sendMessage({ action: "openTimelineWithUserId", finalId });
-    });
-
-    // 按顺序添加：备注显示 -> 编辑按钮 -> 详情按钮
-    noteContainer.appendChild(noteDisplay);
-    noteContainer.appendChild(noteButton);
-    noteContainer.appendChild(detailButton);
-    noteContainer.appendChild(sreenshotsButton);
-    userNameContainer.appendChild(noteContainer);
+    await this.createNoteUI(
+      userNameContainer, userId, username, userNameContainer, isHomePage
+    );
   }
 
   /* ==========================处理关注者/粉丝页面========================== */
@@ -922,11 +833,14 @@ class TwitterNotes {
     this.processUserCards();
 
     // 监听新加载的用户卡片
-    const observer = new MutationObserver(() => {
+    if (this._followingObserver) {
+      this._followingObserver.disconnect();
+    }
+    this._followingObserver = new MutationObserver(() => {
       this.processUserCards();
     });
 
-    observer.observe(document.body, {
+    this._followingObserver.observe(document.body, {
       childList: true,
       subtree: true,
     });
@@ -961,37 +875,40 @@ class TwitterNotes {
 
   // 在关注者/粉丝页面为用户卡片添加备注元素
   async addUserCardNoteElements(userCell, userNameContainer, username) {
+    await this.createNoteUI(userCell, null, username, userNameContainer, true);
+  }
+
+  // 统一的备注 UI 创建逻辑
+  async createNoteUI(container, userId, username, targetElement, needsFetchId = false) {
     // 检查是否已经添加过
-    if (userCell.querySelector(".twitter-notes-inline")) return;
+    if (container.querySelector(".twitter-notes-inline")) return;
 
     const noteContainer = document.createElement("span");
     noteContainer.className = "twitter-notes-inline";
     noteContainer.setAttribute("data-username", username);
+    if (userId) {
+      noteContainer.setAttribute("data-user-id", userId);
+    }
 
-    // 创建备注显示元素
     const noteDisplay = document.createElement("span");
     noteDisplay.className = "twitter-notes-display";
 
-    // 创建备注按钮
     const noteButton = document.createElement("button");
     noteButton.className = "twitter-notes-inline-button";
-    noteButton.innerHTML = "📝";
+    noteButton.textContent = "\u{1F4DD}";
 
-    // 创建详情按钮
     const detailButton = document.createElement("button");
     detailButton.className = "twitter-notes-detail-button";
-    detailButton.innerHTML = "ℹ️";
-    detailButton.title = "查看详情";
+    detailButton.textContent = "\u2139\uFE0F";
+    detailButton.title = "\u67E5\u770B\u8BE6\u60C5";
     detailButton.style.display = "none";
 
-    // 创建详情按钮
-    const sreenshotsButton = document.createElement("button");
-    sreenshotsButton.className = "view-screenshots-button";
-    sreenshotsButton.innerHTML = "📸";
-    sreenshotsButton.style.display = "none";
+    const screenshotsButton = document.createElement("button");
+    screenshotsButton.className = "view-screenshots-button";
+    screenshotsButton.textContent = "\u{1F4F8}";
+    screenshotsButton.style.display = "none";
 
-    // 获取备注数据
-    const currentNote = this.getUserNote(username);
+    const currentNote = this.getUserNote(username, userId);
 
     if (currentNote) {
       const noteName = currentNote.name || "";
@@ -1001,7 +918,6 @@ class TwitterNotes {
       noteDisplay.textContent = `${noteName}`;
       noteDisplay.style.display = "inline";
 
-      // 添加标签颜色显示
       if (currentNote.tagId) {
         chrome.storage.local.get(["noteTags"]).then((result) => {
           const tags = result.noteTags || {};
@@ -1016,23 +932,25 @@ class TwitterNotes {
       if (noteDescription) {
         detailButton.style.display = "inline";
         detailButton.dataset.titleKey = "viewDetail";
-      } else {
-        detailButton.style.display = "none";
       }
+
+      noteButton.dataset.titleKey = "editNote";
     } else {
       noteDisplay.style.display = "none";
       noteButton.dataset.titleKey = "addNote";
     }
 
     // 获取截图数据
-    const finalId = await this.fetchUserIdinDB(username);
+    let finalId = userId || "";
+    if (!finalId) {
+      finalId = await this.fetchUserIdinDB(username);
+    }
 
     if (finalId) {
       const count = await this.fetchUserScreenshotsNum(finalId);
-
       if (count) {
-        sreenshotsButton.style.display = "inline";
-        sreenshotsButton.title = `${count} ${langData.screenshotCount}`;
+        screenshotsButton.style.display = "inline";
+        screenshotsButton.title = `${count} ${langData.screenshotCount}`;
       }
     }
 
@@ -1042,45 +960,41 @@ class TwitterNotes {
       e.stopPropagation();
 
       if (currentNote) {
-        // 已经有备注，直接编辑
         this.showNoteDialog(currentNote.userId, username);
-      } else {
-        // 没有备注，通过用户名获取 userId
+      } else if (needsFetchId) {
         try {
-          const userId =
+          const fetchedId =
             this.userIdCache.get(username) ||
             (await this.fetchUserIdFromProfile(username));
-
-          // 缓存用户名到ID的映射
-          this.userIdCache.set(username, userId);
-
-          this.showNoteDialog(userId, username);
+          this.userIdCache.set(username, fetchedId);
+          this.showNoteDialog(fetchedId, username);
         } catch (error) {
           console.error("获取用户ID失败:", error);
-          // 如果获取ID失败，使用用户名作为标识
           this.showNoteDialog(null, username);
         }
+      } else {
+        this.showNoteDialog(userId, username);
       }
     });
 
     detailButton.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      this.showNoteDetail(currentNote.userId, username);
+      const noteUserId = currentNote ? currentNote.userId : userId;
+      this.showNoteDetail(noteUserId, username);
     });
 
-    sreenshotsButton.addEventListener("click", (e) => {
+    screenshotsButton.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
       chrome.runtime.sendMessage({ action: "openTimelineWithUserId", finalId });
     });
 
-    // 按顺序添加：备注显示 -> 编辑按钮 -> 详情按钮
     noteContainer.appendChild(noteDisplay);
     noteContainer.appendChild(noteButton);
     noteContainer.appendChild(detailButton);
-    noteContainer.appendChild(sreenshotsButton);
-    userNameContainer.appendChild(noteContainer);
+    noteContainer.appendChild(screenshotsButton);
+    targetElement.appendChild(noteContainer);
   }
 
   addProfileNoteButton(container, userId, username) {
@@ -1621,9 +1535,11 @@ class TwitterNotes {
           </div>
         `;
 
-        // 添加样式
-        const style = document.createElement("style");
-        style.textContent = `
+        // 添加样式（仅一次）
+        if (!document.getElementById('xmark-screenshot-style')) {
+          const style = document.createElement("style");
+          style.id = 'xmark-screenshot-style';
+          style.textContent = `
           .screenshot-inner {
             display: inline-flex;
             align-items: center;
@@ -1643,7 +1559,8 @@ class TwitterNotes {
             stroke: rgb(29, 155, 240);
           }
         `;
-        document.head.appendChild(style);
+          document.head.appendChild(style);
+        }
 
         screenshotBtn.addEventListener("click", async (e) => {
           e.preventDefault();
@@ -1916,6 +1833,20 @@ class TwitterNotes {
 
       const filename = `${handle}_${dateStr}.png`;
 
+      // 隐藏grok按钮
+      const grokButton = Array.from(
+        tweetElement.querySelectorAll("button[aria-label]")
+      ).find((btn) => {
+        const label = btn.getAttribute("aria-label");
+        return label && /Grok/i.test(label);
+      });
+
+      let originalGrokDisplay = null;
+      if (grokButton) {
+        originalGrokDisplay = grokButton.style.display;
+        grokButton.style.display = "none";
+      }
+
       // 隐藏右上角的三个点
       const menuButton = tweetElement.querySelector('[data-testid="caret"]');
       let originalDisplay = null;
@@ -2015,6 +1946,9 @@ class TwitterNotes {
       }
 
       // 先恢复 UI
+      if (grokButton) {
+        grokButton.style.display = originalGrokDisplay || "";
+      }
       if (menuButton) {
         menuButton.style.display = originalDisplay || "";
       }

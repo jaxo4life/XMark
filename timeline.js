@@ -1096,6 +1096,7 @@ document.getElementById("clearFilters").addEventListener("click", async () => {
 document.getElementById("kw").addEventListener("keydown", async (e) => {
   if (e.key === "Enter") {
     kw = e.currentTarget.value.trim();
+    clearTimeline();
     await rebuildTimeline();
   }
 });

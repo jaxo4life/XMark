@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/version-5.2.6-blue.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-5.2.7-blue.svg" alt="Version"></a>
   <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Manifest-V3-green.svg" alt="Manifest"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Chrome%20Extension-orange.svg" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
@@ -15,6 +15,11 @@
 
 <details open>
 <summary><b>v5.x</b></summary>
+
+### v5.2.7
+| 中文 | English |
+|------|----------|
+| 代码优化与性能提升 | Code optimization & performance improvements |
 
 ### v5.2.6
 | 中文 | English |

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "XMark",
-  "version": "5.2.6",
+  "version": "5.2.7",
   "description": "XMark is a note-taking tool designed specifically for X (formerly Twitter)",
   "permissions": [
     "storage",
@@ -14,7 +14,7 @@
   "host_permissions": ["<all_urls>"],
   "content_scripts": [
     {
-      "matches": ["https://twitter.com/*", "https://x.com/*"],
+      "matches": ["https://twitter.com/*", "https://x.com/*", "https://pro.x.com/*"],
       "js": ["content.js"],
       "css": ["styles/content.css"],
       "run_at": "document_end"

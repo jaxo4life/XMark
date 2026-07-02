@@ -759,6 +759,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           .then(async () => {
             ctx.restore(); // 裁剪结束
 
+            // 释放 bitmap 资源
+            bitmaps.forEach(b => b.close?.());
+
             // 5. 导出并下载
             const mergedBlob = await canvas.convertToBlob({
               type: "image/png",

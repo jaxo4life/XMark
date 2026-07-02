@@ -1076,7 +1076,7 @@ async function saveWebdavConfig() {
     await updateConfigurationStatusOnly(); // 只更新状态，不改变折叠状态
   } catch (error) {
     showMessage(
-      `langData.messages.webdavConfigSaveFailed + ${error.message}`,
+      `${langData.messages.webdavConfigSaveFailed} ${error.message}`,
       "error"
     );
   }
@@ -1152,7 +1152,7 @@ async function testWebdavConnection() {
   } catch (error) {
     await chrome.storage.local.set({ webdavConnectionStatus: "failed" });
     showMessage(
-      `${langData.messages.webdavTestFailed} + ${error.message}`,
+      `${langData.messages.webdavTestFailed} ${error.message}`,
       "error"
     );
   } finally {
@@ -1569,7 +1569,7 @@ async function testAutoBackup() {
 
     showMessage(langData.messages.autoBackupTriggered);
   } catch (error) {
-    showMessage(`${langData.messages.testFailed} + ${error.message}`, "error");
+    showMessage(`${langData.messages.testFailed} ${error.message}`, "error");
   } finally {
     button.disabled = false;
     button.innerHTML = originalText;
@@ -1789,7 +1789,7 @@ async function backupToWebDAV() {
     showMessage(langData.messages.webdavBackupSuccess);
   } catch (error) {
     showMessage(
-      `${langData.messages.webdavBackupFailed} + ${error.message}`,
+      `${langData.messages.webdavBackupFailed} ${error.message}`,
       "error"
     );
   } finally {
@@ -1881,7 +1881,7 @@ async function restoreFromWebDAV() {
     showMessage(langData.messages.webdavRestoreSuccess);
   } catch (error) {
     showMessage(
-      `${langData.messages.webdavRestoreFailed} + ${error.message}`,
+      `${langData.messages.webdavRestoreFailed} ${error.message}`,
       "error"
     );
   } finally {
@@ -1976,7 +1976,7 @@ async function restoreFromSpecificBackup(fileName) {
     showMessage(langData.messages.restoreSuccess);
   } catch (error) {
     showMessage(
-      `${langData.messages.restoreFailed} + ${error.message}`,
+      `${langData.messages.restoreFailed} ${error.message}`,
       "error"
     );
   } finally {
@@ -2085,7 +2085,7 @@ async function backupToWebDAVByTags(selectedTagIds) {
     );
   } catch (error) {
     showMessage(
-      `${langData.messages.webdavBackupFailed} + ${error.message}`,
+      `${langData.messages.webdavBackupFailed} ${error.message}`,
       "error"
     );
   } finally {
@@ -2216,7 +2216,7 @@ async function showBackupList() {
     }
   } catch (error) {
     showMessage(
-      `${langData.messages.loadBackupListFailed} + ${error.message}`,
+      `${langData.messages.loadBackupListFailed} ${error.message}`,
       "error"
     );
   } finally {
@@ -2517,7 +2517,7 @@ async function deleteBackupFile(fileName) {
     showMessage(`${langData.messages.backupDeleted} : ${fileName}`);
   } catch (error) {
     showMessage(
-      `${langData.messages.deleteFailed} + ${error.message}`,
+      `${langData.messages.deleteFailed} ${error.message}`,
       "error"
     );
   }
