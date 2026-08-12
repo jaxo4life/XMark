@@ -18,6 +18,8 @@ import {
   updateScreenshotNote,
   getScreenshotsByCategory,
   getAvatar,
+  getDBStats,
+  dayKey,
 } from "../utils/db.js";
 import { updateTexts, getLang, resetLangData } from "../utils/lang.js";
 
@@ -299,11 +301,41 @@ let _observer = null;
 let _scrollObserver = null;
 let _allCats = [];
 let _categoryId = null;
+let _cardObserver = null;
+
+// 卡片级视口观察：滚出视口回收 Object URL；_cache 全量在内存，滚回用 Blob 重建 URL（近零闪烁）
+function getCardObserver() {
+  if (_cardObserver) return _cardObserver;
+  _cardObserver = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        const card = e.target;
+        if (e.isIntersecting) {
+          if (card._loaded === false && card._blob && card._img) {
+            card._img.src = createObjURL(card._blob);
+            card._loaded = true;
+          }
+        } else if (card._loaded === true && card._img) {
+          const url = card._img.src;
+          if (url && url.startsWith("blob:")) {
+            URL.revokeObjectURL(url);
+            _urls.delete(url);
+          }
+          card._img.removeAttribute("src");
+          card._loaded = false;
+        }
+      }
+    },
+    { rootMargin: "300px 0px" }
+  );
+  return _cardObserver;
+}
 
 function clearTimeline() {
   $("#timeline-grid").innerHTML = "";
   _page = 0;
   revokeAllURLs();
+  if (_cardObserver) _cardObserver.disconnect();
 }
 
 async function renderCard(item) {
@@ -677,6 +709,10 @@ async function renderCard(item) {
     if (opt) opt.selected = true;
   }
 
+  wrap._blob = item.blob;
+  wrap._img = img;
+  wrap._loaded = true;
+  getCardObserver().observe(wrap);
   return wrap;
 }
 
@@ -872,40 +908,38 @@ function groupByDay(items) {
     .sort((a, b) => new Date(a.day) - new Date(b.day));
 }
 
-function renderStatCards(items) {
-  const users = new Set(items.map((i) => i.userId));
-  const byDay = groupByDay(items);
+function renderStatCards(stats, byDay) {
   const maxDay = byDay.reduce((m, x) => Math.max(m, x.count), 0);
+  const busiest = byDay.length
+    ? byDay.reduce((a, b) => (a.count > b.count ? a : b)).day
+    : "-";
   const el = $("#stats-cards");
-  el.innerHTML = `
-    <div class="glass rounded-2xl p-4 text-center">
-      <div class="text-slate-500 text-sm" data-key="totalCount">总截图数</div>
-      <div class="text-2xl font-semibold">${items.length}</div>
-    </div>
-
-    <div class="glass rounded-2xl p-4 text-center">
-      <div class="text-slate-500 text-sm" data-key="uniqueUserCount">用户数</div>
-      <div class="text-2xl font-semibold">${users.size}</div>
-    </div>
-
-    <div class="glass rounded-2xl p-4 text-center">
-      <div class="text-slate-500 text-sm" data-key="busyday">最忙的一天</div>
-      <div class="text-lg font-medium">${
-        byDay.length
-          ? byDay.reduce((a, b) => (a.count > b.count ? a : b)).day
-          : "-"
-      }</div>
-    </div>
-
-    <div class="glass rounded-2xl p-4 text-center">
-      <div class="text-slate-500 text-sm" data-key="highestperday">单日峰值</div>
-      <div class="text-2xl font-semibold">${maxDay}</div>
-    </div>
-  `;
+  el.textContent = "";
+  const cards = [
+    { key: "totalCount", label: "总截图数", value: stats.totalCount },
+    { key: "uniqueUserCount", label: "用户数", value: stats.uniqueUserCount },
+    { key: "busyday", label: "最忙的一天", value: busiest },
+    { key: "highestperday", label: "单日峰值", value: maxDay },
+  ];
+  for (const c of cards) {
+    const card = document.createElement("div");
+    card.className = "glass rounded-2xl p-4 text-center";
+    const label = document.createElement("div");
+    label.className = "text-slate-500 text-sm";
+    label.dataset.key = c.key;
+    label.textContent = c.label;
+    const val = document.createElement("div");
+    val.className =
+      c.key === "busyday" ? "text-lg font-medium" : "text-2xl font-semibold";
+    val.textContent = c.value;
+    card.appendChild(label);
+    card.appendChild(val);
+    el.appendChild(card);
+  }
 }
 
-function renderDailyChart(items) {
-  const data = groupByDay(items); // [{ date, count }, ...]
+function renderDailyChart(data) {
+  // data: [{ day, count }, ...]（调用方从 getDailyActivity 转换）
 
   const cvs = document.getElementById("dailyChart");
   const ctx = cvs.getContext("2d");
@@ -949,7 +983,7 @@ function renderDailyChart(items) {
   const stepLabel = Math.ceil(data.length / 10);
   for (let i = 0; i < data.length; i += stepLabel) {
     const x = pad + i * stepX;
-    const date = new Date(data[i].day);
+    const date = new Date(data[i].day + "T00:00:00"); // 本地构造，避免 UTC 偏移
 
     ctx.fillText(`${date.getMonth() + 1}/${date.getDate()}`, x, H - pad + 16);
   }
@@ -989,7 +1023,7 @@ async function renderHeatmap() {
   for (let i = totalDays - 1; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().slice(0, 10);
+    const dateStr = dayKey(d); // 本地 YYYY-MM-DD
     const count = data[dateStr] || 0;
 
     const cell = document.createElement("div");
@@ -1077,9 +1111,16 @@ document.querySelectorAll(".tab-button").forEach((tab) => {
       await rebuildTimeline();
     } else if (name === "stats") {
       updateTexts();
-      const items = await getScreenshots();
-      renderStatCards(items);
-      renderDailyChart(items);
+      // 走聚合查询，不拉全量 Blob
+      const [stats, dailyMap] = await Promise.all([
+        getDBStats(),
+        getDailyActivity(),
+      ]);
+      const byDay = Object.entries(dailyMap)
+        .map(([day, count]) => ({ day, count }))
+        .sort((a, b) => new Date(a.day) - new Date(b.day));
+      renderStatCards(stats, byDay);
+      renderDailyChart(byDay);
       renderHeatmap();
     }
   });

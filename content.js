@@ -1,3 +1,21 @@
+// 防御扩展上下文失效：重载/更新后残留的 content script 调用 sendMessage 会抛
+// "Extension context invalidated"，统一兜底（失败时 callback(undefined) / Promise resolve undefined）
+(() => {
+  const _send = chrome.runtime.sendMessage.bind(chrome.runtime);
+  chrome.runtime.sendMessage = function (message, callback) {
+    try {
+      if (!chrome.runtime?.id) {
+        if (typeof callback === "function") callback(undefined);
+        return Promise.resolve(undefined);
+      }
+      return callback === undefined ? _send(message) : _send(message, callback);
+    } catch (e) {
+      if (typeof callback === "function") callback(undefined);
+      return Promise.resolve(undefined);
+    }
+  };
+})();
+
 let langData = null;
 
 async function getCurrentLangData() {

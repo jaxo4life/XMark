@@ -1,4 +1,13 @@
 // db.js
+
+// 本地日期归一化（YYYY-MM-DD，基于本地时区；避免 toISOString 的 UTC 偏移导致凌晨数据归到前一天）
+export function dayKey(date) {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
 export function openDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open("ScreenshotDB", 8); // 版本号 +1
@@ -501,7 +510,7 @@ export async function getDailyActivity() {
       const cursor = e.target.result;
       if (cursor) {
         const d = new Date(cursor.value.date);
-        const day = d.toISOString().slice(0, 10); // YYYY-MM-DD
+        const day = dayKey(d); // 本地 YYYY-MM-DD（与 heatmap 统一）
         counts[day] = (counts[day] || 0) + 1;
         cursor.continue();
       } else {
