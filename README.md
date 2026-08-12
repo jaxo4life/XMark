@@ -61,4 +61,4 @@ git clone https://github.com/jaxo4life/XMark.git
 
 ## 📄 许可证
 
-[MIT](LICENSE)
+[GPL v3](LICENSE)

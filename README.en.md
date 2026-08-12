@@ -61,4 +61,4 @@ Issues and Pull Requests are welcome at the [GitHub repo](https://github.com/jax
 
 ## 📄 License
 
-[MIT](LICENSE)
+[GPL v3](LICENSE)
