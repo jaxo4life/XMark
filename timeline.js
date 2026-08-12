@@ -21,6 +21,17 @@ import {
 } from "../utils/db.js";
 import { updateTexts, getLang, resetLangData } from "../utils/lang.js";
 
+// 校验 URL 协议，拦截 javascript:/data: 等通过 href 触发的 DOM XSS
+function safeUrl(url) {
+  if (typeof url !== "string" || !url.trim()) return "#";
+  try {
+    const u = new URL(url, location.origin);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.href : "#";
+  } catch {
+    return "#";
+  }
+}
+
 let realGetAll = null;
 
 try {
@@ -311,7 +322,7 @@ async function renderCard(item) {
     <div class="text-sm text-slate-700">
       ${
         item.tweetlink
-          ? `<a href="${item.tweetlink}" 
+          ? `<a href="${safeUrl(item.tweetlink)}"
                 target="_blank" 
                 data-title-key="opentweetlink"
                 class="font-medium text-yellow-500 hover:text-blue-500 hover:underline">

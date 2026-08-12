@@ -180,25 +180,20 @@ export async function getDBStats() {
     req.onerror = (e) => reject(e.target.error);
   });
 
-  // 获取独立 userId
-  const userIds = new Set();
-  await new Promise((resolve, reject) => {
-    const req = store.openCursor();
-    req.onsuccess = (e) => {
-      const cursor = e.target.result;
-      if (cursor) {
-        if (cursor.value.userId) userIds.add(cursor.value.userId);
-        cursor.continue();
-      } else {
-        resolve();
-      }
+  // 获取独立 userId（走 userId 索引，只读 key 不读 Blob，避免全表 cursor）
+  const uniqueUserCount = await new Promise((resolve, reject) => {
+    const req = store.index("userId").getAllKeys();
+    req.onsuccess = () => {
+      const set = new Set();
+      for (const k of req.result) if (k) set.add(k); // 过滤 falsy，保持与旧逻辑一致
+      resolve(set.size);
     };
     req.onerror = (e) => reject(e.target.error);
   });
 
   return {
     totalCount,
-    uniqueUserCount: userIds.size,
+    uniqueUserCount,
     earliest,
     latest,
   };

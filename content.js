@@ -45,13 +45,29 @@ async function updateTexts() {
   });
 }
 
+// HTML 转义，避免用户数据注入（备注名/内容/用户名等自由文本）
+function escapeHtml(str = "") {
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+const DEFAULT_TAG_COLOR = "#1D9BF0";
+// 防御性颜色清洗，杜绝 CSS 注入
+function safeColor(c) {
+  return typeof c === "string" && HEX_COLOR.test(c) ? c : DEFAULT_TAG_COLOR;
+}
+
 // Twitter Notes Content Script
 class TwitterNotes {
   constructor() {
     this.notes = {}; // 存储备注数据，键可能是用户名或用户ID
     this.userIdCache = new Map(); // 缓存用户名到ID的映射
     this.init();
-    this.avatarTTLMap = {};
     this.observeGroups();
     this.twitterObserver = null;
     this._profileProcessStatus = new Map();
@@ -155,7 +171,7 @@ class TwitterNotes {
       btn.style.justifyContent = "center";
 
       btn.addEventListener("click", () => {
-        this.filterUsersByTag(tag.id);
+        this.filterUsersByTag(id);
       });
 
       wrapper.appendChild(btn);
@@ -298,9 +314,13 @@ class TwitterNotes {
       );
 
       const text = document.createElement("div");
-      text.innerHTML = `<strong>${user.name}</strong><br>@${user.username}<br>${
-        user.description || ""
-      }`;
+      const _nameStrong = document.createElement("strong");
+      _nameStrong.textContent = user.name;
+      text.appendChild(_nameStrong);
+      text.appendChild(document.createElement("br"));
+      text.appendChild(document.createTextNode("@" + user.username));
+      text.appendChild(document.createElement("br"));
+      text.appendChild(document.createTextNode(user.description || ""));
       text.style.fontSize = "14px";
       text.style.lineHeight = "1.4";
 
@@ -321,10 +341,12 @@ class TwitterNotes {
 
       const wrapper = document.querySelector("[data-groups-nav]");
       if (!wrapper) {
-        // ❌ wrapper 不存在，才初始化并设置 display
+        // wrapper 不存在才初始化；异步分支由 finally 释放锁，提前 return，
+        // 避免同步走到下方 busy=false 导致锁失效、initGroups 并发
         this.initGroups()
           .catch(console.error)
           .finally(() => (busy = false));
+        return;
       }
 
       busy = false;
@@ -462,11 +484,12 @@ class TwitterNotes {
       return this.notes[userId];
     }
 
-    // 通过用户名查找 ID
+    // 通过用户名查找：直接返回命中的 note（按用户名保存的旧备注 userId 为 null，
+    // 原代码 return this.notes[note.userId] 会取到 this.notes[null] = undefined）
     for (const id in this.notes) {
       const note = this.notes[id];
       if (note.username === username) {
-        return this.notes[note.userId];
+        return note;
       }
     }
 
@@ -734,7 +757,8 @@ class TwitterNotes {
       const hintKeywords = ["广告", "推荐", "Promoted", "Recommended", "Ad"];
 
       const isAd = [...tweet.querySelectorAll('div[dir="ltr"] span')].some(
-        (span) => hintKeywords.includes((span.innerText || "").trim())
+        (span) =>
+          hintKeywords.includes((span.textContent || "").trim())
       );
 
       if (isAd) {
@@ -1092,15 +1116,15 @@ class TwitterNotes {
 				<div class="twitter-notes-detail-content">
 					<div class="twitter-notes-detail-header">
 						<h3><span data-key="noteDetail"></span>
-							<span style="color:#1d9bf0">@${username}</span>
+							<span style="color:#1d9bf0">@${escapeHtml(username)}</span>
 						</h3>
 						<div class="user-id-info"><span data-key="userID"></span> ${
-              currentNote.userId
+              escapeHtml(currentNote.userId)
             }</div>
 						${
               currentNote && currentNote.username !== username
                 ? `<div class="user-id-info"><span data-key="oldusername"></span> @ 
-							<span style="color: red; font-size: 16px;">${currentNote.username}</span></div>`
+							<span style="color: red; font-size: 16px;">${escapeHtml(currentNote.username)}</span></div>`
                 : ""
             }
 						<button class="twitter-notes-close">×</button>
@@ -1108,14 +1132,14 @@ class TwitterNotes {
 					<div class="twitter-notes-detail-body">
 						<div class="note-field">
 							<label><span data-key="noteName"></span>:</label>
-							<div class="note-value">${noteName}</div>
+							<div class="note-value">${escapeHtml(noteName)}</div>
 						</div>
 						${
               noteDescription
                 ? `
 							<div class="note-field">
 								<label><span data-key="noteContent"></span>:</label>
-								<div class="note-value">${noteDescription}</div>
+								<div class="note-value">${escapeHtml(noteDescription)}</div>
 							</div>
 						`
                 : ""
@@ -1126,7 +1150,7 @@ class TwitterNotes {
               <div class="note-field">
                 <label><span data-key="tagName"></span></label>
                 <div class="note-value">${
-                  availableTags[currentNote.tagId].name
+                  escapeHtml(availableTags[currentNote.tagId].name)
                 }</div>
               </div>
             `
@@ -1221,13 +1245,13 @@ class TwitterNotes {
     dialog.innerHTML = `
 				<div class="twitter-notes-dialog-content">
 					<div class="twitter-notes-dialog-header">
-						<h3><span data-key="addNote"></span> @${username}</h3>
-						<div class="user-id-info"><span data-key="userID"></span> ${userId}</div>
+						<h3><span data-key="addNote"></span> @${escapeHtml(username)}</h3>
+						<div class="user-id-info"><span data-key="userID"></span> ${escapeHtml(userId)}</div>
 						${
               currentNote && currentNote.username !== username
                 ? `<div class="user-id-info">
 								<span data-key="oldusername"></span> @ 
-								<span style="color: red; font-size: 16px;">${currentNote.username}</span>
+								<span style="color: red; font-size: 16px;">${escapeHtml(currentNote.username)}</span>
 								<button class="add-old-username-btn" data-title-key="addtoNote">+</button>
 							 </div>`
                 : ""
@@ -1244,7 +1268,7 @@ class TwitterNotes {
                 data-placeholder-key="notePlaceholder"
 					
 								maxlength="50"
-								value="${noteName}"
+								value="${escapeHtml(noteName)}"
 							/>
 							<div class="char-count">
 								<span class="current-name">${noteName.length}</span>/50
@@ -1259,7 +1283,9 @@ class TwitterNotes {
       const tag = noteTags[tagId];
       const selected =
         currentNote && currentNote.tagId == tagId ? "selected" : "";
-      return `<option value="${tagId}" ${selected} style="color:${tag.color}; font-weight:bold;">${tag.name}</option>`;
+      return `<option value="${escapeHtml(tagId)}" ${selected} style="color:${safeColor(
+        tag.color
+      )}; font-weight:bold;">${escapeHtml(tag.name)}</option>`;
     })
     .join("")}
               </select>
@@ -1272,7 +1298,7 @@ class TwitterNotes {
                 data-placeholder-key="noteContentInput"
 				
 								maxlength="500"
-							>${noteDescription}</textarea>
+							>${escapeHtml(noteDescription)}</textarea>
 							<div class="char-count">
 								<span class="current-desc">${noteDescription.length}</span>/500
 							</div>

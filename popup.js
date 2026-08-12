@@ -516,12 +516,12 @@ async function loadRecentNotes() {
 
         return `
         <div class="note-item">
-          <div class="note-user">@${note.username || "unknown"}</div>
-          <div class="note-id">ID: ${userId}</div>
-          <div class="note-name">${langData.noteName}: ${noteName}</div>
+          <div class="note-user">@${escapeHtml(note.username || "unknown")}</div>
+          <div class="note-id">ID: ${escapeHtml(userId)}</div>
+          <div class="note-name">${langData.noteName}: ${escapeHtml(noteName)}</div>
           ${
             noteTag && tags[noteTag]
-              ? `<div class="note-desc">${langData.tagName}: ${tags[noteTag].name}</div>`
+              ? `<div class="note-desc">${langData.tagName}: ${escapeHtml(tags[noteTag].name)}</div>`
               : ""
           }
         </div>
@@ -642,40 +642,21 @@ async function processImportedNotes(importData) {
   const existingTags = result.noteTags || {};
   const existingOrder = result.noteTagsOrder || [];
 
-  // 处理导入的备注，确保格式正确
+  // 处理导入的备注：白名单清洗 + 类型校验 + 拦截原型链污染
   const processedNotes = {};
-  Object.entries(importData.notes).forEach(([userId, note]) => {
-    if (typeof note === "string") {
-      // 旧格式兼容
-      processedNotes[userId] = {
-        name: note,
-        description: "",
-        username: userId,
-        userId: userId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-    } else if (note.text && !note.name) {
-      // 旧格式兼容
-      processedNotes[userId] = {
-        name: note.text,
-        description: note.description || "",
-        username: note.username || userId,
-        userId: note.userId || userId,
-        createdAt: note.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-    } else {
-      // 新格式
-      processedNotes[userId] = note;
-    }
+  Object.keys(importData.notes || {}).forEach((userId) => {
+    if (FORBIDDEN_KEYS.has(userId)) return;
+    const clean = sanitizeNote(importData.notes[userId], userId);
+    if (clean) processedNotes[userId] = clean;
   });
 
-  // 处理导入的标签
+  // 处理导入的标签：同样清洗
   const processedTags = {};
   if (importData.tags) {
-    Object.entries(importData.tags).forEach(([tagId, tag]) => {
-      processedTags[tagId] = tag;
+    Object.keys(importData.tags).forEach((tagId) => {
+      if (FORBIDDEN_KEYS.has(tagId)) return;
+      const clean = sanitizeTag(importData.tags[tagId], tagId);
+      if (clean) processedTags[tagId] = clean;
     });
   }
 
@@ -683,11 +664,14 @@ async function processImportedNotes(importData) {
   const mergedNotes = { ...existingNotes, ...processedNotes };
   const mergedTags = { ...existingTags, ...processedTags };
 
-  // 处理导入的标签顺序
+  // 处理导入的标签顺序（校验为字符串数组）
   let mergedOrder = [];
-  if (importData.noteTagsOrder) {
+  if (Array.isArray(importData.noteTagsOrder)) {
+    const importedOrder = importData.noteTagsOrder.filter(
+      (id) => typeof id === "string" && !FORBIDDEN_KEYS.has(id)
+    );
     mergedOrder = existingOrder.concat(
-      importData.noteTagsOrder.filter((id) => !existingOrder.includes(id))
+      importedOrder.filter((id) => !existingOrder.includes(id))
     );
   } else {
     // 老文件，没有 noteTagsOrder，用标签对象的顺序自动生成
@@ -834,7 +818,7 @@ function showExportDialog() {
                   <div class="tag-checkbox">
                     <input type="checkbox" id="exportTag_${tagId}" value="${tagId}">
                     <label for="exportTag_${tagId}">
-                      <span class="tag-color-indicator" style="background-color: ${tag.color}"></span>
+                      <span class="tag-color-indicator" style="background-color: ${safeColor(tag.color)}"></span>
                       ${tag.name}
                     </label>
                   </div>
@@ -1120,7 +1104,7 @@ async function testWebdavConnection() {
     const headers = {};
     if (config.username && config.password) {
       headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + config.password);
+        "Basic " + btoaUtf8(config.username + ":" + config.password);
     }
 
     // 测试连接 - 使用 OPTIONS 方法
@@ -1636,7 +1620,7 @@ function showBackupDialog() {
                   <div class="tag-checkbox">
                     <input type="checkbox" id="backupTag_${tagId}" value="${tagId}">
                     <label for="backupTag_${tagId}">
-                      <span class="tag-color-indicator" style="background-color: ${tag.color}"></span>
+                      <span class="tag-color-indicator" style="background-color: ${safeColor(tag.color)}"></span>
                       ${tag.name}
                     </label>
                   </div>
@@ -1773,7 +1757,7 @@ async function backupToWebDAV() {
 
     if (config.username && config.password) {
       headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + config.password);
+        "Basic " + btoaUtf8(config.username + ":" + config.password);
     }
 
     // 通过 background script 发送请求以绕过 CORS
@@ -1854,7 +1838,7 @@ async function restoreFromWebDAV() {
     const headers = {};
     if (config.username && config.password) {
       headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + config.password);
+        "Basic " + btoaUtf8(config.username + ":" + config.password);
     }
 
     // 通过 background script 发送请求以绕过 CORS
@@ -1931,7 +1915,7 @@ async function restoreFromSpecificBackup(fileName) {
     const headers = {};
     if (config.username && config.password) {
       headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + config.password);
+        "Basic " + btoaUtf8(config.username + ":" + config.password);
     }
 
     const downloadResult = await new Promise((resolve) => {
@@ -2065,7 +2049,7 @@ async function backupToWebDAVByTags(selectedTagIds) {
 
     if (config.username && config.password) {
       headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + config.password);
+        "Basic " + btoaUtf8(config.username + ":" + config.password);
     }
 
     // 通过 background script 发送请求以绕过 CORS
@@ -2247,7 +2231,7 @@ async function getWebDAVBackupList(config) {
   const headers = {};
   if (config.username && config.password) {
     headers["Authorization"] =
-      "Basic " + btoa(config.username + ":" + config.password);
+      "Basic " + btoaUtf8(config.username + ":" + config.password);
   }
   headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
   headers["Pragma"] = "no-cache";
@@ -2503,7 +2487,7 @@ async function deleteBackupFile(fileName) {
     const headers = {};
     if (config.username && config.password) {
       headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + config.password);
+        "Basic " + btoaUtf8(config.username + ":" + config.password);
     }
 
     const deleteResult = await new Promise((resolve) => {
@@ -3012,6 +2996,63 @@ function escapeHtml(str = "") {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+// UTF-8 安全的 base64（btoa 对非 ASCII 用户名/密码会抛 InvalidCharacterError）
+function btoaUtf8(s) {
+  return btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+}
+
+// 预设色均为 #RRGGBB；非法颜色回落到默认色，杜绝 CSS 注入
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+const DEFAULT_TAG_COLOR = "#1D9BF0";
+const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+// 防御性颜色清洗
+function safeColor(c) {
+  return typeof c === "string" && HEX_COLOR.test(c) ? c : DEFAULT_TAG_COLOR;
+}
+
+// 导入数据清洗：白名单字段 + 类型校验，拦截原型链污染与恶意脚本
+function sanitizeNote(note, fallbackUserId) {
+  if (typeof note === "string") {
+    return {
+      name: note,
+      description: "",
+      username: fallbackUserId,
+      userId: fallbackUserId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+  if (!note || typeof note !== "object") return null;
+  const name = note.name !== undefined ? note.name : note.text; // 兼容旧字段 text
+  return {
+    name: typeof name === "string" ? name : "",
+    description:
+      typeof note.description === "string" ? note.description : "",
+    username:
+      typeof note.username === "string" ? note.username : fallbackUserId,
+    userId: typeof note.userId === "string" ? note.userId : fallbackUserId,
+    tagId: typeof note.tagId === "string" ? note.tagId : "",
+    createdAt:
+      typeof note.createdAt === "string"
+        ? note.createdAt
+        : new Date().toISOString(),
+    updatedAt:
+      typeof note.updatedAt === "string"
+        ? note.updatedAt
+        : new Date().toISOString(),
+  };
+}
+
+function sanitizeTag(tag, fallbackId = "") {
+  if (!tag || typeof tag !== "object") return null;
+  const name = typeof tag.name === "string" ? tag.name.trim() : "";
+  if (!name) return null;
+  // 保留 id 字段（content 的 filterUsersByTag 用 tag.id 匹配备注）；缺失则回落到 key
+  const id = typeof tag.id === "string" && tag.id ? tag.id : fallbackId;
+  return { id, name, color: safeColor(tag.color) };
 }
 
 // 标签拖拽

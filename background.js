@@ -9,6 +9,33 @@ import {
   getAvatar,
 } from "./utils/db.js";
 
+// UTF-8 安全的 base64（btoa 对非 ASCII 字符会抛 InvalidCharacterError）
+function btoaUtf8(s) {
+  return btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+}
+
+// 带超时的 fetch，避免 WebDAV 请求挂死
+function fetchWithTimeout(url, opts = {}, ms = 20000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { ...opts, signal: controller.signal }).finally(() =>
+    clearTimeout(timer)
+  );
+}
+
+// WebDAV 允许的 HTTP 方法白名单
+const WEBDAV_METHODS = new Set([
+  "GET",
+  "HEAD",
+  "OPTIONS",
+  "PUT",
+  "DELETE",
+  "PROPFIND",
+  "MKCOL",
+  "MOVE",
+  "COPY",
+]);
+
 // 扩展启动时，恢复自动备份
 chrome.runtime.onStartup.addListener(async () => {
   const result = await chrome.storage.local.get(["autoBackupSettings"]);
@@ -259,17 +286,35 @@ async function performAutoBackup() {
 
     if (config.username && config.password) {
       headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + config.password);
+        "Basic " + btoaUtf8(config.username + ":" + config.password);
     }
 
-    // 执行上传
-    const response = await fetch(webdavUrl, {
-      method: "PUT",
-      headers: headers,
-      body: fileContent,
-    });
+    // 执行上传（最多重试 3 次，指数退避，提升备份可靠性）
+    let uploaded = false;
+    let lastError = null;
+    for (let attempt = 0; attempt < 3 && !uploaded; attempt++) {
+      try {
+        const response = await fetchWithTimeout(
+          webdavUrl,
+          { method: "PUT", headers: headers, body: fileContent },
+          20000
+        );
+        if (response.ok) {
+          uploaded = true;
+        } else {
+          lastError = new Error(
+            `自动备份失败: ${response.status} ${response.statusText}`
+          );
+        }
+      } catch (err) {
+        lastError = err;
+      }
+      if (!uploaded && attempt < 2) {
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      }
+    }
 
-    if (response.ok) {
+    if (uploaded) {
       // 更新最后备份时间
       const settingsResult = await chrome.storage.local.get([
         "autoBackupSettings",
@@ -292,9 +337,7 @@ async function performAutoBackup() {
           // popup 可能没有打开，忽略错误
         });
     } else {
-      throw new Error(
-        `自动备份失败: ${response.status} ${response.statusText}`
-      );
+      throw lastError || new Error("自动备份失败");
     }
   } catch (error) {
     console.error("自动备份失败:", error);
@@ -335,7 +378,7 @@ async function uploadToWebDAV(blob, filename, handle) {
     const headers = {};
     if (config.username && config.password) {
       headers["Authorization"] =
-        "Basic " + btoa(config.username + ":" + config.password);
+        "Basic " + btoaUtf8(config.username + ":" + config.password);
     }
 
     // 尝试创建用户文件夹（MKCOL）
@@ -344,7 +387,7 @@ async function uploadToWebDAV(blob, filename, handle) {
     const fileUrl = folderUrl + encodeURIComponent(filename);
 
     // 上传文件
-    const res = await fetch(fileUrl, {
+    const res = await fetchWithTimeout(fileUrl, {
       method: "PUT",
       headers: {
         ...headers,
@@ -376,11 +419,11 @@ async function ensureThreeLevelDirExists(baseUrl, handle, headers) {
     currentUrl += `/${dir}`;
 
     // 检查目录是否存在
-    const res = await fetch(currentUrl, { method: "PROPFIND", headers });
+    const res = await fetchWithTimeout(currentUrl, { method: "PROPFIND", headers });
     if (!res.ok) {
       // 如果不存在，就创建
       try {
-        await fetch(currentUrl, {
+        await fetchWithTimeout(currentUrl, {
           method: "MKCOL",
           headers,
         });
@@ -777,6 +820,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
               tweetlink
             );
 
+            if (!save2Files) {
+              // 仅保存到内置数据库：直接响应（原代码此处漏响应，调用方会挂起直到端口超时）
+              sendResponse({ success: true, savedToDB: true });
+              return canvas;
+            }
+
             if (save2Files) {
               const reader = new FileReader();
               reader.onload = () => {
@@ -868,12 +917,34 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// 处理 WebDAV 请求
+// 处理 WebDAV 请求（带安全校验：方法白名单 + URL 必须落在用户配置的 WebDAV 服务器下）
 async function handleWebDAVRequest(request, sendResponse) {
   try {
     const { url, method, headers, body } = request;
 
-    const response = await fetch(url, {
+    // 安全校验：方法白名单
+    if (!WEBDAV_METHODS.has((method || "").toUpperCase())) {
+      sendResponse({ success: false, error: "方法不被允许" });
+      return;
+    }
+
+    // 安全校验：URL 必须落在用户配置的 WebDAV 服务器下（防止 SSRF）
+    const { webdavConfig } = await chrome.storage.local.get(["webdavConfig"]);
+    const norm = (u) => (typeof u === "string" ? u.replace(/\/+$/, "") : "");
+    const cfgBase = norm(webdavConfig && webdavConfig.url);
+    const reqBase = norm(url);
+    if (
+      !cfgBase ||
+      (reqBase !== cfgBase && !reqBase.startsWith(cfgBase + "/"))
+    ) {
+      sendResponse({
+        success: false,
+        error: "URL 不在 WebDAV 服务器范围内",
+      });
+      return;
+    }
+
+    const response = await fetchWithTimeout(url, {
       method: method,
       headers: headers,
       body: body,
