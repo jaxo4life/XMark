@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/version-5.2.7-blue.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-6.0.0-blue.svg" alt="Version"></a>
   <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Manifest-V3-green.svg" alt="Manifest"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Chrome%20Extension-orange.svg" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
@@ -14,6 +14,19 @@
 ## 🕑 Changelog
 
 <details open>
+<summary><b>v6.x</b></summary>
+
+### v6.0.0
+| 中文 | English |
+|------|----------|
+| 安全加固：XSS 防护、WebDAV SSRF 收口、凭据加密强化 | Security: XSS protection, WebDAV SSRF closure, credential hardening |
+| 性能优化：Blob 内存回收、Stats 聚合查询、日期统一 | Performance: Blob reclamation, Stats aggregation, date normalization |
+| 修复多个 bug（标签筛选、互斥锁、截图保存等） | Multiple bug fixes (tag filter, mutex lock, screenshot save, etc.) |
+| 工程改进：去广告统计、unlimitedStorage、死代码清理 | Engineering: ad-block stats, unlimitedStorage, dead code cleanup |
+
+</details>
+
+<details>
 <summary><b>v5.x</b></summary>
 
 ### v5.2.7
