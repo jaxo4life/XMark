@@ -6,6 +6,8 @@
   "uniqueUserCount": "Total Users",
   "earliest": "Earliest",
   "latest": "Latest",
+  "adsBlockedToday": "Removed Today",
+  "adsBlockedTotal": "Total Removed",
   "tab1": "Stats",
   "tab2": "Capture",
   "tab3": "Data",

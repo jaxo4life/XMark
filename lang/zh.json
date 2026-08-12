@@ -6,6 +6,8 @@
   "uniqueUserCount": "用户数",
   "earliest": "最早",
   "latest": "最新",
+  "adsBlockedToday": "今日已去除",
+  "adsBlockedTotal": "总计已去除",
   "tab1": "数据统计",
   "tab2": "推文截图",
   "tab3": "数据管理",

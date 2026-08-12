@@ -360,6 +360,20 @@ async function loadStats() {
     document.getElementById("latest").textContent = stats.latest
       ? stats.latest.toLocaleString()
       : "-";
+
+    // 去除广告统计（今日已去除 / 总计已去除）
+    const adResult = await chrome.storage.local.get(["adBlockedStats"]);
+    const todayStr = new Date().toDateString();
+    const adBlocked = adResult.adBlockedStats || {
+      date: todayStr,
+      todayCount: 0,
+      totalCount: 0,
+    };
+    const adsToday =
+      adBlocked.date === todayStr ? adBlocked.todayCount || 0 : 0;
+    document.getElementById("adsBlockedToday").textContent = adsToday;
+    document.getElementById("adsBlockedTotal").textContent =
+      adBlocked.totalCount || 0;
   } catch (error) {
     console.error("加载统计数据失败:", error);
   }

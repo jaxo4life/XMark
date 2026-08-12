@@ -730,6 +730,7 @@ class TwitterNotes {
     tweets.forEach((tweet) => {
       if (tweet.hasAttribute("data-twitter-notes-processed")) return;
 
+      // 去除广告推文
       const hintKeywords = ["广告", "推荐", "Promoted", "Recommended", "Ad"];
 
       const isAd = [...tweet.querySelectorAll('div[dir="ltr"] span')].some(
@@ -739,6 +740,7 @@ class TwitterNotes {
       if (isAd) {
         tweet.setAttribute("data-twitter-notes-processed", "true");
         tweet.style.display = "none";
+        this.incrementAdBlockedCount();
         return;
       }
 
@@ -753,6 +755,30 @@ class TwitterNotes {
       this.addTweetNoteElements(tweet, null, username, userNameElement, true);
       tweet.setAttribute("data-twitter-notes-processed", "true");
     });
+  }
+
+  // 去除广告计数：今日已去除 + 总计已去除，按自然日重置今日计数
+  // 用 Promise 链串行化写入，避免同一批次多条广告并发读取导致丢计数
+  incrementAdBlockedCount() {
+    this._adCountChain = (this._adCountChain || Promise.resolve())
+      .then(async () => {
+        const result = await chrome.storage.local.get(["adBlockedStats"]);
+        const today = new Date().toDateString();
+        const stats = result.adBlockedStats || {
+          date: today,
+          todayCount: 0,
+          totalCount: 0,
+        };
+        if (stats.date !== today) {
+          stats.date = today;
+          stats.todayCount = 0;
+        }
+        stats.todayCount += 1;
+        stats.totalCount += 1;
+        await chrome.storage.local.set({ adBlockedStats: stats });
+      })
+      .catch((err) => console.error("广告计数失败:", err));
+    return this._adCountChain;
   }
 
   // 在用户页面的推文中也显示备注
