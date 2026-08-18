@@ -1,5 +1,15 @@
 # 更新日志 / Changelog
 
+## v6.1.0
+
+| 中文 | English |
+|------|----------|
+| 新增「界面净化」：自定义隐藏左侧菜单项（探索/Grok/Premium/Money/文章/关注/创作者工作室） | Added UI Clean: customizable left-nav hiding (Explore/Grok/Premium/Money/Articles/Following/Creator Studio) |
+| 隐藏右侧边栏（搜索/趋势/推荐关注） | Hide right sidebar (Search/Trends/Who to follow) |
+| 广告推文过滤改为面板开关（默认开，实时生效，关闭可还原） | Ad filtering becomes a panel toggle (default on, instant, restorable) |
+| 选择器三重兜底（testid/href/文本），抗 X 改版 | Triple fallback selectors (testid/href/text) against X redesigns |
+| 独立 ui-clean.js 模块，零耦合可整体移除 | Standalone ui-clean.js module, zero-coupled & removable |
+
 ## v6.0.0
 
 | 中文 | English |

@@ -7,7 +7,7 @@
 <p align="center">专为 X（前推特）打造的备注 · 截图 · 广告过滤 Chrome 扩展</p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/version-6.0.0-blue.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-6.1.0-blue.svg" alt="Version"></a>
   <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Manifest-V3-green.svg" alt="Manifest"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Chrome%20Extension-orange.svg" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL_v3-blue.svg" alt="License"></a>
@@ -30,6 +30,7 @@
 - 🗂 **时间线** — 所有截图自动归档，可按用户 / 日期 / 分类 / 关键词检索，配热力图回顾活跃度
 - 🏷 **标签管理** — 标签分类、拖拽排序、按标签筛选用户、标签独立导入导出
 - 🚫 **广告过滤** — 自动识别并隐藏信息流广告推文，去广告数量（今日 / 总计）一目了然
+- 🧹 **界面净化** — 自定义隐藏左侧菜单项（探索 / Grok / Premium / Money / 文章 / 关注 / 创作者工作室）、右侧边栏与广告推文，勾选即时生效
 - ☁️ **WebDAV 云备份** — 支持坚果云、Nextcloud、ownCloud 等，可按小时 / 天 / 周 / 月自动备份，凭据加密存储
 - 🔒 **安全** — XSS 防护、WebDAV SSRF 收口、凭据加密、扩展重载容错（v6.0.0 安全加固）
 - 🌐 **中英双语** — 完整国际化支持，一键切换
