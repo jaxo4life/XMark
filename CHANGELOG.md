@@ -1,5 +1,13 @@
 # 更新日志 / Changelog
 
+## v6.1.2
+
+| 中文 | English |
+|------|----------|
+| 界面净化入口移至 popup 顶部，点击弹出美化模态 | UI Clean entry moved to popup top; opens a polished modal |
+| 语言切换按钮精简（EN / 中文） | Language button simplified (EN / 中文) |
+| 修复：复选框标签切换语言后不刷新（未挂 data-key） | Fix: checkbox labels not refreshing on language switch (missing data-key) |
+
 ## v6.1.1
 
 | 中文 | English |
