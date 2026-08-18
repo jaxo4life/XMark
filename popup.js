@@ -127,6 +127,9 @@ document.addEventListener("DOMContentLoaded", async function () {
   // 加载推文截图开关
   await Screenshot();
 
+  // 加载界面净化控制面板
+  await initUIClean();
+
   // 加载最近备注
   await loadRecentNotes();
 
@@ -377,6 +380,74 @@ async function loadStats() {
   } catch (error) {
     console.error("加载统计数据失败:", error);
   }
+}
+
+// 界面净化控制面板：每项独立勾选，写 uiCleanSettings（content 侧 ui-clean.js 消费并实时生效）
+// 加新隐藏项：这里加一行 + ui-clean.js 的 NAV_ITEMS 加对应配置
+const UI_CLEAN_ITEMS = [
+  { id: "explore", key: "hideExplore", label: "探索" },
+  { id: "grok", key: "hideGrok", label: "Grok" },
+  { id: "premium", key: "hidePremium", label: "Premium" },
+  { id: "money", key: "hideMoney", label: "Money" },
+  { id: "articles", key: "hideArticles", label: "文章" },
+  { id: "following", key: "hideFollowing", label: "关注" },
+  { id: "creatorStudio", key: "hideCreatorStudio", label: "创作者工作室" },
+];
+
+async function initUIClean() {
+  const container = document.getElementById("uiCleanItems");
+  const rightToggle = document.getElementById("toggle-hideRight");
+  if (!container || !rightToggle) return;
+
+  const { uiCleanSettings = {} } = await chrome.storage.local.get([
+    "uiCleanSettings",
+  ]);
+
+  // 渲染复选行（数据驱动；i18n 直接取 langData，渲染晚于 updateTexts 也能生效）
+  container.textContent = "";
+  for (const item of UI_CLEAN_ITEMS) {
+    const row = document.createElement("label");
+    row.style.cssText =
+      "display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.dataset.uiCleanId = item.id;
+    cb.checked = !!uiCleanSettings[item.id];
+    const span = document.createElement("span");
+    span.textContent = langData[item.key] || item.label;
+    row.appendChild(cb);
+    row.appendChild(span);
+    container.appendChild(row);
+  }
+
+  // 通用 toggle 绑定（hideAds 默认开、rightSidebar 默认关）
+  const adsToggle = document.getElementById("toggle-hideAds");
+  const bindToggle = (el, key, defaultOn) => {
+    el.classList.toggle(
+      "active",
+      uiCleanSettings[key] !== undefined ? !!uiCleanSettings[key] : defaultOn
+    );
+    el.addEventListener("click", async () => {
+      const active = el.classList.toggle("active");
+      const cur =
+        (await chrome.storage.local.get(["uiCleanSettings"])).uiCleanSettings ||
+        {};
+      chrome.storage.local.set({ uiCleanSettings: { ...cur, [key]: active } });
+    });
+  };
+  if (adsToggle) bindToggle(adsToggle, "hideAds", true);
+  bindToggle(rightToggle, "rightSidebar", false);
+
+  // 复选框变化
+  container.addEventListener("change", async (e) => {
+    const id = e.target.dataset?.uiCleanId;
+    if (!id) return;
+    const cur =
+      (await chrome.storage.local.get(["uiCleanSettings"])).uiCleanSettings ||
+      {};
+    cur[id] = e.target.checked;
+    chrome.storage.local.set({ uiCleanSettings: cur });
+  });
 }
 
 // 加载推文保存按钮

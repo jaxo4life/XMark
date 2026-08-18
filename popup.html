@@ -147,6 +147,29 @@
           查看时间线
         </button>
       </div>
+
+      <div class="section">
+        <h3 data-key="uiClean">界面净化</h3>
+        <div class="auto-backup-header">
+          <span data-key="hideAds">隐藏广告推文</span>
+          <div class="toggle-switch" id="toggle-hideAds"></div>
+        </div>
+        <div class="auto-backup-header">
+          <span data-key="hideRightSidebar">隐藏右侧边栏</span>
+          <div class="toggle-switch" id="toggle-hideRight"></div>
+        </div>
+        <div
+          id="uiCleanItems"
+          style="
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-top: 8px;
+          "
+        >
+          <!-- 隐藏项复选行由 popup.js 按配置渲染 -->
+        </div>
+      </div>
     </div>
 
     <div id="data" class="tab-content">

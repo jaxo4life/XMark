@@ -16,7 +16,7 @@
   "content_scripts": [
     {
       "matches": ["https://twitter.com/*", "https://x.com/*", "https://pro.x.com/*"],
-      "js": ["content.js"],
+      "js": ["content.js", "ui-clean.js"],
       "css": ["styles/content.css"],
       "run_at": "document_end"
     }

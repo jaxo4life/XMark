@@ -93,6 +93,7 @@ class TwitterNotes {
     this.notificationElement = null;
     this._followingObserver = null;
     this._userTweetsObserver = null;
+    this._hideAds = true; // 广告推文隐藏开关（popup「界面净化」面板写入 uiCleanSettings.hideAds）
   }
 
   async init() {
@@ -121,6 +122,11 @@ class TwitterNotes {
 
     // 初始处理页面
     this.processPage();
+
+    // 去广告开关（默认开）
+    chrome.storage.local.get(["uiCleanSettings"], ({ uiCleanSettings }) => {
+      this._hideAds = uiCleanSettings?.hideAds !== false;
+    });
   }
 
   // 标签面板
@@ -779,8 +785,10 @@ class TwitterNotes {
           hintKeywords.includes((span.textContent || "").trim())
       );
 
-      if (isAd) {
+      // 去广告开关关闭时不隐藏，广告推文走正常备注流程
+      if (isAd && this._hideAds) {
         tweet.setAttribute("data-twitter-notes-processed", "true");
+        tweet.setAttribute("data-xmark-ad-hidden", "true"); // 专属标记，关闭开关时还原用
         tweet.style.display = "none";
         this.incrementAdBlockedCount();
         return;
@@ -821,6 +829,15 @@ class TwitterNotes {
       })
       .catch((err) => console.error("广告计数失败:", err));
     return this._adCountChain;
+  }
+
+  // 关闭去广告开关时，还原此前已隐藏的广告推文
+  restoreHiddenAds() {
+    document.querySelectorAll("[data-xmark-ad-hidden]").forEach((tweet) => {
+      tweet.removeAttribute("data-xmark-ad-hidden");
+      tweet.removeAttribute("data-twitter-notes-processed"); // 让 observer 重新按正常推文处理
+      tweet.style.display = "";
+    });
   }
 
   // 在用户页面的推文中也显示备注
@@ -2147,6 +2164,16 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes.lang) {
     langData = null;
     updateTexts();
+  }
+
+  // 界面净化-去广告开关实时生效
+  if (area === "local" && changes.uiCleanSettings) {
+    const hideAds = changes.uiCleanSettings.newValue?.hideAds !== false;
+    if (hideAds !== twitterNotes._hideAds) {
+      twitterNotes._hideAds = hideAds;
+      if (hideAds) twitterNotes.processHomePage(); // 立即隐藏现存广告推文
+      else twitterNotes.restoreHiddenAds(); // 还原此前已隐藏的
+    }
   }
 
   if (area === "local" && changes.noteTagsOrder) {
