@@ -392,6 +392,7 @@ const UI_CLEAN_ITEMS = [
   { id: "articles", key: "hideArticles", label: "文章" },
   { id: "following", key: "hideFollowing", label: "关注" },
   { id: "creatorStudio", key: "hideCreatorStudio", label: "创作者工作室" },
+  { id: "more", key: "hideMore", label: "更多" },
 ];
 
 async function initUIClean() {
@@ -438,6 +439,33 @@ async function initUIClean() {
   if (adsToggle) bindToggle(adsToggle, "hideAds", true);
   bindToggle(rightToggle, "rightSidebar", false);
 
+  // 一键清爽左栏：全部勾选/全部取消（与单项复选框双向同步）
+  const cleanAllToggle = document.getElementById("toggle-cleanLeftNav");
+  const syncCleanAll = () => {
+    cleanAllToggle?.classList.toggle(
+      "active",
+      UI_CLEAN_ITEMS.every((it) => !!uiCleanSettings[it.id])
+    );
+  };
+  if (cleanAllToggle) {
+    syncCleanAll();
+    cleanAllToggle.addEventListener("click", async () => {
+      const next = !UI_CLEAN_ITEMS.every((it) => !!uiCleanSettings[it.id]);
+      const cur =
+        (await chrome.storage.local.get(["uiCleanSettings"])).uiCleanSettings ||
+        {};
+      UI_CLEAN_ITEMS.forEach((it) => {
+        cur[it.id] = next;
+      });
+      Object.assign(uiCleanSettings, cur);
+      chrome.storage.local.set({ uiCleanSettings: cur });
+      container.querySelectorAll("input[data-ui-clean-id]").forEach((cb) => {
+        cb.checked = next;
+      });
+      cleanAllToggle.classList.toggle("active", next);
+    });
+  }
+
   // 复选框变化
   container.addEventListener("change", async (e) => {
     const id = e.target.dataset?.uiCleanId;
@@ -446,7 +474,9 @@ async function initUIClean() {
       (await chrome.storage.local.get(["uiCleanSettings"])).uiCleanSettings ||
       {};
     cur[id] = e.target.checked;
+    Object.assign(uiCleanSettings, cur); // 同步本地快照，供一键开关判断
     chrome.storage.local.set({ uiCleanSettings: cur });
+    syncCleanAll();
   });
 }
 

@@ -57,6 +57,12 @@
       selectors:
         'nav a[data-testid="AppTabBar_CreatorStudio_Link"], nav a[href="/creatorstudio"], nav a[href^="/i/creator"]',
     },
+    {
+      id: "more",
+      labels: ["更多", "More"],
+      // 「更多」是按钮不是链接（无 href），testid 是主路径，文本兜底靠 nav button 扫描
+      selectors: 'nav [data-testid="AppTabBar_More_Menu"]',
+    },
   ];
   const RIGHT_SIDEBAR = {
     id: "rightSidebar",
@@ -66,18 +72,24 @@
   let settings = {}; // 当前生效的勾选
 
   // 注入静态 CSS（按 body 类隔离；文本兜底类通用）
+  // ⚠️ CSS 逗号是独立选择器列表：拼 "body.cls selA, selB" 时 selB 不继承 body.cls 前缀，
+  //    会变成无条件规则——必须逐条拆开各自加前缀（曾因此 href 选择器无条件隐藏菜单项）
   function injectStyle() {
     if (document.getElementById("xmark-ui-clean-style")) return;
-    const css = [
-      `body.xmark-hide-${RIGHT_SIDEBAR.id} ${RIGHT_SIDEBAR.selectors}{display:none!important}`,
-      ...NAV_ITEMS.map(
-        (it) => `body.xmark-hide-${it.id} ${it.selectors}{display:none!important}`
+    const prefixed = (cls, selectors) =>
+      selectors
+        .split(",")
+        .map((s) => `body.${cls} ${s.trim()}{display:none!important}`);
+    const rules = [
+      ...prefixed(`xmark-hide-${RIGHT_SIDEBAR.id}`, RIGHT_SIDEBAR.selectors),
+      ...NAV_ITEMS.flatMap((it) =>
+        prefixed(`xmark-hide-${it.id}`, it.selectors)
       ),
       ".xmark-ui-nav-hidden{display:none!important}",
-    ].join("\n");
+    ];
     const style = document.createElement("style");
     style.id = "xmark-ui-clean-style";
-    style.textContent = css;
+    style.textContent = rules.join("\n");
     document.documentElement.appendChild(style);
   }
 
@@ -93,14 +105,17 @@
       );
 
       // 文本兜底：只有"已启用项"的 label 才隐藏（关闭项即使文本命中也要还原）
+      // 扫描范围含 button——「更多」等按钮型菜单项无 href
       const hiddenLabels = new Set(
         NAV_ITEMS.filter((it) => settings[it.id]).flatMap((it) => it.labels)
       );
-      document.querySelectorAll("nav a[href]").forEach((a) => {
-        const t = (a.textContent || "").trim();
-        if (t && hiddenLabels.has(t)) a.classList.add("xmark-ui-nav-hidden");
-        else a.classList.remove("xmark-ui-nav-hidden");
-      });
+      document
+        .querySelectorAll("nav a[href], nav button")
+        .forEach((a) => {
+          const t = (a.textContent || "").trim();
+          if (t && hiddenLabels.has(t)) a.classList.add("xmark-ui-nav-hidden");
+          else a.classList.remove("xmark-ui-nav-hidden");
+        });
     } catch (e) {
       /* 扩展上下文失效等场景静默 */
     }
