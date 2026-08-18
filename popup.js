@@ -33,7 +33,7 @@ async function loadLanguage(lang) {
     localStorage.setItem("lang", lang);
     currentLang = lang;
     chrome.storage.local.set({ lang: currentLang });
-    langBtn.textContent = lang === "zh" ? "English" : "中文";
+    langBtn.textContent = lang === "zh" ? "EN" : "中文";
     console.log(langData.status.webdavConnected);
 
     updateTexts();
@@ -400,6 +400,20 @@ async function initUIClean() {
   const rightToggle = document.getElementById("toggle-hideRight");
   if (!container || !rightToggle) return;
 
+  // 模态开关：顶部「界面净化」按钮弹出
+  const modal = document.getElementById("uiCleanModal");
+  const uiCleanBtn = document.getElementById("uiCleanBtn");
+  const modalClose = document.getElementById("uiCleanModalClose");
+  if (modal && uiCleanBtn) {
+    uiCleanBtn.addEventListener("click", () =>
+      modal.classList.remove("hidden")
+    );
+    modalClose?.addEventListener("click", () => modal.classList.add("hidden"));
+    modal.addEventListener("click", (e) => {
+      if (e.target === modal) modal.classList.add("hidden"); // 点遮罩关闭
+    });
+  }
+
   const { uiCleanSettings = {} } = await chrome.storage.local.get([
     "uiCleanSettings",
   ]);
@@ -415,6 +429,7 @@ async function initUIClean() {
     cb.dataset.uiCleanId = item.id;
     cb.checked = !!uiCleanSettings[item.id];
     const span = document.createElement("span");
+    span.dataset.key = item.key; // 挂 data-key，语言切换时 updateTexts 自动刷新
     span.textContent = langData[item.key] || item.label;
     row.appendChild(cb);
     row.appendChild(span);
