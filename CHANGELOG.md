@@ -1,5 +1,13 @@
 # 更新日志 / Changelog
 
+## v6.1.1
+
+| 中文 | English |
+|------|----------|
+| 修复：菜单项 href 选择器因 CSS 逗号陷阱被无条件隐藏（开关关闭也生效） | Fix: CSS comma pitfall caused href selectors to hide nav items unconditionally (even when toggled off) |
+| 新增「更多」菜单项隐藏（按钮型，文本兜底覆盖） | Added "More" nav item hiding (button type, text-fallback covered) |
+| 新增「一键清爽左栏」：全选/全关，与单项复选框双向同步 | Added "Clean left nav" one-click toggle (all on/off, two-way synced with items) |
+
 ## v6.1.0
 
 | 中文 | English |

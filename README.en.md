@@ -7,7 +7,7 @@
 <p align="center">A Chrome extension for X (formerly Twitter): Notes · Screenshots · Ad-filtering</p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/version-6.1.0-blue.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-6.1.1-blue.svg" alt="Version"></a>
   <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Manifest-V3-green.svg" alt="Manifest"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Chrome%20Extension-orange.svg" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL_v3-blue.svg" alt="License"></a>
@@ -30,7 +30,7 @@
 - 🗂 **Timeline** — All screenshots auto-archived; search by user / date / category / keyword, with an activity heatmap
 - 🏷 **Tag Management** — Tagging, drag-to-reorder, filter users by tag, independent tag import/export
 - 🚫 **Ad Filtering** — Auto-detects and hides promoted tweets in your feed; ad-block counts (today / total) at a glance
-- 🧹 **UI Clean** — Customizable hiding of left-nav items (Explore / Grok / Premium / Money / Articles / Following / Creator Studio), the right sidebar, and ad tweets — applied instantly
+- 🧹 **UI Clean** — Customizable hiding of left-nav items (Explore / Grok / Premium / Money / Articles / Following / Creator Studio / More), the right sidebar, and ad tweets; one-click clean-left-nav — applied instantly
 - ☁️ **WebDAV Cloud Backup** — Works with Nutstore, Nextcloud, ownCloud, etc.; hourly/daily/weekly/monthly auto-backup, credentials encrypted at rest
 - 🔒 **Secure** — XSS protection, WebDAV SSRF closure, credential encryption, extension-reload tolerance (hardened in v6.0.0)
 - 🌐 **Bilingual** — Full i18n, one-click switch between Chinese and English
