@@ -7,7 +7,7 @@
 <p align="center">A Chrome extension for X (formerly Twitter): Notes · Screenshots · Ad-filtering</p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/version-6.2.0-blue.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-6.3.0-blue.svg" alt="Version"></a>
   <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Manifest-V3-green.svg" alt="Manifest"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Chrome%20Extension-orange.svg" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL_v3-blue.svg" alt="License"></a>
@@ -28,7 +28,7 @@
 - 📝 **User Notes** — Add personalized notes to any X user (e.g. "Key Account", "Potential Partner", "Suspicious"), shown prominently in the timeline and on profiles
 - 📸 **Tweet Screenshots** — Capture long tweets in one click; save to local / WebDAV / built-in timeline database
 - 🗂 **Timeline** — All screenshots auto-archived; search by user / date / category / keyword, with an activity heatmap
-- 🏷 **Tag Management** — Tagging, drag-to-reorder, filter users by tag, independent tag import/export
+- 🏷 **Tag Management** — Tagging, drag-to-reorder, filter users by tag (edge-handle drawer + count badges), independent tag import/export
 - 🚫 **Ad Filtering** — Auto-detects and hides promoted tweets in your feed; ad-block counts (today / total) at a glance
 - 🧹 **UI Clean** — Customizable hiding of left-nav items (Explore / Grok / Premium / Money / Articles / Following / Creator Studio / More), the right sidebar, and ad tweets; one-click clean-left-nav — applied instantly
 - 🔍 **XFinder Advanced Search** — a search panel embedded in the freed right-rail slot: combine from / keyword / to-interaction / date range, with X native operators (detailed hints behind the ? icon) and one-click history repeat; UI fully aligned with X official

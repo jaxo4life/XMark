@@ -1,5 +1,13 @@
 # 更新日志 / Changelog
 
+## v6.3.0
+
+| 中文 | English |
+|------|----------|
+| 标签面板重构：X 风格贴边把手抽屉（左缘把手，箭头翻转，面板从左滑出） | Tags UI rebuilt: X-style edge-handle drawer (left-edge tab, flipping arrow, slides out from left) |
+| 标签行新增用户数徽标 | Per-tag user count badge |
+| 用户列表面板 X 化：右侧滑入卡片、垂直居中、暗色适配 | User list panel X-styled: right slide-in card, vertically centered, dark mode |
+
 ## v6.2.0
 
 | 中文 | English |

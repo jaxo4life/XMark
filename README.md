@@ -7,7 +7,7 @@
 <p align="center">专为 X（前推特）打造的备注 · 截图 · 广告过滤 Chrome 扩展</p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/version-6.2.0-blue.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-6.3.0-blue.svg" alt="Version"></a>
   <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Manifest-V3-green.svg" alt="Manifest"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Chrome%20Extension-orange.svg" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL_v3-blue.svg" alt="License"></a>
@@ -28,7 +28,7 @@
 - 📝 **用户备注** — 为任意 X 用户添加个性化备注（如「重点关注」「潜在合作」「存疑账号」），在信息流与主页醒目展示
 - 📸 **推文截图** — 一键捕获长推文，支持保存到本地 / WebDAV / 内置时间线数据库
 - 🗂 **时间线** — 所有截图自动归档，可按用户 / 日期 / 分类 / 关键词检索，配热力图回顾活跃度
-- 🏷 **标签管理** — 标签分类、拖拽排序、按标签筛选用户、标签独立导入导出
+- 🏷 **标签管理** — 标签分类、拖拽排序、按标签筛选用户（左缘贴边抽屉 + 数量徽标）、标签独立导入导出
 - 🚫 **广告过滤** — 自动识别并隐藏信息流广告推文，去广告数量（今日 / 总计）一目了然
 - 🧹 **界面净化** — 自定义隐藏左侧菜单项（探索 / Grok / Premium / Money / 文章 / 关注 / 创作者工作室 / 更多）、右侧边栏与广告推文；一键清爽左栏，勾选即时生效
 - 🔍 **XFinder 高阶搜索** — 隐藏右栏后原位内嵌搜索面板：from / 关键词 / to 交互账户 / 日期范围组合查询，支持 X 原生操作符（问号有详细提示），搜索历史一键重复；UI 与 X 官方完全统一
