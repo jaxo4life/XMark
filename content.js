@@ -86,7 +86,6 @@ class TwitterNotes {
     this.notes = {}; // 存储备注数据，键可能是用户名或用户ID
     this.userIdCache = new Map(); // 缓存用户名到ID的映射
     this.init();
-    this.observeGroups();
     this.twitterObserver = null;
     this._profileProcessStatus = new Map();
     this.extensionEnabled = true;
@@ -123,6 +122,9 @@ class TwitterNotes {
     // 初始处理页面
     this.processPage();
 
+    // 标签抽屉首次渲染（旧版由 observeGroups 触发，已删）
+    this.initGroups();
+
     // 去广告开关（默认开）
     chrome.storage.local.get(["uiCleanSettings"], ({ uiCleanSettings }) => {
       this._hideAds = uiCleanSettings?.hideAds !== false;
@@ -138,6 +140,100 @@ class TwitterNotes {
     });
   }
 
+  // ---------- 标签抽屉（X 风格：左缘垂直居中圆钮 + 从左滑出抽屉，替代旧 nav 内彩色药丸条） ----------
+  injectTagsStyle() {
+    if (document.getElementById("xmark-tags-style")) return;
+    const css = `
+/* 贴边把手式抽屉：容器只负责定位/过渡，无背景——收起时左缘只露把手自己的 20×100 玻璃条 */
+#xmark-tags-drawer{position:fixed;left:0;top:50%;transform:translateY(-50%) translateX(calc(-100% + 20px));display:flex;align-items:center;z-index:2;transition:transform .25s ease;font-family:inherit;box-sizing:border-box;--xt-hover:#f7f9f9;--xt-fg:#0f1419;--xt-muted:#536471}
+#xmark-tags-drawer.open{transform:translateY(-50%) translateX(0)}
+html[data-xmark-theme="dark"] #xmark-tags-drawer{--xt-hover:rgba(101,119,134,.18);--xt-fg:#e7e9ea;--xt-muted:#71767b}
+/* 面板卡片（毛玻璃，左贴屏直角、右接把手） */
+#xmark-tags-drawer .xt-card{width:200px;max-height:min(70vh,560px);display:flex;flex-direction:column;background:rgba(255,255,255,.85);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid rgb(159,181,195);border-bottom:1px solid rgb(159,181,195);box-shadow:0 0 15px rgba(101,119,134,.2),0 0 3px 1px rgba(101,119,134,.15)}
+html[data-xmark-theme="dark"] #xmark-tags-drawer .xt-card{background:rgba(0,0,0,.65);border-color:rgb(75,78,82);box-shadow:rgba(255,255,255,.2) 0 0 18px,rgba(255,255,255,.15) 0 0 4px 2px}
+/* 固定标题头（不随列表滚动） */
+#xmark-tags-drawer .xt-head{flex:none;padding:12px 14px 8px;font-size:15px;font-weight:800;color:var(--xt-fg);border-bottom:1px solid rgba(159,181,195,.35)}
+html[data-xmark-theme="dark"] #xmark-tags-drawer .xt-head{border-bottom-color:rgba(75,78,82,.5)}
+/* 滚动区（只滚列表） */
+#xmark-tags-drawer .xt-scroll{flex:1;overflow-y:auto;scrollbar-width:none;padding:6px 2px 8px 0;min-height:64px}
+#xmark-tags-drawer .xt-scroll::-webkit-scrollbar{display:none}
+/* 把手（20×100 玻璃小条，自身带背景/边框/右侧圆角） */
+#xmark-tags-handle{flex:none;width:20px;height:100px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;margin:0;color:#0f1419;background:rgba(255,255,255,.85);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border:1px solid rgb(159,181,195);border-left:none;border-radius:0 12px 12px 0;box-shadow:0 0 15px rgba(101,119,134,.2),0 0 3px 1px rgba(101,119,134,.15);outline:none}
+#xmark-tags-handle:hover{background:rgba(255,255,255,.95)}
+html[data-xmark-theme="dark"] #xmark-tags-handle{background:rgba(0,0,0,.65);border-color:rgb(75,78,82);color:#e7e9ea;box-shadow:rgba(255,255,255,.2) 0 0 18px,rgba(255,255,255,.15) 0 0 4px 2px}
+html[data-xmark-theme="dark"] #xmark-tags-handle:hover{background:rgba(0,0,0,.75)}
+#xmark-tags-handle svg{width:15px;height:15px;display:block}
+#xmark-tags-handle .xt-chev-l{display:none}
+#xmark-tags-drawer.open #xmark-tags-handle .xt-chev-r{display:none}
+#xmark-tags-drawer.open #xmark-tags-handle .xt-chev-l{display:block}
+
+/* 用户面板共享变量 */
+#twitterTagPanel{--xt-hover:#f7f9f9;--xt-fg:#0f1419;--xt-muted:#536471}
+html[data-xmark-theme="dark"] #twitterTagPanel{--xt-hover:rgba(101,119,134,.18);--xt-fg:#e7e9ea;--xt-muted:#71767b}
+
+.xt-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;cursor:pointer;user-select:none}
+.xt-row:hover{background:var(--xt-hover)}
+.xt-dot{width:11px;height:11px;border-radius:9999px;flex:none}
+.xt-name{flex:1;font-size:14px;font-weight:700;color:var(--xt-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.xt-count{font-size:12px;color:var(--xt-muted)}
+.xt-empty{padding:16px 10px;text-align:center;color:var(--xt-muted);font-size:13px}
+
+/* 用户列表面板（右侧滑入，X 卡片规格） */
+#twitterTagPanel{--xt-bg:#fff;--xt-line:#eff3f4;position:fixed;top:50%;transform:translateY(-50%);right:-340px;width:320px;max-height:calc(100vh - 400px);overflow-y:auto;scrollbar-width:none;background:var(--xt-bg);border:1px solid var(--xt-line);border-radius:16px;box-shadow:0 4px 18px rgba(101,119,134,.28);color:var(--xt-fg);z-index:9999;transition:right .25s ease;padding:8px}
+#twitterTagPanel::-webkit-scrollbar{display:none}
+#twitterTagPanel.open{right:12px}
+html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336}
+.xt-user-head{display:flex;align-items:center;gap:10px;position:sticky;top:-8px;background:var(--xt-bg);padding:8px 10px;border-bottom:1px solid var(--xt-line);margin-bottom:4px;z-index:1}
+.xt-user-head .xt-dot{width:10px;height:10px}
+.xt-htitle{flex:1;font-size:16px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.xt-uclose{border:none;background:none;font-size:18px;line-height:1;color:var(--xt-muted);cursor:pointer;width:32px;height:32px;border-radius:9999px;display:flex;align-items:center;justify-content:center;padding:0}
+.xt-uclose:hover{background:var(--xt-hover);color:var(--xt-fg)}
+.xt-user{display:flex;align-items:flex-start;gap:10px;padding:10px;border-radius:12px;text-decoration:none;color:var(--xt-fg);transition:background-color .15s}
+.xt-user:hover{background:var(--xt-hover)}
+.xt-user img{width:40px;height:40px;border-radius:9999px;flex:none}
+.xt-uinfo{min-width:0;font-size:14px;line-height:1.4}
+.xt-uinfo strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.xt-uhandle{color:var(--xt-muted);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.xt-udesc{color:var(--xt-muted);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+`;
+    const style = document.createElement("style");
+    style.id = "xmark-tags-style";
+    style.textContent = css;
+    document.documentElement.appendChild(style);
+  }
+
+  // 暗色三层检测（与 xfinder 共享 html[data-xmark-theme] 钩子，两侧幂等）
+  applyXMarkTheme() {
+    const lum = (m) =>
+      parseInt(m[0]) * 0.299 +
+        parseInt(m[1] || 0) * 0.587 +
+        parseInt(m[2] || 0) * 0.114 <
+      128;
+    let dark = null;
+    try {
+      const cs = document.documentElement.style.colorScheme;
+      if (cs) dark = cs.includes("dark");
+    } catch (e) {
+      /* ignore */
+    }
+    if (dark === null) {
+      const meta = document.querySelector('meta[name="theme-color"]');
+      const m = meta && (meta.content || "").match(/\d+/g);
+      if (m) dark = lum(m);
+    }
+    if (dark === null) {
+      try {
+        const m = (getComputedStyle(document.body).backgroundColor || "").match(
+          /\d+/g
+        );
+        dark = m ? lum(m) : false;
+      } catch (e) {
+        dark = false;
+      }
+    }
+    document.documentElement.dataset.xmarkTheme = dark ? "dark" : "light";
+  }
+
   async initGroups() {
     // 初始化状态并设置样式
     const res = await new Promise((resolve) => {
@@ -145,64 +241,122 @@ class TwitterNotes {
     });
 
     if (!res.tagGroupsVisible) {
+      document.getElementById("xmark-tags-drawer")?.remove();
       return;
     }
 
-    // 取出标签和顺序
-    const { noteTags = {}, noteTagsOrder = [] } = await this.getGroups();
+    // 取出标签、顺序与备注（数量统计用）
+    const { twitterNotes = {}, noteTags = {}, noteTagsOrder = [] } =
+      await this.getGroups();
 
-    const nav = document.querySelector("header nav");
-    if (!nav) return;
+    this.injectTagsStyle();
+    this.applyXMarkTheme();
+    this.renderTagsDrawer(twitterNotes, noteTags, noteTagsOrder);
+  }
 
-    // 删除旧 wrapper，保证每次刷新都生效
-    const oldWrapper = nav.querySelector("[data-groups-nav]");
-    if (oldWrapper) oldWrapper.remove();
+  renderTagsDrawer(notes, tags, orderList) {
+    const order = (orderList.length ? orderList : Object.keys(tags)).filter(
+      (id) => tags[id]
+    );
 
-    const wrapper = document.createElement("div");
-    wrapper.setAttribute("data-groups-nav", "true");
+    // 每个标签的用户数
+    const counts = {};
+    for (const n of Object.values(notes || {})) {
+      if (n.tagId) counts[n.tagId] = (counts[n.tagId] || 0) + 1;
+    }
 
-    // 样式优化
-    wrapper.style.display = "flex"; // 水平排列
-    wrapper.style.flexWrap = "wrap"; // 多行换行
-    wrapper.style.gap = "6px"; // 标签之间间距
-    wrapper.style.maxWidth = "100%"; // 不超出父元素宽度
-    wrapper.style.padding = "4px 0"; // 上下内边距
-    wrapper.style.overflowX = "auto"; // 超出可横向滚动
-    wrapper.style.scrollBehavior = "smooth"; // 滑动平滑
+    // 抽屉容器（首建：卡片[固定标题头+滚动列表] + 贴边把手，一体结构）
+    let drawer = document.getElementById("xmark-tags-drawer");
+    if (!drawer) {
+      drawer = document.createElement("div");
+      drawer.id = "xmark-tags-drawer";
 
-    // 渲染顺序：先按 noteTagsOrder，再补上缺的
-    const order = (
-      noteTagsOrder.length ? noteTagsOrder : Object.keys(noteTags)
-    ).filter((id) => noteTags[id]);
+      const card = document.createElement("div");
+      card.className = "xt-card";
+      const head = document.createElement("div");
+      head.className = "xt-head";
+      head.textContent = langData?.tagsDrawerTitle || "标签";
+      const scroll = document.createElement("div");
+      scroll.className = "xt-scroll";
+      card.appendChild(head);
+      card.appendChild(scroll);
+      drawer.appendChild(card);
+
+      // 把手：20×100，箭头随开合翻转（chevron fill 型；DOMParser 必须显式 xmlns 且单根）
+      const handle = document.createElement("button");
+      handle.id = "xmark-tags-handle";
+      handle.title = langData?.tagsDrawerTitle || "标签";
+      const mkChev = (cls, d) => {
+        const doc = new DOMParser().parseFromString(
+          `<svg xmlns="http://www.w3.org/2000/svg" class="${cls}" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="${d}"/></svg>`,
+          "image/svg+xml"
+        );
+        return document.importNode(doc.documentElement, true);
+      };
+      handle.appendChild(
+        mkChev(
+          "xt-chev-r",
+          "M9.47 4.47a.75.75 0 0 1 1.06 0l7.06 7.06a.75.75 0 0 1 0 1.06l-7.06 7.06a.75.75 0 1 1-1.06-1.06L15.88 12 9.47 5.53a.75.75 0 0 1 0-1.06z"
+        )
+      );
+      handle.appendChild(
+        mkChev(
+          "xt-chev-l",
+          "M14.53 4.47a.75.75 0 0 0-1.06 0L6.41 11.53a.75.75 0 0 0 0 1.06l7.06 7.06a.75.75 0 1 0 1.06-1.06L8.12 12l6.41-6.47a.75.75 0 0 0 0-1.06z"
+        )
+      );
+      handle.addEventListener("click", (e) => {
+        e.stopPropagation();
+        drawer.classList.toggle("open");
+      });
+      drawer.appendChild(handle);
+
+      document.body.appendChild(drawer);
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") drawer.classList.remove("open");
+      });
+      document.addEventListener("click", (e) => {
+        if (!drawer.contains(e.target)) drawer.classList.remove("open");
+      });
+    }
+
+    // 列表（渲染进滚动区；标题在固定头不随滚动）
+    const scroll = drawer.querySelector(".xt-scroll");
+    scroll.textContent = "";
+
+    if (!order.length) {
+      const empty = document.createElement("div");
+      empty.className = "xt-empty";
+      empty.textContent = langData?.noTag || "无标签";
+      scroll.appendChild(empty);
+      return;
+    }
 
     order.forEach((id) => {
-      const tag = noteTags[id];
-      if (!tag) return;
-
-      const btn = document.createElement("span");
-      btn.textContent = tag.name;
-
-      btn.style.cursor = "pointer";
-      btn.style.fontWeight = "bold";
-      btn.style.color = "#fff";
-      btn.style.backgroundColor = tag.color || "rgb(29,155,240)";
-      btn.style.borderRadius = "12px";
-      btn.style.padding = "2px 8px";
-      btn.style.fontSize = "12px";
-      btn.style.whiteSpace = "nowrap"; // 保证文字不换行
-      btn.style.display = "inline-flex";
-      btn.style.alignItems = "center";
-      btn.style.justifyContent = "center";
-
-      btn.addEventListener("click", () => {
+      const tag = tags[id];
+      const row = document.createElement("div");
+      row.className = "xt-row";
+      const dot = document.createElement("span");
+      dot.className = "xt-dot";
+      dot.style.backgroundColor = safeColor(tag.color);
+      const name = document.createElement("span");
+      name.className = "xt-name";
+      name.textContent = tag.name;
+      const count = document.createElement("span");
+      count.className = "xt-count";
+      count.textContent = counts[id] || 0;
+      row.appendChild(dot);
+      row.appendChild(name);
+      row.appendChild(count);
+      row.addEventListener("click", () => {
         this.filterUsersByTag(id);
       });
-
-      wrapper.appendChild(btn);
+      scroll.appendChild(row);
     });
-
-    nav.appendChild(wrapper);
   }
+
+  // 旧 initGroups（nav 内彩色药丸条）已由上方标签抽屉替代
 
   async filterUsersByTag(tagId) {
     const { twitterNotes = {}, noteTags = {} } = await this.getGroups();
@@ -211,173 +365,80 @@ class TwitterNotes {
     );
     const tag = noteTags[tagId];
 
-    // 创建或获取面板
+    // 创建或获取面板（X 卡片规格，class 驱动；样式见 injectTagsStyle）
     let panel = document.querySelector("#twitterTagPanel");
     if (!panel) {
       panel = document.createElement("div");
       panel.id = "twitterTagPanel";
-      panel.style.position = "fixed";
-      panel.style.top = "100px";
-      panel.style.right = "-340px";
-      panel.style.width = "320px";
-      panel.style.maxHeight = "70%";
-      panel.style.overflowY = "auto";
-      panel.style.borderRadius = "12px";
-      panel.style.boxShadow = "0 4px 12px rgba(0,0,0,0.1)";
-      panel.style.padding = "0";
-      panel.style.zIndex = "9999";
-      panel.style.fontFamily =
-        'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
-      panel.style.transition = "right 0.3s ease, background 0.3s ease";
       document.body.appendChild(panel);
 
-      // 关闭按钮
-      const closeBtn = document.createElement("div");
-      closeBtn.textContent = "✕";
-      closeBtn.style.position = "absolute";
-      closeBtn.style.top = "8px";
-      closeBtn.style.right = "12px";
-      closeBtn.style.cursor = "pointer";
-      closeBtn.style.fontSize = "18px";
-      closeBtn.style.fontWeight = "bold";
-      closeBtn.addEventListener("click", () => (panel.style.right = "-340px"));
-      panel.appendChild(closeBtn);
-
-      // 点击面板外关闭
+      // 点击面板外关闭（一次性绑定）
       document.addEventListener("click", (e) => {
-        if (
-          !panel.contains(e.target) &&
-          e.target.dataset.tagButton !== "true"
-        ) {
-          panel.style.right = "-340px";
-        }
+        if (!panel.contains(e.target)) panel.classList.remove("open");
       });
     }
 
     // 清空旧内容
-    panel.innerHTML = "";
+    panel.textContent = "";
 
-    // 标题栏
-    const titleBar = document.createElement("div");
-    titleBar.style.display = "flex";
-    titleBar.style.alignItems = "center";
-    titleBar.style.justifyContent = "center";
-    titleBar.style.position = "sticky";
-    titleBar.style.top = "0";
-    titleBar.style.zIndex = "1";
-    titleBar.style.background = tag?.color || "#1DA1F2";
-    titleBar.style.color = "#fff";
-    titleBar.style.padding = "10px";
-    titleBar.style.fontWeight = "bold";
-    titleBar.style.fontSize = "16px";
-    titleBar.style.borderTopLeftRadius = "12px";
-    titleBar.style.borderTopRightRadius = "12px";
+    // 标题栏（色点 + 标签名 + 关闭，X 列表头规格）
+    const head = document.createElement("div");
+    head.className = "xt-user-head";
+    const dot = document.createElement("span");
+    dot.className = "xt-dot";
+    dot.style.backgroundColor = safeColor(tag?.color);
+    const htitle = document.createElement("div");
+    htitle.className = "xt-htitle";
+    htitle.textContent = tag?.name || "标签";
+    const uclose = document.createElement("button");
+    uclose.className = "xt-uclose";
+    uclose.textContent = "×";
+    uclose.addEventListener("click", () => panel.classList.remove("open"));
+    head.appendChild(dot);
+    head.appendChild(htitle);
+    head.appendChild(uclose);
+    panel.appendChild(head);
 
-    // 标题文字
-    const titleText = document.createElement("div");
-    titleText.textContent = tag?.name || "标签";
-    titleText.style.flex = "1";
-    titleText.style.textAlign = "center";
-    titleBar.appendChild(titleText);
-
-    // 关闭按钮
-    const closeBtn = document.createElement("div");
-    closeBtn.textContent = "✕";
-    closeBtn.style.cursor = "pointer";
-    closeBtn.style.fontSize = "18px";
-    closeBtn.style.fontWeight = "bold";
-    closeBtn.style.position = "absolute";
-    closeBtn.style.right = "12px";
-    closeBtn.style.top = "50%";
-    closeBtn.style.transform = "translateY(-50%)";
-    closeBtn.addEventListener("click", () => (panel.style.right = "-340px"));
-    titleBar.appendChild(closeBtn);
-
-    panel.appendChild(titleBar);
-
-    users.forEach(async (user) => {
+    users.forEach((user) => {
       const link = document.createElement("a");
       link.href = `https://x.com/${user.username}`;
       link.target = "_blank";
-      link.className = "userItem";
-      link.style.display = "flex";
-      link.style.alignItems = "center";
-      link.style.padding = "8px";
-      link.style.borderRadius = "8px";
-      link.style.textDecoration = "none";
-      link.style.color = "#000";
-      link.style.marginBottom = "0";
-      link.style.backgroundColor = "#fff";
-      link.style.transition = "background-color 160ms ease";
-
-      link.addEventListener(
-        "mouseenter",
-        () => (link.style.backgroundColor = tag?.color || "#1DA1F2")
-      );
-      link.addEventListener(
-        "mouseleave",
-        () => (link.style.backgroundColor = "#fff")
-      );
+      link.className = "xt-user";
 
       const img = document.createElement("img");
-      img.style.width = "40px";
-      img.style.height = "40px";
-      img.style.borderRadius = "50%";
-      img.style.marginRight = "10px";
-
       chrome.runtime.sendMessage(
-        {
-          action: "fetchAvatar",
-          username: user.username,
-        },
+        { action: "fetchAvatar", username: user.username },
         (res) => {
-          if (res && res.src) {
-            img.src = res.src;
-          }
+          if (res && res.src) img.src = res.src;
         }
       );
 
-      const text = document.createElement("div");
-      const _nameStrong = document.createElement("strong");
-      _nameStrong.textContent = user.name;
-      text.appendChild(_nameStrong);
-      text.appendChild(document.createElement("br"));
-      text.appendChild(document.createTextNode("@" + user.username));
-      text.appendChild(document.createElement("br"));
-      text.appendChild(document.createTextNode(user.description || ""));
-      text.style.fontSize = "14px";
-      text.style.lineHeight = "1.4";
-
+      const info = document.createElement("div");
+      info.className = "xt-uinfo";
+      const strong = document.createElement("strong");
+      strong.textContent = user.name;
+      const handle = document.createElement("span");
+      handle.className = "xt-uhandle";
+      handle.textContent = "@" + user.username;
+      info.appendChild(strong);
+      info.appendChild(handle);
+      if (user.description) {
+        const desc = document.createElement("span");
+        desc.className = "xt-udesc";
+        desc.textContent = user.description;
+        info.appendChild(desc);
+      }
       link.appendChild(img);
-      link.appendChild(text);
+      link.appendChild(info);
       panel.appendChild(link);
     });
 
     // 滑入面板
-    requestAnimationFrame(() => (panel.style.right = "0"));
+    requestAnimationFrame(() => panel.classList.add("open"));
   }
 
-  observeGroups() {
-    let busy = false;
-    const observer = new MutationObserver(() => {
-      if (busy) return; // 避免递归触发
-      busy = true;
-
-      const wrapper = document.querySelector("[data-groups-nav]");
-      if (!wrapper) {
-        // wrapper 不存在才初始化；异步分支由 finally 释放锁，提前 return，
-        // 避免同步走到下方 busy=false 导致锁失效、initGroups 并发
-        this.initGroups()
-          .catch(console.error)
-          .finally(() => (busy = false));
-        return;
-      }
-
-      busy = false;
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
-  }
+  // observeGroups 已删：抽屉/圆钮挂 body（fixed），SPA 重渲染不影响，
+  // 无需旧版对 header nav 的 wrapper 重挂监视
 
   async loadNotes() {
     try {
@@ -772,6 +833,8 @@ class TwitterNotes {
 
   // 在主页等页面基于用户名显示备注
   processHomePage() {
+    this.applyXMarkTheme(); // 标签抽屉/用户面板暗色跟随（幂等）
+
     const tweets = document.querySelectorAll('[data-testid="tweet"]');
 
     tweets.forEach((tweet) => {
