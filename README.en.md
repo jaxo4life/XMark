@@ -7,7 +7,7 @@
 <p align="center">A Chrome extension for X (formerly Twitter): Notes · Screenshots · Ad-filtering</p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/version-6.1.2-blue.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-6.2.0-blue.svg" alt="Version"></a>
   <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Manifest-V3-green.svg" alt="Manifest"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Chrome%20Extension-orange.svg" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL_v3-blue.svg" alt="License"></a>
@@ -31,6 +31,7 @@
 - 🏷 **Tag Management** — Tagging, drag-to-reorder, filter users by tag, independent tag import/export
 - 🚫 **Ad Filtering** — Auto-detects and hides promoted tweets in your feed; ad-block counts (today / total) at a glance
 - 🧹 **UI Clean** — Customizable hiding of left-nav items (Explore / Grok / Premium / Money / Articles / Following / Creator Studio / More), the right sidebar, and ad tweets; one-click clean-left-nav — applied instantly
+- 🔍 **XFinder Advanced Search** — a search panel embedded in the freed right-rail slot: combine from / keyword / to-interaction / date range, with X native operators (detailed hints behind the ? icon) and one-click history repeat; UI fully aligned with X official
 - ☁️ **WebDAV Cloud Backup** — Works with Nutstore, Nextcloud, ownCloud, etc.; hourly/daily/weekly/monthly auto-backup, credentials encrypted at rest
 - 🔒 **Secure** — XSS protection, WebDAV SSRF closure, credential encryption, extension-reload tolerance (hardened in v6.0.0)
 - 🌐 **Bilingual** — Full i18n, one-click switch between Chinese and English

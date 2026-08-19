@@ -1,5 +1,16 @@
 # 更新日志 / Changelog
 
+## v6.2.0
+
+| 中文 | English |
+|------|----------|
+| 新增 XFinder 高阶搜索（整合自独立扩展，右栏替代形态） | Added XFinder advanced search (integrated from standalone extension, right-rail replacement form) |
+| from / 关键词 / to 交互账户 / 日期范围组合查询，支持 X 原生操作符 | from / keyword / to-interaction / date-range combined queries, X native operators supported |
+| 搜索历史（20 条指纹去重）与一键重复 | Search history (20, fingerprint-deduped) with one-click repeat |
+| 面板 UI 逐项对齐 X 官方（毛玻璃圆钮 / 描边搜索框 / 暗色适配 / 滑入动效） | Panel UI aligned with X official item-by-item (glass fab / outlined inputs / dark mode / slide-in) |
+| 界面净化·隐藏右栏开启时激活，嵌入原右栏 grid 格位 | Activates when right sidebar is hidden; embeds into the freed grid slot |
+| 面板开关状态记忆；语言切换即时生效 | Panel open/close state remembered; language switch applies instantly |
+
 ## v6.1.2
 
 | 中文 | English |
