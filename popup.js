@@ -127,6 +127,9 @@ document.addEventListener("DOMContentLoaded", async function () {
   // 加载推文截图开关
   await Screenshot();
 
+  // 加载 XFinder 开关
+  await XFinderSettings();
+
   // 加载界面净化控制面板
   await initUIClean();
 
@@ -492,6 +495,18 @@ async function initUIClean() {
     Object.assign(uiCleanSettings, cur); // 同步本地快照，供一键开关判断
     chrome.storage.local.set({ uiCleanSettings: cur });
     syncCleanAll();
+  });
+}
+
+// XFinder 高阶搜索开关（content 侧 xfinder.js 消费，storage.onChanged 实时显隐）
+async function XFinderSettings() {
+  const toggle = document.getElementById("toggle-xfinder");
+  if (!toggle) return;
+  const { xfinderSettings } = await chrome.storage.local.get(["xfinderSettings"]);
+  toggle.classList.toggle("active", xfinderSettings?.enabled !== false); // 默认开
+  toggle.addEventListener("click", () => {
+    const active = toggle.classList.toggle("active");
+    chrome.storage.local.set({ xfinderSettings: { enabled: active } });
   });
 }
 
