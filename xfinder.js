@@ -62,8 +62,10 @@
 html[data-xmark-theme="dark"] #xmark-xfinder-fab{background:rgba(0,0,0,.65);border-color:rgb(75,78,82);color:#e7e9ea;box-shadow:rgba(255,255,255,.2) 0 0 18px,rgba(255,255,255,.15) 0 0 4px 2px}
 html[data-xmark-theme="dark"] #xmark-xfinder-fab:hover{background:rgba(0,0,0,.75)}
 
-/* ========== 面板（右栏格位，X 侧栏卡片规格） ========== */
-#xmark-xfinder-panel{position:sticky;top:0;width:100%;font-family:inherit;box-sizing:border-box;padding:12px 12px 24px;color:#0f1419;--xf-input:#eff3f4;--xf-hover:#f7f9f9;--xf-card:#fff;--xf-line:#eff3f4;--xf-muted:#536471;--xf-key:#0f1419;--xf-btn:#0f1419;--xf-btn-h:#272c30}
+/* ========== 面板（fixed 悬浮浮层：点圆钮弹出，不占 grid 格） ========== */
+/* v6.4.0 起与右列 timeline（listcol）叠放：右缘对齐圆钮（right:20px），top 在圆钮下方；
+   z-index 1 浮在 timeline 列上；max-height 兜底矮屏（内部历史区自带 40vh 滚动） */
+#xmark-xfinder-panel{display:none;position:fixed;top:76px;right:20px;width:360px;max-width:calc(100vw - 40px);max-height:calc(100vh - 96px);overflow-y:auto;z-index:1;font-family:inherit;box-sizing:border-box;padding:12px 12px 24px;color:#0f1419;--xf-input:#eff3f4;--xf-hover:#f7f9f9;--xf-card:#fff;--xf-line:#eff3f4;--xf-muted:#536471;--xf-key:#0f1419;--xf-btn:#0f1419;--xf-btn-h:#272c30}
 #xmark-xfinder-panel[data-theme="dark"]{--xf-input:#202327;--xf-hover:#16181c;--xf-card:#16181c;--xf-line:#2f3336;--xf-muted:#71767b;--xf-key:#e7e9ea;--xf-btn:#eff3f9;--xf-btn-h:#d7dbdc}
 #xmark-xfinder-panel .xf-card{background:var(--xf-card);border:1px solid var(--xf-line);border-radius:16px;overflow:hidden;animation:xf-in .22s ease}
 @keyframes xf-in{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}
@@ -224,9 +226,7 @@ html[data-xmark-theme="dark"] #xmark-xfinder-fab:hover{background:rgba(0,0,0,.75
     panel.id = "xmark-xfinder-panel";
 
     const card = el("div", "xf-card");
-    // 开关状态记忆：sessionStorage（标签页会话内保持，路由切换/重挂不丢）
-    card.style.display =
-      sessionStorage.getItem("xfinderPanelOpen") === "1" ? "block" : "none";
+    // 浮层形态：默认隐藏（CSS display:none），点圆钮弹出——不再记忆展开态，避免常驻遮挡 timeline 列
 
     // 表单体
     const body = el("div", "xf-body");
@@ -373,10 +373,8 @@ html[data-xmark-theme="dark"] #xmark-xfinder-fab:hover{background:rgba(0,0,0,.75
 
   function togglePanel() {
     if (!panel) return;
-    const card = panel.querySelector(".xf-card");
-    const open = card.style.display !== "none";
-    card.style.display = open ? "none" : "block";
-    sessionStorage.setItem("xfinderPanelOpen", open ? "0" : "1"); // 记忆开关状态
+    const open = panel.style.display === "block";
+    panel.style.display = open ? "none" : "block";
     if (!open) {
       applyTheme();
       syncUserField();
@@ -384,8 +382,7 @@ html[data-xmark-theme="dark"] #xmark-xfinder-fab:hover{background:rgba(0,0,0,.75
   }
 
   function closePanel() {
-    const card = panel?.querySelector(".xf-card");
-    if (card) card.style.display = "none";
+    if (panel) panel.style.display = "none";
   }
 
   // ---------- 查询构造（内核） ----------
@@ -554,24 +551,13 @@ html[data-xmark-theme="dark"] #xmark-xfinder-fab:hover{background:rgba(0,0,0,.75
   }
 
   function ensureUI() {
-    const fab = document.getElementById("xmark-xfinder-fab");
-    const panelEl = document.getElementById("xmark-xfinder-panel");
-    const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
-    const host = sidebar?.parentElement;
-
-    if (!fab && !fabEl) buildFab();
-
-    if (!host) {
-      panelEl?.remove();
-      panel = null;
-      return; // 布局未就绪/无右栏：圆钮可留，面板等下一轮
-    }
-    if (panelEl && panelEl.parentElement === host) {
+    if (!document.getElementById("xmark-xfinder-fab") && !fabEl) buildFab();
+    if (!panel) {
+      buildPanel();
+      document.body.appendChild(panel); // fixed 浮层挂 body：不占 grid 格、不随 SPA 路由重挂
+    } else {
       syncUserField();
-      return;
     }
-    if (!panel) buildPanel();
-    host.appendChild(panel); // grid：sidebarColumn 已 display:none，本节点顶入第三格
   }
 
   function teardownUI() {

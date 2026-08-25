@@ -129,6 +129,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   // 加载 XFinder 开关
   await XFinderSettings();
+  await ListColSettings();
 
   // 加载界面净化控制面板
   await initUIClean();
@@ -403,7 +404,7 @@ async function initUIClean() {
   const rightToggle = document.getElementById("toggle-hideRight");
   if (!container || !rightToggle) return;
 
-  // 模态开关：顶部「界面净化」按钮弹出
+  // 模态开关：顶部「高级」按钮弹出
   const modal = document.getElementById("uiCleanModal");
   const uiCleanBtn = document.getElementById("uiCleanBtn");
   const modalClose = document.getElementById("uiCleanModalClose");
@@ -414,6 +415,22 @@ async function initUIClean() {
     modalClose?.addEventListener("click", () => modal.classList.add("hidden"));
     modal.addEventListener("click", (e) => {
       if (e.target === modal) modal.classList.add("hidden"); // 点遮罩关闭
+    });
+
+    // 模态内子 tab：界面净化 / 增强
+    modal.querySelectorAll(".modal-tab").forEach((tabEl) => {
+      tabEl.addEventListener("click", () => {
+        modal.querySelectorAll(".modal-tab").forEach((t) =>
+          t.classList.toggle("active", t === tabEl)
+        );
+        const sub = tabEl.dataset.subtab;
+        modal
+          .querySelector("#advPanelClean")
+          ?.classList.toggle("hidden", sub !== "clean");
+        modal
+          .querySelector("#advPanelEnhance")
+          ?.classList.toggle("hidden", sub !== "enhance");
+      });
     });
   }
 
@@ -508,6 +525,130 @@ async function XFinderSettings() {
     const active = toggle.classList.toggle("active");
     chrome.storage.local.set({ xfinderSettings: { enabled: active } });
   });
+}
+
+// 右列 Timeline 配置（content 侧 listcol.js 消费，storage.onChanged 实时显隐）
+// UI 位于「高级」模态（uiCleanModal）的「增强」子 tab；名称渲染走 textContent（安全）
+async function ListColSettings() {
+  const toggle = document.getElementById("toggle-listcol");
+  if (!toggle) return;
+
+  const getSettings = async () =>
+    (await chrome.storage.local.get(["listColSettings"])).listColSettings ||
+    {};
+
+  const settings = await getSettings();
+  toggle.classList.toggle("active", settings.enabled === true); // 默认关
+  toggle.addEventListener("click", async () => {
+    const active = toggle.classList.toggle("active");
+    chrome.storage.local.set({
+      listColSettings: { ...(await getSettings()), enabled: active },
+    });
+  });
+
+  const renderListcolItems = async () => {
+    const box = document.getElementById("listcolItems");
+    if (!box) return;
+    const { lists = [] } = await getSettings();
+    box.textContent = "";
+    if (!lists.length) {
+      const empty = document.createElement("div");
+      empty.className = "listcol-empty";
+      empty.dataset.key = "lcEmpty";
+      empty.textContent =
+        langData.lcEmpty || "尚未添加 List；添加后将在 X 页面右列显示";
+      box.appendChild(empty);
+      return;
+    }
+    lists.forEach((l, i) => {
+      const row = document.createElement("div");
+      row.className = "listcol-item";
+      const name = document.createElement("span");
+      name.className = "lc-name";
+      name.textContent = l.name; // textContent 渲染，无 innerHTML
+      name.title = l.name;
+      const id = document.createElement("span");
+      id.className = "lc-id";
+      id.textContent = "#" + l.id;
+      const mk = (label, fn) => {
+        const b = document.createElement("button");
+        b.textContent = label;
+        b.addEventListener("click", fn);
+        return b;
+      };
+      const up = mk("↑", () => moveList(i, -1));
+      up.title = langData.lcUp || "上移";
+      const down = mk("↓", () => moveList(i, 1));
+      down.title = langData.lcDown || "下移";
+      const del = mk("✕", () => removeList(i));
+      del.title = langData.lcDelete || "删除";
+      row.appendChild(name);
+      row.appendChild(id);
+      row.appendChild(up);
+      row.appendChild(down);
+      row.appendChild(del);
+      box.appendChild(row);
+    });
+  };
+
+  const saveLists = async (lists) => {
+    const cur = await getSettings();
+    // activeId 指向已删除项时回落首个
+    const activeId = lists.some((l) => l.id === cur.activeId)
+      ? cur.activeId
+      : lists[0]?.id;
+    chrome.storage.local.set({ listColSettings: { ...cur, lists, activeId } });
+    renderListcolItems();
+  };
+
+  const moveList = async (i, delta) => {
+    const { lists = [] } = await getSettings();
+    const j = i + delta;
+    if (j < 0 || j >= lists.length) return;
+    [lists[i], lists[j]] = [lists[j], lists[i]];
+    saveLists(lists);
+  };
+
+  const removeList = async (i) => {
+    const { lists = [] } = await getSettings();
+    saveLists(lists.filter((_, idx) => idx !== i));
+  };
+
+  // 添加：从输入提取最长数字串（≥6 位）作为 List ID——纯 ID / 完整链接均可；名称 trim + 50 字符上限
+  const addBtn = document.getElementById("listcolAddBtn");
+  const urlInput = document.getElementById("listcolUrlInput");
+  const nameInput = document.getElementById("listcolNameInput");
+  addBtn?.addEventListener("click", async () => {
+    const nums = (urlInput.value || "").match(/\d{6,}/g) || [];
+    const id = nums.sort((a, b) => b.length - a.length)[0];
+    if (!id) {
+      alert(langData.lcBadUrl || "无法识别（需含 List 数字 ID）");
+      return;
+    }
+    const { lists = [], ...rest } = await getSettings();
+    if (lists.some((l) => l.id === id)) {
+      alert(langData.lcExists || "该 List 已存在");
+      return;
+    }
+    const name = (nameInput.value || "").trim().slice(0, 50) || `List ${id}`;
+    await chrome.storage.local.set({
+      listColSettings: {
+        ...rest,
+        lists: [...lists, { id, name }],
+        activeId: rest.activeId || id,
+      },
+    });
+    urlInput.value = "";
+    nameInput.value = "";
+    renderListcolItems();
+  });
+  [urlInput, nameInput].forEach((input) =>
+    input?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") addBtn?.click();
+    })
+  );
+
+  renderListcolItems();
 }
 
 // 加载推文保存按钮

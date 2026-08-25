@@ -20,7 +20,7 @@
         style="width: auto; padding: 3px 8px; font-size: 12px"
         data-key="uiCleanBtn"
       >
-        🧹 界面净化
+        高级
       </button>
       <div class="version"></div>
     </div>
@@ -377,24 +377,56 @@
     <div id="uiCleanModal" class="modal-overlay hidden">
       <div class="modal-card">
         <div class="modal-header">
-          <h3 data-key="uiClean">界面净化</h3>
+          <h3 data-key="uiCleanBtn">高级</h3>
           <button id="uiCleanModalClose" class="modal-close">×</button>
         </div>
         <div class="modal-body">
-          <div class="auto-backup-header">
-            <span data-key="hideAds">隐藏广告推文</span>
-            <div class="toggle-switch" id="toggle-hideAds"></div>
+          <!-- 模态内子 tab：界面净化 / 增强 -->
+          <div class="modal-tabs">
+            <div class="modal-tab active" data-subtab="clean" data-key="advTabClean">界面净化</div>
+            <div class="modal-tab" data-subtab="enhance" data-key="advTabEnhance">增强</div>
           </div>
-          <div class="auto-backup-header">
-            <span data-key="hideRightSidebar">隐藏右侧边栏</span>
-            <div class="toggle-switch" id="toggle-hideRight"></div>
+
+          <div id="advPanelClean" class="adv-panel">
+            <div class="auto-backup-header">
+              <span data-key="hideAds">隐藏广告推文</span>
+              <div class="toggle-switch" id="toggle-hideAds"></div>
+            </div>
+            <div class="auto-backup-header">
+              <span data-key="hideRightSidebar">隐藏右侧边栏</span>
+              <div class="toggle-switch" id="toggle-hideRight"></div>
+            </div>
+            <div class="auto-backup-header">
+              <span data-key="cleanLeftNav">一键清爽左栏</span>
+              <div class="toggle-switch" id="toggle-cleanLeftNav"></div>
+            </div>
+            <div id="uiCleanItems" class="ui-clean-items">
+              <!-- 隐藏项复选行由 popup.js 按配置渲染 -->
+            </div>
           </div>
-          <div class="auto-backup-header">
-            <span data-key="cleanLeftNav">一键清爽左栏</span>
-            <div class="toggle-switch" id="toggle-cleanLeftNav"></div>
-          </div>
-          <div id="uiCleanItems" class="ui-clean-items">
-            <!-- 隐藏项复选行由 popup.js 按配置渲染 -->
+
+          <div id="advPanelEnhance" class="adv-panel hidden">
+            <div class="auto-backup-header">
+              <span data-key="lcEnabled">启用右列 Timeline</span>
+              <div class="toggle-switch" id="toggle-listcol"></div>
+            </div>
+            <div class="adv-hint" data-key="lcHint">在 X 页面右栏常驻显示原生 List timeline；需同时开启「界面净化 · 隐藏右侧边栏」</div>
+            <div id="listcolItems"></div>
+            <div class="listcol-add">
+              <input
+                type="text"
+                id="listcolUrlInput"
+                data-key="lcUrlInput"
+                placeholder="List ID 或链接"
+              />
+              <input
+                type="text"
+                id="listcolNameInput"
+                data-key="lcNameInput"
+                placeholder="名称（可选）"
+              />
+              <button id="listcolAddBtn" class="lc-add-btn" data-key="lcAdd">添加</button>
+            </div>
           </div>
         </div>
       </div>

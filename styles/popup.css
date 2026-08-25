@@ -1109,3 +1109,138 @@ body::-webkit-scrollbar {
     opacity: 1;
   }
 }
+
+/* ========== 高级模态：子 tab（界面净化 / 增强） ========== */
+.modal-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #f1f5f9;
+}
+
+.modal-tab {
+  flex: 1;
+  text-align: center;
+  padding: 7px 0;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #536471;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.modal-tab:hover {
+  color: #0f1419;
+}
+
+.modal-tab.active {
+  background: linear-gradient(135deg, #1d9bf0, #1991db);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(29, 155, 240, 0.35);
+}
+
+.adv-panel.hidden {
+  display: none;
+}
+
+.adv-hint {
+  margin: 2px 0 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #536471;
+}
+
+/* ========== 增强 panel：右列 Timeline Lists 管理 ========== */
+.listcol-add {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #eaeef2;
+}
+
+.listcol-add input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border-radius: 9999px;
+  border: 1px solid #cfd9de;
+  background: #fff;
+  color: #0f1419;
+  font-size: 12px;
+}
+
+.listcol-add input:focus {
+  outline: none;
+  border-color: #1d9bf0;
+}
+
+.lc-add-btn {
+  flex: none;
+  border: none;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #1d9bf0, #1991db);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 16px;
+  cursor: pointer;
+}
+
+.lc-add-btn:hover {
+  background: linear-gradient(135deg, #1991db, #187bc1);
+}
+
+.listcol-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 2px;
+  font-size: 13px;
+  border-bottom: 1px solid #f7f9f9;
+}
+
+.listcol-item:last-child {
+  border-bottom: none;
+}
+
+.listcol-item .lc-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #0f1419;
+}
+
+.listcol-item .lc-id {
+  color: #536471;
+  font-size: 11px;
+}
+
+.listcol-item button {
+  border: none;
+  border-radius: 9999px;
+  background: #eff3f4;
+  color: #0f1419;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  flex: none;
+}
+
+.listcol-item button:hover {
+  background: #e1e8ed;
+}
+
+.listcol-empty {
+  padding: 14px 4px 6px;
+  text-align: center;
+  color: #536471;
+  font-size: 12px;
+}

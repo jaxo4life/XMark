@@ -1,5 +1,8 @@
 # 本地 Claude Code 项目约定，不入库
 CLAUDE.md
 
+# 设计文档/本地资料，不入库
+docs/
+
 # 本地语法校验临时文件
 _chk.mjs

@@ -36,6 +36,33 @@ const WEBDAV_METHODS = new Set([
   "COPY",
 ]);
 
+// ===== 右列 Timeline：放行同源子帧嵌入（正式规则，勿删）=====
+// X 响应头禁止 iframe 嵌入（X-Frame-Options/CSP frame-ancestors），右列需嵌 /i/lists/*。
+// urlFilter 全域而非仅 /i/lists：帧内点用户/推文跳转后的后续文档也是 sub_frame，收窄会导航后被拒。
+// 已知放宽面：任何 x.com 页面可被 x.com/twitter.com 页面嵌入（含用户控制台手贴），自有浏览器可接受。
+// 附带影响：被嵌子帧的官方 CSP 同时被删（同源自有内容，见项目 CLAUDE.md 备案）。
+const unframeRule = (id, urlFilter) => ({
+  id,
+  priority: 1,
+  action: {
+    type: "modifyHeaders",
+    responseHeaders: [
+      { header: "x-frame-options", operation: "remove" },
+      { header: "content-security-policy", operation: "remove" },
+      { header: "content-security-policy-report-only", operation: "remove" },
+    ],
+  },
+  condition: {
+    urlFilter,
+    resourceTypes: ["sub_frame"],
+    initiatorDomains: ["x.com", "twitter.com"],
+  },
+});
+chrome.declarativeNetRequest.updateDynamicRules({
+  removeRuleIds: [9001, 9002],
+  addRules: [unframeRule(9001, "||x.com/"), unframeRule(9002, "||twitter.com/")],
+}).catch((e) => console.error("[XMark] DNR unframe rules failed:", e));
+
 // 扩展启动时，恢复自动备份
 chrome.runtime.onStartup.addListener(async () => {
   const result = await chrome.storage.local.get(["autoBackupSettings"]);
