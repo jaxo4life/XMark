@@ -1,5 +1,15 @@
 # 更新日志 / Changelog
 
+## v6.4.0
+
+| 中文 | English |
+|------|----------|
+| 新增右列 Timeline：净化隐藏右栏后第三格常驻 X 原生 List 时间线，tab 条多 List 切换（点当前 tab 强制回列表），iframe 嵌原生页 + 帧内深度净化（frame-clean.js） | New right column timeline: after hiding the right rail, a native X List timeline lives in the freed third column; multi-List tab bar (click active tab to force-return), iframe-embedded native page with deep in-frame cleaning (frame-clean.js) |
+| DNR 删 x.com / twitter.com 子帧嵌入头（仅 sub_frame、initiatorDomains 限自有域，主页面零影响） | DNR strips sub-frame embedding headers for x.com / twitter.com (sub_frame only, initiatorDomains limited to own domains, zero impact on top pages) |
+| 加载遮罩走帧内就绪信号（非固定延时）；后台冻结 5 分钟自动重载自愈 | Loading veil driven by in-frame ready signal (not fixed delay); background-freeze auto-reload after 5 minutes |
+| XFinder 面板改为 fixed 浮层，与右列 Timeline 共存（点圆钮弹出、Esc 关闭） | XFinder panel becomes a fixed floating layer coexisting with the right column timeline (toggle via fab, Esc to close) |
+| popup 入口「设置」改名「高级」，模态内子 tab 分「界面净化」/「增强」 | Popup entry renamed to "Advanced", with "UI Clean" / "Enhance" sub-tabs inside the modal |
+
 ## v6.3.0
 
 | 中文 | English |
