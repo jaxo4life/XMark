@@ -1,5 +1,16 @@
 # 更新日志 / Changelog
 
+## v6.5.0
+
+| 中文 | English |
+|------|----------|
+| 新增播客面板 XCast：左下播放卡（封面 / ±15s / 倍速 / 进度拖拽）+ idle 圆 dock，可拖动记忆位置 | New podcast panel XCast: bottom-left player card (cover / ±15s / speed / seekable progress) + idle round dock, draggable with position memory |
+| 播放引擎跑在 offscreen 文档，页面切换不断播；暂停 10 分钟自动回收，播放键一键续播 | Playback engine runs in an offscreen document — audio survives navigation; auto-reaped after 10 min paused, one-click resume |
+| 订阅 / 发现目录（内置 10 播客 + GitHub Pages 远程更新）、RSS 解析、历史统计与断点续播 | Subscriptions / discover catalog (10 built-in podcasts + remote updates via GitHub Pages), RSS parsing, history stats and resume-from-breakpoint |
+| popup「高级→播客」子 tab：开关 / 统计总览 / 默认倍速 / 订阅管理与导入导出 / 清空收听记录 | Popup "Advanced → Podcast" sub-tab: toggle / stats overview / default speed / subscription management with import-export / clear listening history |
+| 右列 Timeline XMark 化：iframe 内备注 / 标签徽标 / 广告过滤 / 截图 / members 用户卡全功能同构（帧内坐标换算 + 截图期间临时隐藏 sticky 顶栏） | Right column timeline XMark-ified: full in-frame notes / tag badges / ad filtering / screenshots / members user-cards (frame-coordinate translation + temporarily hiding sticky bars while shooting) |
+| 右列加载圈换 X 官方同款双层 circle spinner；冻结自愈改假死探测（回前台 DOM 白屏判定，非定时盲重载） | Right column spinner switched to X official dual-circle; freeze self-healing switched to liveness probing (DOM blank detection on refocus, not blind timed reload) |
+
 ## v6.4.0
 
 | 中文 | English |
