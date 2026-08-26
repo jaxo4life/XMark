@@ -1,10 +1,12 @@
 /**
- * XMark · 右列 Timeline 帧内净化（独立模块，仅 iframe 内运行）
+ * XMark · 右列 Timeline 帧内增强（独立模块，仅 iframe 内运行）
  *
- * 职责：右列 iframe（/i/lists/* 等）内的轻净化——
+ * 职责：右列 iframe（/i/lists/* 等）内——
  *   1. 隐藏 X 左边栏（360px 窄断点下的图标栏）
  *   2. 隐藏列表页顶部 header 区（banner/列表名/创建者/成员数/编辑按钮）
  *   3. 广告推文隐藏（跟随「界面净化·隐藏广告推文」开关 uiCleanSettings.hideAds）
+ *   4. 帧内导航接管：X 对 iframe 有意降级为完整文档导航（文档销毁/滚动丢失），
+ *      拦截 <a> 点击转 pushState + popstate 交 X 路由 SPA 渲染（失败自禁用并回滚）
  *
  * 顶层页面（window.top === window.self）直接 return——顶层净化由 ui-clean.js 负责，
  * 防重入零成本（实测：content script 默认 all_frames:false 不进帧，本条目显式 true）。
@@ -39,6 +41,8 @@ div.r-1pz39u2:has([data-testid="share-button"]){display:none!important}
 /* 藏 X 自己的 primaryColumn 左右列线（与外层 .lc-frame 外框线形成双线）；
    推文横向分割线（cell border-bottom）不受影响 */
 [data-testid="primaryColumn"]{border-left:none!important;border-right:none!important}
+/* 列表时间线页的返回按钮禁用态（iframe 以列表为首页，返回无处可去） */
+button[data-testid="app-bar-back"]:disabled{opacity:.4;pointer-events:none}
 `;
     const style = document.createElement("style");
     style.id = "xmark-frame-clean-style";
@@ -102,18 +106,90 @@ div.r-1pz39u2:has([data-testid="share-button"]){display:none!important}
     }
   }
 
+  // ---------- 帧内导航接管 ----------
+  // X 在 iframe 里把站内链接降级为完整文档导航（文档销毁、滚动丢失、整帧重载）。
+  // 替 X 补上 SPA：capture 拦截同源相对链接的无修饰键点击 → pushState + 派发
+  // popstate（X 路由的 popstate 监听常挂——浏览器后退依赖它）→ 路由接管原地渲染。
+  // 只 preventDefault 不 stopPropagation：若 X 对个别链接自有处理则不干扰。
+  // 500ms 内 title / 推文格数 / 路径均无变化 = X 未接管 → location.replace 原地址
+  // 完整导航（= 优化前行为；replace 恰好替换我们 push 的栈条目，历史不残留），
+  // 并永久禁用接管（一次性 500ms 成本，之后回到纯原生行为）。
+  // 接管成功时无文档导航，父页 beforeunload veil 不触发（原地顺滑切换，不动 iframe）。
+  let navTakeoverBroken = false;
+
+  function hookFrameNav() {
+    document.addEventListener(
+      "click",
+      (e) => {
+        if (
+          navTakeoverBroken ||
+          e.defaultPrevented ||
+          e.button !== 0 ||
+          e.metaKey ||
+          e.ctrlKey ||
+          e.shiftKey ||
+          e.altKey
+        ) {
+          return;
+        }
+        const a = e.target?.closest?.('a[href^="/"]');
+        if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
+        const url = a.getAttribute("href");
+        if (!url || url.startsWith("//")) return;
+
+        const beforeTitle = document.title;
+        const beforeCells = document.querySelectorAll(
+          '[data-testid="cellInnerDiv"]'
+        ).length;
+        const beforePath = location.pathname;
+        // 同页链接不接管（探针三态全不变必误判刷新自己）
+        if (new URL(url, location.href).pathname === beforePath) return;
+
+        e.preventDefault();
+        history.pushState(history.state, "", url);
+        dispatchEvent(new PopStateEvent("popstate", { state: history.state }));
+
+        setTimeout(() => {
+          const tookOver =
+            document.title !== beforeTitle ||
+            document.querySelectorAll('[data-testid="cellInnerDiv"]').length !==
+              beforeCells ||
+            location.pathname !== beforePath;
+          if (!tookOver) {
+            navTakeoverBroken = true;
+            location.replace(url);
+          }
+        }, 500);
+      },
+      true
+    );
+  }
+
+  // 列表时间线页禁用返回按钮：iframe 以 /i/lists/<id> 为首页，返回无处可去
+  // （点击只会触发空历史导航或混乱回退）；离开列表页（推文/用户页）自动恢复。
+  // React 重渲染可能覆盖 disabled，随 observer 轮幂等重设。
+  function processBackBtn() {
+    const onList = /^\/i\/lists\/\d+\/?$/.test(location.pathname);
+    document.querySelectorAll('[data-testid="app-bar-back"]').forEach((b) => {
+      if (onList !== !!b.disabled) b.disabled = onList;
+    });
+  }
+
   // ⚠️ 本条目 run_at: document_start：injectStyle 必须在 SSR 首帧渲染前注入，
   //    X 水合计算虚拟列表布局时 header 格已 display:none → 后续格子无缝顶上；
   //    body 相关（observer/扫描）等 DOMContentLoaded
   function boot() {
     loadHideAds().then(processAds);
     processListHeader();
+    hookFrameNav();
+    processBackBtn();
     let timer = null;
     new MutationObserver(() => {
       clearTimeout(timer);
       timer = setTimeout(() => {
         processAds();
         processListHeader();
+        processBackBtn();
       }, 400);
     }).observe(document.body, { childList: true, subtree: true });
   }

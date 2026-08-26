@@ -41,11 +41,15 @@
   function injectStyle() {
     if (document.getElementById("xmark-listcol-style")) return;
     const css = `
-/* 列容器：总宽 598（对齐原生 timeline）；无 padding——iframe 内 X 推文 timeline 自带内边距，
-   外层再包 padding 会双重缩进；
-   ⚠️ host 是 flex 容器——必须 flex-shrink:0，否则 width:598 被主栏挤压成 450（iframe 显 418）；
-   贴顶；grid-column 显式钉最后一列（host 若为 grid 时防 auto-placement 挤压） */
-#xmark-listcol{grid-column:-2/-1;justify-self:end;flex-shrink:0;position:sticky;top:0;width:598px;min-width:0;height:100vh;box-sizing:border-box;display:flex;flex-direction:column;font-family:inherit;--lc-card:#fff;--lc-line:#eff3f4;--lc-key:#0f1419;--lc-muted:#536471;--lc-hover:#f7f9f9}
+/* 双层架构（Chrome 铁律：移动 iframe 节点 = 重新加载文档，绝不能动 iframe）：
+   ① #xmark-listcol-slot 挂 host——纯占位框撑住第三格布局（无状态，React 重建删了就补）；
+   ② #xmark-listcol 是真正的列（tab 条+iframe+veil），常驻 body、position:fixed，
+      left/top/width/height 由 syncFramePos 同步自占位框 rect——React 重建期间列悬停原地，
+      iframe 文档零扰动；白名单外路由切 visibility:hidden（保活不冻结）。
+   ⚠️ 占位框继承原布局约束：host 是 flex 容器必须 flex-shrink:0（否则 598 被主栏挤成 450）；
+   grid-column 显式钉最后一列（host 若为 grid 时防 auto-placement 挤压） */
+#xmark-listcol-slot{grid-column:-2/-1;justify-self:end;flex-shrink:0;position:sticky;top:0;width:598px;min-width:0;height:100vh;box-sizing:border-box}
+#xmark-listcol{position:fixed;top:0;left:0;display:flex;flex-direction:column;z-index:1;font-family:inherit;--lc-card:#fff;--lc-line:#eff3f4;--lc-key:#0f1419;--lc-muted:#536471;--lc-hover:#f7f9f9}
 #xmark-listcol[data-theme="dark"]{--lc-card:#16181c;--lc-line:#2f3336;--lc-key:#e7e9ea;--lc-muted:#71767b;--lc-hover:#202327}
 /* 列头：对齐原生「为你推荐/正在关注」tab 行——53px 高、通栏贴列线（左线与主栏头边线衔接）、底部分割线 */
 #xmark-listcol .lc-head{flex:none;height:53px;display:flex;align-items:stretch;overflow-x:auto;scrollbar-width:none;background:var(--lc-card);border-bottom:1px solid var(--lc-line);border-left:1px solid var(--lc-line);border-right:1px solid var(--lc-line)}
@@ -138,6 +142,9 @@
 
   let veil = null;
   let unveilTimer = null;
+  let navVeilTimer = null;
+  let slot = null; // host 内占位框（无状态壳，React 连坐重建后由 ensureUI 补挂）
+  let slotRO = null; // 占位框尺寸监听 → 同步 fixed 列位置
 
   // 加载遮罩：导航瞬间盖上（防被隐藏元素闪现），onload 后再留 600ms 盖住 X 水合期，淡出
   function showVeil() {
@@ -266,7 +273,43 @@
     }
   }
 
+  // 帧内完整导航平滑过渡：X 在 iframe 里点推文/用户是完整文档导航而非 SPA
+  // （X 对 iframe 有意降级，扩展侧无法拦截，见 DNR urlFilter 全域注释），白屏闪烁
+  // 明显。同域挂 beforeunload：导航确定发生即盖 veil，新文档就绪信号揭开；12s 兜底
+  // 防导航挂起死盖。SPA 同文档导航不触发 beforeunload，零干扰。旧文档的 listener
+  // 随卸载销毁，须每次 load 后重挂。
+  function hookFrameNavVeil() {
+    try {
+      frame.contentWindow?.addEventListener("beforeunload", () => {
+        showVeil();
+        clearTimeout(navVeilTimer);
+        navVeilTimer = setTimeout(() => {
+          if (!veil) return;
+          veil.style.transition = "opacity .25s ease";
+          veil.style.opacity = "0";
+          veil.style.pointerEvents = "none";
+        }, 12000);
+      });
+    } catch (e) {
+      /* 跨域读不到：跳过（顶层 twitter.com 嵌 x.com 场景） */
+    }
+  }
+
+  // 列位置同步：fixed 列（body 常驻）对齐 host 内占位框。占位框被 React 重建的
+  // 间隙（未挂/宽 0）保持旧位不动——布局稳定后 ResizeObserver / observer 轮跟上。
+  function syncFramePos() {
+    if (!root || !slot || !slot.isConnected) return;
+    const r = slot.getBoundingClientRect();
+    if (!(r.width > 0) || !(r.height > 0)) return;
+    root.style.left = r.left + "px";
+    root.style.top = r.top + "px";
+    root.style.width = r.width + "px";
+    root.style.height = r.height + "px";
+  }
+
   function buildColumn(settings) {
+    slot = el("div", "");
+    slot.id = "xmark-listcol-slot";
     root = el("div", "");
     root.id = "xmark-listcol";
     head = el("div", "lc-head");
@@ -275,49 +318,132 @@
     frame.title = t("lcEnabled", "XMark Timeline");
     veil = el("div", "lc-veil");
     veil.appendChild(mkSpinner());
-    frame.addEventListener("load", scheduleUnveil);
+    frame.addEventListener("load", () => {
+      scheduleUnveil();
+      hookFrameNavVeil();
+    });
     root.appendChild(head);
     root.appendChild(frame);
     root.appendChild(veil);
     showVeil(); // 初始加载即遮
     renderTabs(settings);
     applyTheme(); // 建出即检测，不等 observer（修刷新时暗色延迟）
+    document.body.appendChild(root); // 列常驻 body——Chrome 移动 iframe=重载，永不移动
+    if (!slotRO) {
+      slotRO = new ResizeObserver(syncFramePos);
+      slotRO.observe(slot);
+    }
+    window.addEventListener("resize", syncFramePos); // 位置平移（尺寸不变）RO 捕不到
+  }
+
+  // 路由白名单：仅主页与推文详情页显示右列。status 用前缀匹配涵盖 /photo/N 全屏延伸页。
+  const allowedPath = (p) =>
+    /^\/home\/?$/.test(p) || /^\/[^/]+\/status\/\d+/.test(p);
+  const routeAllowed = () => allowedPath(location.pathname);
+
+  // 显隐切换：只动 visibility（保 iframe 活性——display:none 会触发 Chrome 冻结，
+  // 恢复后白屏假死）；占位框无状态可粗暴 display:none
+  function setShown(shown) {
+    if (!root) return;
+    root.style.visibility = shown ? "" : "hidden";
+    if (slot) slot.style.display = shown ? "" : "none";
   }
 
   function ensureUI(settings) {
     const sidebar = document.querySelector('[data-testid="sidebarColumn"]');
     const host = sidebar?.parentElement;
-    const existing = document.getElementById("xmark-listcol");
 
-    if (!host) {
-      existing?.remove();
-      root = null;
-      head = null;
-      frame = null;
-      return; // 布局未就绪/无右栏：等下一轮
-    }
-    if (existing && existing.parentElement === host) {
-      renderTabs(settings); // 已挂：仅刷新 tab（src guard 防重载）
+    if (!routeAllowed()) {
+      setShown(false); // 白名单外路由：隐藏保活，等回归
       return;
     }
-    existing?.remove();
-    if (!root) buildColumn(settings);
-    host.appendChild(root); // grid：sidebarColumn 已 display:none，本节点顶入第三格
+    if (!host) {
+      return; // 白名单内但布局过渡（sidebarColumn 尚未渲染）：fixed 列悬停原地等下一轮
+    }
+
+    if (!root || !frame) buildColumn(settings);
+    // 占位框被 React 连坐重建了就补挂（无状态壳，随便补）；iframe 常驻 body 零扰动
+    if (!slot.isConnected) host.appendChild(slot);
+    setShown(true);
+    syncFramePos();
+    renderTabs(settings); // 刷新 tab（src guard 防重载）
+  }
+
+  let returnTimer = null;
+
+  // 快速回归：白名单内导航后，React 重建占位框一出现立即补挂+对位（不等 observer
+  // 400ms 防抖，缩短列位置悬空窗口）；白名单外或 10s 超时即停，交给 observer 轮看管
+  function watchReturn() {
+    clearTimeout(returnTimer);
+    let waited = 0;
+    const tick = async () => {
+      if (!root || !routeAllowed()) return;
+      const host =
+        document.querySelector('[data-testid="sidebarColumn"]')?.parentElement;
+      if (host) {
+        const f = await readFlags();
+        if (f.on && f.rightHidden) ensureUI(f.settings);
+        return;
+      }
+      waited += 50;
+      if (waited < 10000) returnTimer = setTimeout(tick, 50);
+    };
+    returnTimer = setTimeout(tick, 50);
+  }
+
+  // 顶层 SPA 导航同步显隐：pushState/replaceState/popstate 的同步时机（必然先于
+  // React commit）按目标路由立即切 visibility——fixed 列若不藏，会盖住新页面内容
+  // 直到 observer 轮（400ms 防抖）才反应。列与 iframe 本体不动（React 随便重建都
+  // 伤不到 body 常驻的列）；renderTabs 的 frameTarget guard 保证 iframe 零导航。
+  // 同 pathname 的 push（无导航意义）跳过防闪。与 content.js 的 pushState 包装
+  // 链式共存（本 hook 在外层、显隐判断最先执行）。
+  function hookTopNav() {
+    const preempt = (urlArg) => {
+      if (!root) return;
+      let to = null;
+      try {
+        to = new URL(String(urlArg), location.href).pathname;
+      } catch (e) {
+        to = location.pathname;
+      }
+      if (to === location.pathname) return;
+      setShown(allowedPath(to));
+      watchReturn(); // 白名单内导航：React 重建占位框后快速补挂+对位
+    };
+    for (const name of ["pushState", "replaceState"]) {
+      const orig = history[name];
+      history[name] = function () {
+        preempt(arguments[2]);
+        return orig.apply(this, arguments);
+      };
+    }
+    window.addEventListener("popstate", () => {
+      if (!root) return;
+      setShown(routeAllowed());
+      watchReturn();
+    });
   }
 
   function teardownUI() {
-    document.getElementById("xmark-listcol")?.remove();
+    slot?.remove();
+    root?.remove();
+    slot = null;
     root = null;
     head = null;
     frame = null;
     veil = null;
+    slotRO?.disconnect();
+    slotRO = null;
     clearTimeout(unveilTimer);
+    clearTimeout(navVeilTimer);
+    clearTimeout(returnTimer);
     frameTarget = ""; // 重建后首帧走 src 赋值而非 replace
   }
 
   async function start() {
     injectStyle();
     await loadLang();
+    hookTopNav(); // 抢先冻结必须在任何导航前就位（早于首建也无碍：preempt 判 root）
     const { on, rightHidden, settings } = await readFlags();
     if (on && rightHidden) ensureUI(settings);
 
@@ -361,6 +487,7 @@
     };
     document.addEventListener("visibilitychange", () => {
       if (document.hidden || !root || !frameTarget) return;
+      if (root.style.visibility === "hidden") return; // 隐藏中（白名单外）：无需探测
       setTimeout(() => {
         if (!frameAlive()) navigate(frameTarget); // 白屏=假死，重载（盖 veil 走就绪信号流程）
       }, 2000);
