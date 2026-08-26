@@ -80,6 +80,35 @@ function safeColor(c) {
   return typeof c === "string" && HEX_COLOR.test(c) ? c : DEFAULT_TAG_COLOR;
 }
 
+// 帧内模式（右列 Timeline iframe）：content.js 走 manifest 独立 all_frames:true 条目，
+// 顶层 + 每帧各注入一份（顶层跑全家桶，帧内只跑推文处理子集——备注按钮/标签徽标/
+// 广告/截图/用户卡；跳过标签抽屉、用户页 header 按钮与粉丝页专门分支，见各处注释）
+const IN_FRAME = (() => {
+  try {
+    return window.top !== window.self;
+  } catch (e) {
+    return false;
+  }
+})();
+
+// 帧内截图坐标换算：captureVisibleTab 截的是【顶层视口】，bg 裁剪公式是
+// 「元素视口位置 = 绝对坐标 - 滚动位置」——帧内坐标系必须平移进顶层坐标系
+// （页面级坐标 = 帧内坐标 + frameElement.getBoundingClientRect() 偏移；
+// 右列 sticky 恒在视口右侧，几何成立）。返回 null 表示非帧内/读不到（跨域）。
+// 覆盖字段：x/y（顶层视口坐标系伪绝对值）、scrollX=0（帧内无水平滚动）、
+// viewportHeight=帧底（bg 用它作可见下界 min 截断）。每步捕获前实时调用，防截图期间顶层滚动。
+function frameShotOverride(rect, frameScrollY) {
+  const fe = window.frameElement;
+  if (!fe) return null;
+  const fr = fe.getBoundingClientRect();
+  return {
+    x: fr.left + rect.left,
+    y: fr.top + rect.top + frameScrollY,
+    scrollX: 0,
+    viewportHeight: Math.min(window.top?.innerHeight || fr.bottom, fr.bottom),
+  };
+}
+
 // Twitter Notes Content Script
 class TwitterNotes {
   constructor() {
@@ -122,8 +151,8 @@ class TwitterNotes {
     // 初始处理页面
     this.processPage();
 
-    // 标签抽屉首次渲染（旧版由 observeGroups 触发，已删）
-    this.initGroups();
+    // 标签抽屉首次渲染（旧版由 observeGroups 触发，已删）——仅顶层，帧内窄列不放
+    if (!IN_FRAME) this.initGroups();
 
     // 去广告开关（默认开）
     chrome.storage.local.get(["uiCleanSettings"], ({ uiCleanSettings }) => {
@@ -145,7 +174,7 @@ class TwitterNotes {
     if (document.getElementById("xmark-tags-style")) return;
     const css = `
 /* 贴边把手式抽屉：容器只负责定位/过渡，无背景——收起时左缘只露把手自己的 20×100 玻璃条 */
-#xmark-tags-drawer{position:fixed;left:0;top:50%;transform:translateY(-50%) translateX(calc(-100% + 20px));display:flex;align-items:center;z-index:2;transition:transform .25s ease;font-family:inherit;box-sizing:border-box;--xt-hover:#f7f9f9;--xt-fg:#0f1419;--xt-muted:#536471}
+#xmark-tags-drawer{position:fixed;left:0;top:20%;transform:translateY(-50%) translateX(calc(-100% + 20px));display:flex;align-items:center;z-index:2;transition:transform .25s ease;font-family:inherit;box-sizing:border-box;--xt-hover:#f7f9f9;--xt-fg:#0f1419;--xt-muted:#536471}
 #xmark-tags-drawer.open{transform:translateY(-50%) translateX(0)}
 html[data-xmark-theme="dark"] #xmark-tags-drawer{--xt-hover:rgba(101,119,134,.18);--xt-fg:#e7e9ea;--xt-muted:#71767b}
 /* 面板卡片（毛玻璃，左贴屏直角、右接把手） */
@@ -748,6 +777,14 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
     let langData = null;
     updateTexts();
 
+    if (IN_FRAME) {
+      // 帧内（右列 Timeline）统一按时间线处理：列表/用户页/推文页的推文同构，
+      // members 等用户卡页在 processHomePage 的帧内分支处理。
+      // 跳过 processUserProfile（SSR 扒 ID / 1×1 弹窗依赖顶层文档）与粉丝页专门分支。
+      this.processHomePage();
+      return;
+    }
+
     if (this.isUserProfilePage()) {
       // 在用户个人页面处理备注
       this.processUserProfile();
@@ -834,6 +871,9 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
   // 在主页等页面基于用户名显示备注
   processHomePage() {
     this.applyXMarkTheme(); // 标签抽屉/用户面板暗色跟随（幂等）
+
+    // 帧内 members 等页的用户卡同构处理（顶层粉丝页走专门分支，不进这里）
+    if (IN_FRAME) this.processUserCards();
 
     const tweets = document.querySelectorAll('[data-testid="tweet"]');
 
@@ -1931,6 +1971,51 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
     return userId;
   }
 
+  // 帧内截图专用：临时隐藏悬顶 sticky bar，返回还原函数。
+  // 三路候选（不依赖单一选择器，抗 X 改版；全部 visibility:hidden 保布局）：
+  //   ① timeline 滚动 sticky header——推文格子（cellInnerDiv）内 inline sticky 贴顶层
+  //   ② 返回按钮（app-bar-back）所在的 sticky 祖先——推文详情/用户页顶栏
+  //   ③ frame-clean 首屏 header 两层同源选择器——滚动后浮出的变体兜底
+  hideFrameStickyBars() {
+    const saved = [];
+    const hide = (el) => {
+      if (!el || el.style.visibility === "hidden") return;
+      saved.push([el, el.style.visibility]);
+      el.style.visibility = "hidden";
+    };
+    try {
+      document
+        .querySelectorAll('[data-testid="cellInnerDiv"] > div')
+        .forEach((d) => {
+          const cs = getComputedStyle(d);
+          if (cs.position === "sticky" && parseFloat(cs.top || "0") < 1) {
+            hide(d);
+          }
+        });
+      document
+        .querySelectorAll('[data-testid="app-bar-back"]')
+        .forEach((b) => {
+          let n = b.parentElement;
+          while (n && n !== document.body) {
+            const cs = getComputedStyle(n);
+            if (cs.position === "sticky" || cs.position === "fixed") {
+              hide(n);
+              break;
+            }
+            n = n.parentElement;
+          }
+        });
+      document
+        .querySelectorAll(
+          'div.r-1habvwh:has(>h2[role="heading"]), div.r-1pz39u2:has([data-testid="share-button"])'
+        )
+        .forEach(hide);
+    } catch (e) {
+      /* ignore */
+    }
+    return () => saved.forEach(([el, v]) => (el.style.visibility = v));
+  }
+
   async screenshotTweet(
     tweetElement,
     save2Files = false,
@@ -2023,6 +2108,10 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
         subscribeButton.style.display = "none";
       }
 
+      // 帧内：临时隐藏悬顶 sticky bar（列表/详情页滚动后浮出的「返回+标题」层会盖住
+      // 推文首屏用户名）。用 visibility:hidden 而非 display:none——保布局占位，截图坐标不受影响
+      const restoreFrameBars = IN_FRAME ? this.hideFrameStickyBars() : null;
+
       // 获取位置和尺寸
       const rect = tweetElement.getBoundingClientRect();
       const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
@@ -2050,7 +2139,9 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
       };
 
       const absoluteTop = rect.top + scrollY; // 推文元素在文档里的绝对 Y
-      const headerHeight = 53; // 推文顶部 header 大小（自己调）
+      // 每段向上多滚 53px 让推文顶部避开 sticky 区（长期实测调校，顶层/帧内同构保留）；
+      // 帧内 sticky 顶栏遮挡由 hideFrameStickyBars 截图期间临时隐藏处理，与本偏移无关
+      const headerHeight = 53;
       const stepHeight = viewportHeight - headerHeight; // 每次滚动时减掉 header
       const maxScroll = document.documentElement.scrollHeight - viewportHeight;
 
@@ -2083,9 +2174,11 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
           action: "partialShot",
           elementInfo: {
             ...info,
-            rectTop: rect.top,
-            scrollY: scrollPos,
             viewportHeight,
+            ...(IN_FRAME ? frameShotOverride(rect, scrollY) || {} : null),
+            rectTop: rect.top,
+            // 帧内也不改：bg 公式 elemTop - captureTop 恰好给出元素在顶层视口的 y
+            scrollY: scrollPos,
             step: i,
             headerHeight,
             stepHeight,
@@ -2096,6 +2189,7 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
       }
 
       // 先恢复 UI
+      if (restoreFrameBars) restoreFrameBars();
       if (grokButton) {
         grokButton.style.display = originalGrokDisplay || "";
       }
@@ -2192,10 +2286,11 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
       chrome.runtime.sendMessage(
         { action: "getScreenshotCountByUserId", userId },
         (response) => {
-          if (response.success) {
+          // SW 冷启动窗口期消息可能无人应答（callback 收 undefined）——判空兜底
+          if (response && response.success) {
             resolve(response.data);
           } else {
-            reject(response.error);
+            reject(response ? response.error : "no response");
           }
         }
       );
@@ -2207,11 +2302,12 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
       chrome.runtime.sendMessage(
         { action: "getUserIdinDB", username },
         (response) => {
-          if (response.success) {
+          // 同上：SW 冷启动窗口期判空兜底
+          if (response && response.success) {
             resolve(response.data);
           } else {
             console.log("错误");
-            reject(response.error);
+            reject(response ? response.error : "no response");
           }
         }
       );
@@ -2240,14 +2336,19 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 
   if (area === "local" && changes.noteTagsOrder) {
-    if (twitterNotes.initGroups) {
-      twitterNotes.initGroups();
+    if (!IN_FRAME && twitterNotes.initGroups) {
+      twitterNotes.initGroups(); // 帧内无标签抽屉
     }
   }
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.action === "initGroups") {
+    // 帧内无抽屉：直接应答（防广播挂起 + 防抽屉误建进帧）
+    if (IN_FRAME) {
+      sendResponse({ ok: true });
+      return;
+    }
     if (twitterNotes.initGroups) {
       twitterNotes
         .initGroups()

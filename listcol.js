@@ -58,9 +58,9 @@
 /* iframe：原生 timeline 列体（598 全宽、无圆角、左右 1px 列线） */
 #xmark-listcol .lc-frame{flex:1;min-height:0;width:100%;border:none;border-left:1px solid var(--lc-line);border-right:1px solid var(--lc-line);border-radius:0;background:var(--lc-card)}
 /* 加载遮罩：导航/水合期盖住 iframe（防被隐藏元素闪现）；就绪信号到后淡出；
-   中央 X 风格蓝色旋转圆环（#1d9bf0，同 X 官方 spinner 色值） */
+   中央 X 原生同款 spinner（双层 circle SVG，SVG 挂旋转动画） */
 #xmark-listcol .lc-veil{position:absolute;top:53px;left:0;right:0;bottom:0;background:var(--lc-card);z-index:2;opacity:1;pointer-events:auto;display:flex;align-items:center;justify-content:center}
-#xmark-listcol .lc-veil::after{content:"";width:28px;height:28px;border-radius:9999px;border:3px solid #1d9bf0;border-top-color:transparent;animation:lc-spin .8s linear infinite}
+#xmark-listcol .lc-veil svg{width:32px;height:32px;animation:lc-spin 1s linear infinite}
 @keyframes lc-spin{to{transform:rotate(360deg)}}
 `;
     const style = document.createElement("style");
@@ -75,6 +75,27 @@
     if (cls) n.className = cls;
     if (text !== undefined) n.textContent = text;
     return n;
+  }
+
+  // X 原生 loader 同款 spinner（双层 circle，官方色值/弧参数照抄；动画在 CSS lc-spin）
+  function mkSpinner() {
+    const NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", "0 0 32 32");
+    for (const style of [
+      "stroke: rgb(29, 155, 240); opacity: 0.2;",
+      "stroke: rgb(29, 155, 240); stroke-dasharray: 80; stroke-dashoffset: 60;",
+    ]) {
+      const c = document.createElementNS(NS, "circle");
+      c.setAttribute("cx", "16");
+      c.setAttribute("cy", "16");
+      c.setAttribute("r", "14");
+      c.setAttribute("fill", "none");
+      c.setAttribute("stroke-width", "4");
+      c.setAttribute("style", style);
+      svg.appendChild(c);
+    }
+    return svg;
   }
 
   // 暗色检测三层信号（与 xfinder.js 同款：color-scheme → theme-color → body 亮度）
@@ -253,6 +274,7 @@
     frame.className = "lc-frame";
     frame.title = t("lcEnabled", "XMark Timeline");
     veil = el("div", "lc-veil");
+    veil.appendChild(mkSpinner());
     frame.addEventListener("load", scheduleUnveil);
     root.appendChild(head);
     root.appendChild(frame);
@@ -326,16 +348,22 @@
       /* ignore */
     }
 
-    // 后台冻结自愈：Chrome 后台 tab 资源回收可能冻死 iframe（回前台空白）；
-    // 离开超 5 分钟回前台时直接重载（盖 veil，复用回列表导航流程）
-    let hiddenAt = 0;
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) {
-        hiddenAt = Date.now();
-      } else if (hiddenAt && Date.now() - hiddenAt > 5 * 60 * 1000) {
-        hiddenAt = 0;
-        if (root && frameTarget) navigate(frameTarget);
+    // 后台冻结自愈：Chrome 后台冻结/资源回收可能冻死 iframe（实测表现=回前台空白假死，
+    // 左栏原生 timeline 同冻结但能恢复）。**不按离开时长盲重载**——回前台探测假死的
+    // 可见表现：同域（x.com 嵌 x.com）读帧 DOM，2s 恢复缓冲后推文格子（cellInnerDiv）
+    // 仍不存在 = 帧真死了 → 重载；DOM 还在（只是不推新内容）不算死，不动。
+    const frameAlive = () => {
+      try {
+        return !!frame?.contentDocument?.querySelector('[data-testid="cellInnerDiv"]');
+      } catch (e) {
+        return true; // 跨域意外读不到：宁可不重载（跨域父页 twitter.com 场景）
       }
+    };
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden || !root || !frameTarget) return;
+      setTimeout(() => {
+        if (!frameAlive()) navigate(frameTarget); // 白屏=假死，重载（盖 veil 走就绪信号流程）
+      }, 2000);
     });
   }
 

@@ -11,14 +11,21 @@
     "scripting",
     "downloads",
     "alarms",
+    "offscreen",
     "declarativeNetRequestWithHostAccess"
   ],
   "host_permissions": ["<all_urls>"],
   "content_scripts": [
     {
       "matches": ["https://twitter.com/*", "https://x.com/*", "https://pro.x.com/*"],
-      "js": ["content.js", "ui-clean.js", "xfinder.js", "listcol.js"],
+      "js": ["content.js"],
       "css": ["styles/content.css"],
+      "run_at": "document_end",
+      "all_frames": true
+    },
+    {
+      "matches": ["https://twitter.com/*", "https://x.com/*", "https://pro.x.com/*"],
+      "js": ["ui-clean.js", "xfinder.js", "listcol.js", "podcast.js"],
       "run_at": "document_end"
     },
     {
@@ -41,7 +48,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["lang/*.json"],
+      "resources": ["lang/*.json", "podcasts.json", "public/XCast.png"],
       "matches": ["*://*.twitter.com/*", "*://*.x.com/*", "*://*.pro.x.com/*"]
     }
   ],
