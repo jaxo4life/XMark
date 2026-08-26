@@ -1,0 +1,72 @@
+[
+  {
+    "title": "疯投圈",
+    "url": "https://crazy.capital/feed",
+    "cover": "https://crazy.capital/assets/icon-square-normal-dark-cn@4x.png",
+    "lang": "zh",
+    "category": "创投"
+  },
+  {
+    "title": "商业就是这样",
+    "url": "https://feeds.fireside.fm/thatisbiz/rss",
+    "cover": "https://media24.fireside.fm/file/fireside-images-2024/podcasts/images/9/9a91414e-51b0-42ae-bee7-2c17d3c1c146/cover.jpg?v=4",
+    "lang": "zh",
+    "category": "商业"
+  },
+  {
+    "title": "晚点聊 LateTalk",
+    "url": "https://feeds.fireside.fm/latetalk/rss",
+    "cover": "https://media24.fireside.fm/file/fireside-images-2024/podcasts/images/1/19a49f52-28ee-4e25-b8e9-4f0ee70917e0/cover.jpg?v=7",
+    "lang": "zh",
+    "category": "科技"
+  },
+  {
+    "title": "声动早咖啡",
+    "url": "https://feeds.fireside.fm/sheng-espresso/rss",
+    "cover": "https://media24.fireside.fm/file/fireside-images-2024/podcasts/images/1/12647593-905b-40ef-8977-371837f74e89/cover.jpg?v=4",
+    "lang": "zh",
+    "category": "商业"
+  },
+  {
+    "title": "忽左忽右",
+    "url": "https://www.ximalaya.com/album/12817863.xml",
+    "cover": "https://is1-ssl.mzstatic.com/image/thumb/Podcasts114/v4/af/dc/11/afdc113a-000b-9b01-0864-092fc781ebc2/mza_13382010269595592052.png/600x600bb.jpg",
+    "lang": "zh",
+    "category": "文化"
+  },
+  {
+    "title": "The Daily",
+    "url": "https://feeds.simplecast.com/Sl5CSM3S",
+    "cover": "https://image.simplecastcdn.com/images/7f2f4c05-9c2f-4deb-82b7-b538062bc22d/73549bf1-94b3-40ff-8aeb-b4054848ec1b/3000x3000/the-daily-album-art-original.jpg?aid=rss_feed",
+    "lang": "en",
+    "category": "News"
+  },
+  {
+    "title": "Hard Fork",
+    "url": "https://feeds.simplecast.com/6HKOhNgS",
+    "cover": "https://image.simplecastcdn.com/images/4105a47a-42e5-4ccc-887a-832af7989986/23965394-f5e4-4fdb-b150-639f4910353e/3000x3000/nyt-hf-album-art-3000-2.jpg?aid=rss_feed",
+    "lang": "en",
+    "category": "Tech/AI"
+  },
+  {
+    "title": "Lex Fridman Podcast",
+    "url": "https://lexfridman.com/feed/podcast/",
+    "cover": "https://lexfridman.com/wordpress/wp-content/uploads/powerpress/artwork_3000-230.png",
+    "lang": "en",
+    "category": "Tech"
+  },
+  {
+    "title": "Acquired",
+    "url": "https://feeds.transistor.fm/acquired",
+    "cover": "https://img.transistorcdn.com/SYy-ia3mZbFnUAhbvsUEVW0EZyOaJlbF1tNaO9_3qEw/rs:fill:0:0:1/w:1400/h:1400/q:60/mb:500000/aHR0cHM6Ly9pbWct/dXBsb2FkLXByb2R1/Y3Rpb24udHJhbnNp/c3Rvci5mbS8zNjQx/ZWZhM2YzZTI3YjA5/MDZhYmE3ZWUzNzU2/ZWYzMy5qcGc.jpg",
+    "lang": "en",
+    "category": "Business"
+  },
+  {
+    "title": "Huberman Lab",
+    "url": "https://feeds.megaphone.fm/hubermanlab",
+    "cover": "https://megaphone.imgix.net/podcasts/042e6144-725e-11ec-a75d-c38f702aecad/image/ee4f0b7b466ca35620792970d9bce2d2.jpg?ixlib=rails-4.3.1&max-w=3000&max-h=3000&fit=crop&auto=format,compress",
+    "lang": "en",
+    "category": "Health"
+  }
+]

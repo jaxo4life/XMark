@@ -28,6 +28,16 @@
       <img src="/public/logo.png" style="width: 120px" />
     </div>
 
+    <!-- 播客迷你控制（正在播时显示；任何站点都可经扩展图标控制引擎） -->
+    <div id="pod-mini" style="display: none">
+      <div class="pod-mini-info">
+        <div class="pod-mini-ep" id="podMiniEp"></div>
+        <div class="pod-mini-feed" id="podMiniFeed"></div>
+      </div>
+      <button class="pod-mini-btn pod-toggle" id="podMiniToggle" data-key="podBtnToggle" title="播放/暂停"></button>
+      <button class="pod-mini-btn pod-stop" id="podMiniStop" data-key="podBtnStop" title="停止"></button>
+    </div>
+
     <!-- Tab 导航 -->
     <div class="tabs">
       <div class="tab active" data-tab="stats">
@@ -385,6 +395,7 @@
           <div class="modal-tabs">
             <div class="modal-tab active" data-subtab="clean" data-key="advTabClean">界面净化</div>
             <div class="modal-tab" data-subtab="enhance" data-key="advTabEnhance">增强</div>
+            <div class="modal-tab" data-subtab="podcast" data-key="advTabPodcast">播客</div>
           </div>
 
           <div id="advPanelClean" class="adv-panel">
@@ -402,6 +413,54 @@
             </div>
             <div id="uiCleanItems" class="ui-clean-items">
               <!-- 隐藏项复选行由 popup.js 按配置渲染 -->
+            </div>
+          </div>
+
+          <div id="advPanelPodcast" class="adv-panel hidden">
+            <div class="auto-backup-header">
+              <span data-key="podToggleLabel">播客面板</span>
+              <div class="toggle-switch" id="toggle-podcast"></div>
+            </div>
+
+            <!-- 收听统计总览 -->
+            <div class="pod-stat-row">
+              <div class="pod-stat">
+                <div class="pod-stat-num" id="podStatTime">0m</div>
+                <div class="pod-stat-label" data-key="podStatTimeLabel">总收听</div>
+              </div>
+              <div class="pod-stat">
+                <div class="pod-stat-num" id="podStatPlays">0</div>
+                <div class="pod-stat-label" data-key="podStatPlaysLabel">播放次数</div>
+              </div>
+              <div class="pod-stat">
+                <div class="pod-stat-num" id="podStatSubs">0</div>
+                <div class="pod-stat-label" data-key="podStatSubsLabel">订阅数</div>
+              </div>
+            </div>
+
+            <!-- 默认倍速 -->
+            <div class="auto-backup-header">
+              <span data-key="podDefaultRate">默认倍速</span>
+              <select id="podRateSelect" class="pod-rate-select">
+                <option value="0.75">0.75x</option>
+                <option value="1" selected>1x</option>
+                <option value="1.25">1.25x</option>
+                <option value="1.5">1.5x</option>
+                <option value="1.75">1.75x</option>
+                <option value="2">2x</option>
+              </select>
+            </div>
+
+            <!-- 订阅管理 -->
+            <div class="podp-sec-label" data-key="podSubsLabel">订阅管理</div>
+            <div id="podSubsItems"></div>
+
+            <!-- 数据：导出/导入/清空 -->
+            <div class="pod-data-row">
+              <button id="podExportBtn" class="btn btn-secondary pod-data-btn" data-key="podExport">导出订阅</button>
+              <button id="podImportBtn" class="btn btn-secondary pod-data-btn" data-key="podImport">导入订阅</button>
+              <button id="podClearBtn" class="btn btn-secondary pod-data-btn pod-danger" data-key="podClear">清空收听记录</button>
+              <input type="file" id="podImportFile" accept=".json,application/json" style="display:none" />
             </div>
           </div>
 
@@ -427,6 +486,21 @@
               />
               <button id="listcolAddBtn" class="lc-add-btn" data-key="lcAdd">添加</button>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- 播客清空记录确认模态 -->
+    <div id="podClearModal" class="modal-overlay hidden">
+      <div class="modal-card pod-clear-card">
+        <div class="modal-header">
+          <h3 data-key="confirmTitle">确认提示</h3>
+        </div>
+        <div class="modal-body">
+          <p class="pod-clear-text" data-key="podClearConfirm">确认清空全部收听记录与统计？（不影响订阅）</p>
+          <div class="pod-clear-btns">
+            <button id="podClearNo" class="btn btn-secondary" data-key="NO">取消</button>
+            <button id="podClearYes" class="btn pod-clear-yes" data-key="YES">确认</button>
           </div>
         </div>
       </div>

@@ -129,7 +129,10 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   // 加载 XFinder 开关
   await XFinderSettings();
+  await PodcastSettings();
   await ListColSettings();
+  await PodAdvancedTab();
+  await PodMiniBar();
 
   // 加载界面净化控制面板
   await initUIClean();
@@ -430,6 +433,9 @@ async function initUIClean() {
         modal
           .querySelector("#advPanelEnhance")
           ?.classList.toggle("hidden", sub !== "enhance");
+        modal
+          .querySelector("#advPanelPodcast")
+          ?.classList.toggle("hidden", sub !== "podcast");
       });
     });
   }
@@ -525,6 +531,192 @@ async function XFinderSettings() {
     const active = toggle.classList.toggle("active");
     chrome.storage.local.set({ xfinderSettings: { enabled: active } });
   });
+}
+
+// 播客面板开关（content 侧 podcast.js 消费，storage.onChanged 实时显隐）
+async function PodcastSettings() {
+  const toggle = document.getElementById("toggle-podcast");
+  if (!toggle) return;
+  const { podcastSettings } = await chrome.storage.local.get(["podcastSettings"]);
+  toggle.classList.toggle("active", podcastSettings?.enabled !== false); // 默认开
+  toggle.addEventListener("click", async () => {
+    const active = toggle.classList.toggle("active");
+    // 展开保留其他字段（barPos 播放器位置记忆等），勿整对象覆盖
+    chrome.storage.local.set({
+      podcastSettings: {
+        ...((await chrome.storage.local.get(["podcastSettings"])).podcastSettings || {}),
+        enabled: active,
+      },
+    });
+  });
+}
+
+// 「高级→播客」子 tab：统计总览 / 默认倍速 / 订阅管理 / 导出导入 / 清空记录
+async function PodAdvancedTab() {
+  const panel = document.getElementById("advPanelPodcast");
+  if (!panel) return;
+
+  const getSettings = async () =>
+    (await chrome.storage.local.get(["podcastSettings"])).podcastSettings || {};
+
+  // 统计总览 + 订阅列表
+  const render = async () => {
+    const { podcastSubs = [], podcastStats = {} } = await chrome.storage.local.get([
+      "podcastSubs",
+      "podcastStats",
+    ]);
+    let plays = 0;
+    let listened = 0;
+    for (const st of Object.values(podcastStats)) {
+      plays += st.plays || 0;
+      listened += st.listened || 0;
+    }
+    const h = Math.floor(listened / 3600);
+    const m = Math.round((listened % 3600) / 60);
+    document.getElementById("podStatTime").textContent = h >= 1 ? `${h}h ${m}m` : `${m}m`;
+    document.getElementById("podStatPlays").textContent = String(plays);
+    document.getElementById("podStatSubs").textContent = String(podcastSubs.length);
+
+    const box = document.getElementById("podSubsItems");
+    box.textContent = "";
+    if (!podcastSubs.length) {
+      const empty = document.createElement("div");
+      empty.className = "listcol-empty";
+      empty.textContent = langData.podSubsEmpty || "尚未订阅；在 X 页面播客面板里添加";
+      box.appendChild(empty);
+      return;
+    }
+    podcastSubs.forEach((s) => {
+      const row = document.createElement("div");
+      row.className = "listcol-item";
+      const cov = document.createElement("img");
+      cov.className = "pod-sub-cover";
+      cov.src = s.cover || "/public/XCast.png";
+      cov.alt = "";
+      cov.onerror = () => (cov.style.visibility = "hidden");
+      const name = document.createElement("span");
+      name.className = "lc-name";
+      name.textContent = s.title;
+      name.title = s.title;
+      const del = document.createElement("button");
+      del.textContent = "✕";
+      del.title = langData.podUnsub || "删除订阅";
+      del.addEventListener("click", async () => {
+        await chrome.runtime.sendMessage({ action: "podSubRemove", id: s.id });
+        render();
+      });
+      row.append(cov, name, del);
+      box.appendChild(row);
+    });
+  };
+  render();
+
+  // 默认倍速
+  const rateSel = document.getElementById("podRateSelect");
+  const settings0 = await getSettings();
+  rateSel.value = String(settings0.defaultRate || 1);
+  rateSel.addEventListener("change", async () => {
+    chrome.storage.local.set({
+      podcastSettings: { ...(await getSettings()), defaultRate: parseFloat(rateSel.value) },
+    });
+  });
+
+  // 导出订阅
+  document.getElementById("podExportBtn").onclick = async () => {
+    const { podcastSubs = [] } = await chrome.storage.local.get(["podcastSubs"]);
+    const blob = new Blob([JSON.stringify(podcastSubs, null, 2)], {
+      type: "application/json",
+    });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "xmark-podcasts.json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  // 导入订阅（复用 bg podSubAdd 的 url 去重）
+  const importBtn = document.getElementById("podImportBtn");
+  const importFile = document.getElementById("podImportFile");
+  importBtn.onclick = () => importFile.click();
+  importFile.addEventListener("change", async () => {
+    const file = importFile.files?.[0];
+    importFile.value = "";
+    if (!file) return;
+    try {
+      const list = JSON.parse(await file.text());
+      if (!Array.isArray(list)) throw new Error("format");
+      let added = 0;
+      for (const s of list) {
+        if (!s || typeof s.url !== "string" || !/^https?:\/\//.test(s.url)) continue;
+        const r = await chrome.runtime.sendMessage({
+          action: "podSubAdd",
+          url: s.url,
+          title: typeof s.title === "string" ? s.title : s.url,
+          cover: typeof s.cover === "string" ? s.cover : "",
+          link: typeof s.link === "string" ? s.link : "",
+        });
+        if (r?.ok) added++;
+      }
+      importBtn.textContent = `${langData.podImported || "已导入"} ${added}`;
+      setTimeout(() => (importBtn.textContent = langData.podImport || "导入订阅"), 2000);
+      render();
+    } catch (e) {
+      importBtn.textContent = langData.podImportErr || "导入失败";
+      setTimeout(() => (importBtn.textContent = langData.podImport || "导入订阅"), 2000);
+    }
+  });
+
+  // 清空收听记录（进度 + 统计）——自建确认模态（不用原生 confirm）
+  const clearModal = document.getElementById("podClearModal");
+  document.getElementById("podClearBtn").onclick = () => clearModal?.classList.remove("hidden");
+  document.getElementById("podClearNo").onclick = () => clearModal?.classList.add("hidden");
+  clearModal?.addEventListener("click", (e) => {
+    if (e.target === clearModal) clearModal.classList.add("hidden"); // 点遮罩关闭
+  });
+  document.getElementById("podClearYes").onclick = async () => {
+    clearModal?.classList.add("hidden");
+    await chrome.storage.local.set({ podcastProgress: {}, podcastStats: {} });
+    render();
+  };
+
+  // 订阅增删实时刷新（面板/页面侧操作同步）
+  chrome.storage.onChanged.addListener((changes, ns) => {
+    if (ns === "local" && changes.podcastSubs) render();
+  });
+}
+
+// 播客迷你控制（popup 顶部，正在播时显示）——非 X 站点无迷你条，经扩展图标兜底控制引擎
+async function PodMiniBar() {
+  const box = document.getElementById("pod-mini");
+  if (!box) return;
+  const s = await chrome.runtime.sendMessage({ action: "podGetState" }).catch(() => null);
+  if (!s?.key) return;
+  box.style.display = "flex";
+  document.getElementById("podMiniEp").textContent = s.epTitle || "";
+  document.getElementById("podMiniFeed").textContent = s.feedTitle || "";
+  const tg = document.getElementById("podMiniToggle");
+  const st = document.getElementById("podMiniStop");
+  // 图标幂等构建：三音柱（playing 跳动/暂停冻结，仅 class 切换不重建 DOM）+ 停止方块
+  if (!tg.querySelector(".pod-eq")) {
+    const SVG_STOP =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" d="M6 6h12v12H6z"/></svg>';
+    const svgNode = (str) =>
+      document.importNode(new DOMParser().parseFromString(str, "image/svg+xml").documentElement, true);
+    const eq = document.createElement("span");
+    eq.className = "pod-eq";
+    for (let i = 0; i < 3; i++) eq.appendChild(document.createElement("i"));
+    tg.replaceChildren(eq);
+    st.replaceChildren(svgNode(SVG_STOP)); // XML 模式必须显式 xmlns
+  }
+  tg.classList.toggle("playing", !!s.playing);
+  tg.onclick = async () => {
+    await chrome.runtime.sendMessage({ action: "podControl", cmd: "toggle" }).catch(() => {});
+    setTimeout(PodMiniBar, 150); // 引擎事件回传后刷新
+  };
+  st.onclick = async () => {
+    await chrome.runtime.sendMessage({ action: "podControl", cmd: "stop" }).catch(() => {});
+    box.style.display = "none";
+  };
 }
 
 // 右列 Timeline 配置（content 侧 listcol.js 消费，storage.onChanged 实时显隐）

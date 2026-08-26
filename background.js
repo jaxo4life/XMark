@@ -168,6 +168,15 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "autoBackup") {
     performAutoBackup();
   }
+  // 播客 offscreen 空闲回收：到点直接关（期间恢复播放则 podActive 已清 alarm，无竞态）
+  if (alarm.name === "podcast-offscreen-reap") {
+    chrome.runtime
+      .getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] })
+      .then((ctx) => {
+        if (ctx.length) chrome.offscreen.closeDocument();
+      })
+      .catch(() => {});
+  }
 });
 
 // 设置自动备份
@@ -256,10 +265,11 @@ async function performAutoBackup() {
       config = await cryptoUtils.decryptWebDAVConfig(config);
     }
 
-    // 获取备注和标签数据
-    const result = await chrome.storage.local.get(["twitterNotes", "noteTags"]);
+    // 获取备注和标签数据（v6.5.0 起播客订阅一并备份）
+    const result = await chrome.storage.local.get(["twitterNotes", "noteTags", "podcastSubs"]);
     const notes = result.twitterNotes || {};
     const tags = result.noteTags || {};
+    const podcastSubs = result.podcastSubs || [];
 
     if (Object.keys(notes).length === 0) {
       console.log("没有备注数据，跳过自动备份");
@@ -279,6 +289,7 @@ async function performAutoBackup() {
       exportTime: new Date().toISOString(),
       notes: notes,
       tags: tags,
+      podcastSubs: podcastSubs,
       autoBackup: true,
       frequency: frequency,
     };
@@ -468,6 +479,20 @@ async function ensureThreeLevelDirExists(baseUrl, handle, headers) {
 
 // 处理来自content script和popup的消息
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  // ===== 播客面板（podcast.js / offscreen.js 消费，见文件尾部 pod 段） =====
+  // 排除内部信号（podIdle/podActive/podStateFromEngine 由尾部专用 listener 处理，
+  // 混进本分支会 fall-through 到 {ok:false} 的脏应答）
+  if (
+    typeof request.action === "string" &&
+    request.action.startsWith("pod") &&
+    request.action !== "podIdle" &&
+    request.action !== "podActive" &&
+    request.action !== "podStateFromEngine"
+  ) {
+    handlePodcastMessage(request, sender, sendResponse);
+    return true; // 异步应答
+  }
+
   if (request.action === "getNotes") {
     chrome.storage.local.get(["twitterNotes"]).then((result) => {
       sendResponse({ notes: result.twitterNotes || {} });
@@ -997,3 +1022,204 @@ async function handleWebDAVRequest(request, sendResponse) {
     });
   }
 }
+
+// ========== 播客面板：offscreen 生命周期 + 消息路由（podcast.js / offscreen.js 消费） ==========
+const POD_OFFSCREEN_URL = "offscreen.html";
+
+async function hasPodOffscreen() {
+  const ctx = await chrome.runtime.getContexts({
+    contextTypes: ["OFFSCREEN_DOCUMENT"],
+    documentUrls: [chrome.runtime.getURL(POD_OFFSCREEN_URL)],
+  });
+  return ctx.length > 0;
+}
+
+async function ensurePodOffscreen() {
+  if (await hasPodOffscreen()) return;
+  try {
+    await chrome.offscreen.createDocument({
+      url: POD_OFFSCREEN_URL,
+      reasons: ["AUDIO_PLAYBACK"],
+      justification: "Podcast audio playback decoupled from page lifecycle",
+    });
+  } catch (e) {
+    // 并发创建竞态：已存在即视为成功
+    if (!/single offscreen|existing offscreen/i.test(String(e?.message || e))) throw e;
+  }
+}
+
+async function toPodOffscreen(payload) {
+  const existed = await hasPodOffscreen();
+  await ensurePodOffscreen();
+  // 非 play 用途（RSS 解析等）新建的文档无 audio 事件 → 无 pause → 永不触发回收 alarm。
+  // 僵尸防护：本次是新建且命令不是 play，就挂短 alarm 兜底回收；play 后由 pause 事件
+  // 设的 10min alarm 自然接管（同名 alarm 重设）
+  if (!existed && payload.cmd !== "play") {
+    chrome.alarms.create("podcast-offscreen-reap", { delayInMinutes: 2 });
+  }
+  return chrome.runtime.sendMessage({ ...payload, target: "offscreen" });
+}
+
+async function handlePodcastMessage(req, _sender, sendResponse) {
+  try {
+    if (req.action === "podControl") {
+      if (req.cmd === "play") {
+        await ensurePodOffscreen(); // play 前必须先建（消息要有人接）
+        // 持久化 lastPlay payload：暂停 10min 引擎回收后，迷你条 toggle 用它重放续播
+        const pp = (await chrome.storage.local.get(["podcastPlayer"])).podcastPlayer || {};
+        await chrome.storage.local.set({
+          podcastPlayer: {
+            ...pp,
+            lastPlay: {
+              audioUrl: req.audioUrl,
+              key: req.key,
+              feedTitle: req.feedTitle,
+              epTitle: req.epTitle,
+              cover: req.cover,
+              rate: req.rate,
+            },
+          },
+        });
+        // 播放计数（历史视图统计）：play 一次 +1
+        const stats0 = (await chrome.storage.local.get(["podcastStats"])).podcastStats || {};
+        const st0 = stats0[req.key] || { plays: 0, listened: 0 };
+        st0.plays += 1;
+        stats0[req.key] = st0;
+        await chrome.storage.local.set({ podcastStats: stats0 });
+        sendResponse(await toPodOffscreen(req));
+        return;
+      }
+      if (!(await hasPodOffscreen())) {
+        // 引擎已回收（暂停超 10min）：toggle 用 lastPlay + 已存进度重放；其他命令静默应答。
+        // （不凭空建空 offscreen——否则 play() 无源被静默吞、还因无 pause 事件失去回收 alarm）
+        if (req.cmd === "toggle") {
+          const { podcastPlayer = {}, podcastProgress = {} } = await chrome.storage.local.get([
+            "podcastPlayer",
+            "podcastProgress",
+          ]);
+          const lp = podcastPlayer.lastPlay;
+          if (lp?.audioUrl) {
+            await ensurePodOffscreen();
+            sendResponse(
+              await toPodOffscreen({
+                action: "podControl",
+                cmd: "play",
+                ...lp,
+                pos: podcastProgress[lp.key]?.pos || 0,
+                rate: podcastPlayer.rate || lp.rate || 1,
+              })
+            );
+            return;
+          }
+        }
+        sendResponse({ ok: false });
+        return;
+      }
+      sendResponse(await toPodOffscreen(req));
+      return;
+    }
+    if (req.action === "podGetState") {
+      if (!(await hasPodOffscreen())) {
+        sendResponse({ playing: false, key: "", epTitle: "", feedTitle: "", cover: "", pos: 0, dur: 0, rate: 1 });
+      } else {
+        sendResponse(await toPodOffscreen({ action: "podGetState" }));
+      }
+      return;
+    }
+    if (req.action === "podFetchFeed" || req.action === "podDiscoverRss") {
+      await ensurePodOffscreen(); // RSS 解析器在 offscreen（SW 无 DOMParser）
+      sendResponse(await toPodOffscreen(req));
+      return;
+    }
+    if (req.action === "podSubAdd") {
+      const { podcastSubs = [] } = await chrome.storage.local.get(["podcastSubs"]);
+      if (podcastSubs.some((s) => s.url === req.url)) {
+        sendResponse({ ok: false, dup: true });
+        return;
+      }
+      podcastSubs.push({
+        id: Date.now().toString(),
+        url: req.url,
+        title: req.title || req.url,
+        cover: req.cover || "",
+        link: req.link || "",
+        addedAt: Date.now(),
+      });
+      await chrome.storage.local.set({ podcastSubs });
+      sendResponse({ ok: true });
+      return;
+    }
+    if (req.action === "podSave") {
+      // 引擎进度代写（offscreen 无 chrome.storage）
+      const { podcastProgress = {} } = await chrome.storage.local.get(["podcastProgress"]);
+      if (req.key) {
+        const prev = podcastProgress[req.key] || {};
+        podcastProgress[req.key] = {
+          ...prev, // 保留已落元数据（老条目嗅探兼容：缺 audioUrl 的历史条目不可续播）
+          pos: req.pos,
+          dur: req.dur,
+          updatedAt: Date.now(),
+          done: req.done,
+          feedTitle: req.feedTitle || prev.feedTitle || "",
+          epTitle: req.epTitle || prev.epTitle || "",
+          cover: req.cover || prev.cover || "",
+          audioUrl: req.audioUrl || prev.audioUrl || "",
+        };
+        const keys = Object.keys(podcastProgress).sort(
+          (a, b) => podcastProgress[a].updatedAt - podcastProgress[b].updatedAt
+        );
+        while (keys.length > 200) delete podcastProgress[keys.shift()]; // LRU ≤200
+      }
+      const pp = (await chrome.storage.local.get(["podcastPlayer"])).podcastPlayer || {};
+      await chrome.storage.local.set({
+        podcastProgress,
+        podcastPlayer: {
+          ...pp, // 保留 lastPlay（play 时写入，toggle 兜底重放消费）
+          currentKey: req.done ? "" : req.key,
+          rate: req.rate,
+          volume: req.volume,
+        },
+      });
+      // 收听时长累计（历史视图统计）
+      if (req.delta > 0) {
+        const stats = (await chrome.storage.local.get(["podcastStats"])).podcastStats || {};
+        const st = stats[req.key] || { plays: 0, listened: 0 };
+        st.listened += req.delta;
+        stats[req.key] = st;
+        await chrome.storage.local.set({ podcastStats: stats });
+      }
+      sendResponse({ ok: true });
+      return;
+    }
+    if (req.action === "podSubRemove") {
+      const { podcastSubs = [] } = await chrome.storage.local.get(["podcastSubs"]);
+      await chrome.storage.local.set({ podcastSubs: podcastSubs.filter((s) => s.id !== req.id) });
+      sendResponse({ ok: true });
+      return;
+    }
+    sendResponse({ ok: false });
+  } catch (e) {
+    // 所有分支必应答（项目已知坑：分支漏 sendResponse 会挂起调用方 Promise）
+    sendResponse({ ok: false, error: String(e?.message || e) });
+  }
+}
+
+// offscreen 空闲信号：podIdle 设 10min 回收 alarm；podActive 清（恢复播放即取消回收）
+// podStateFromEngine：引擎事件态中转到各 X 标签页（offscreen 无 chrome.tabs，广播必经 SW；
+//   仅事件级频率——play/pause/seek/skip/rate/ended/error，秒级进度由 content 本地时钟推算）
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.action === "podIdle") chrome.alarms.create("podcast-offscreen-reap", { delayInMinutes: 10 });
+  if (msg.action === "podActive") chrome.alarms.clear("podcast-offscreen-reap");
+  if (msg.action === "podStateFromEngine") {
+    const { action, ...state } = msg;
+    chrome.tabs.query(
+      { url: ["https://x.com/*", "https://twitter.com/*", "https://pro.x.com/*"] },
+      (tabs) => {
+        for (const tab of tabs) {
+          chrome.tabs.sendMessage(tab.id, { action: "podState", ...state }).catch(() => {});
+        }
+      }
+    );
+  }
+  return false; // 不占 sendResponse 通道
+});
