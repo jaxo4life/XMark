@@ -106,6 +106,60 @@ button[data-testid="app-bar-back"]:disabled{opacity:.4;pointer-events:none}
     }
   }
 
+  // ---------- 用户页链接 → 顶层原生打开 ----------
+  // 帧内点用户名/头像/@提及：不在帧内纵深（用户页交给 X 主环境全功能渲染：关注/
+  // 私信/标签页都在顶层），右列零动作。实现：跨帧同域直接调顶层 pushState + 向
+  // 顶层派发 popstate（顶层 X 路由的后退键级监听，必健壮）原地渲染用户页——
+  // 顶层的 listcol pushState 包装同链触发（用户页在白名单 → 列继续显示）。
+  // 500ms 顶层 title 未变 = 未接管 → location.replace 整页兜底（最后手段）。
+  // 保留字表与 listcol.js 的 RESERVED_PATHS 保持同步（两处各持一份，零耦合纪律）。
+  const RESERVED_PATHS = new Set([
+    "home", "explore", "notifications", "messages", "bookmarks", "lists",
+    "profile", "settings", "i", "search", "compose", "intent", "login",
+    "signup", "grok", "premium", "money", "articles", "following",
+    "creator_studio", "analytics", "connect", "moments", "topics", "safety",
+    "personalization", "data", "account", "share", "live", "hashtag",
+  ]);
+  const PROFILE_PATH =
+    /^\/([^/]+?)(?:\/(?:with_replies|media|likes|following|followers|verified_followers))?\/?$/;
+  function isProfileLink(p) {
+    const m = p.match(PROFILE_PATH);
+    return !!m && !RESERVED_PATHS.has(m[1].toLowerCase());
+  }
+
+  function topNavigate(path) {
+    const top = window.top;
+    if (!top || top === window.self) return; // 防御：不在帧内
+    if (top.location.pathname === path) return; // 已在该用户页：零动作
+    const beforeTitle = top.document.title;
+    try {
+      top.history.pushState(top.history.state, "", path);
+      top.dispatchEvent(
+        new PopStateEvent("popstate", { state: top.history.state })
+      );
+    } catch (e) {
+      try {
+        top.location.replace(path);
+      } catch (e2) {
+        /* 跨域 top：放弃 */
+      }
+      return;
+    }
+    setTimeout(() => {
+      // 接管信号：title 变化或用户页 header（UserName）出现，任一即成功
+      const took =
+        top.document.title !== beforeTitle ||
+        !!top.document.querySelector('[data-testid="UserName"]');
+      if (!took) {
+        try {
+          top.location.replace(path);
+        } catch (e) {
+          /* ignore */
+        }
+      }
+    }, 800);
+  }
+
   // ---------- 帧内导航接管 ----------
   // X 在 iframe 里把站内链接降级为完整文档导航（文档销毁、滚动丢失、整帧重载）。
   // 替 X 补上 SPA：capture 拦截同源相对链接的无修饰键点击 → pushState + 派发
@@ -134,8 +188,23 @@ button[data-testid="app-bar-back"]:disabled{opacity:.4;pointer-events:none}
         }
         const a = e.target?.closest?.('a[href^="/"]');
         if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
+        if (a.closest('[data-testid="app-bar-back"]')) return; // 返回按钮归 hookBackBtn 管
         const url = a.getAttribute("href");
         if (!url || url.startsWith("//")) return;
+        let toPath;
+        try {
+          toPath = new URL(url, location.href).pathname;
+        } catch (err) {
+          return;
+        }
+
+        // 用户页族链接（用户名/头像/@提及）→ 顶层原生打开，右列零动作
+        if (isProfileLink(toPath)) {
+          e.preventDefault();
+          e.stopPropagation();
+          topNavigate(toPath);
+          return;
+        }
 
         const beforeTitle = document.title;
         const beforeCells = document.querySelectorAll(
@@ -143,7 +212,7 @@ button[data-testid="app-bar-back"]:disabled{opacity:.4;pointer-events:none}
         ).length;
         const beforePath = location.pathname;
         // 同页链接不接管（探针三态全不变必误判刷新自己）
-        if (new URL(url, location.href).pathname === beforePath) return;
+        if (toPath === beforePath) return;
 
         e.preventDefault();
         history.pushState(history.state, "", url);
@@ -165,14 +234,46 @@ button[data-testid="app-bar-back"]:disabled{opacity:.4;pointer-events:none}
     );
   }
 
-  // 列表时间线页禁用返回按钮：iframe 以 /i/lists/<id> 为首页，返回无处可去
-  // （点击只会触发空历史导航或混乱回退）；离开列表页（推文/用户页）自动恢复。
-  // React 重渲染可能覆盖 disabled，随 observer 轮幂等重设。
+  // 列表时间线页隐藏返回按钮：iframe 以 /i/lists/<id> 为首页，返回无处可去
+  // （点击只会触发空历史导航或混乱回退）；disabled 兜底 + 直接 display:none 隐藏
+  // （列表名顶格，还原原生列表时间线观感）。离开列表页（推文页）自动恢复。
+  // React 重渲染可能覆盖内联样式，随 observer 轮幂等重设。
   function processBackBtn() {
     const onList = /^\/i\/lists\/\d+\/?$/.test(location.pathname);
     document.querySelectorAll('[data-testid="app-bar-back"]').forEach((b) => {
-      if (onList !== !!b.disabled) b.disabled = onList;
+      b.disabled = onList;
+      b.style.display = onList ? "none" : "";
     });
+  }
+
+  // ---------- 返回按钮拦截 ----------
+  // iframe 的 history.back() 走 joint session history（顶层+子帧联合历史，浏览器
+  // 规范行为）——顶层做过 SPA 导航后，帧内返回链退到底（=回到列表主页）再点返回，
+  // joint 指针会越过帧内条目区间、退到顶层旧条目 → 顶层被劫回 /home。
+  // 唯一需要拦的就是这一种，且它必然发生在「帧已是列表主页」时：
+  //   列表主页（/i/lists/<id> 精确匹配）→ 吸掉点击（零导航零刷新，帧不动）；
+  //   其余页面 → 完全放行 X 原生返回（同文档 popstate 一层层退，无刷新）。
+  function hookBackBtn() {
+    document.addEventListener(
+      "click",
+      (e) => {
+        if (
+          e.button !== 0 ||
+          e.metaKey ||
+          e.ctrlKey ||
+          e.shiftKey ||
+          e.altKey
+        ) {
+          return;
+        }
+        const back = e.target?.closest?.('[data-testid="app-bar-back"]');
+        if (!back) return;
+        if (!/^\/i\/lists\/\d+\/?$/.test(location.pathname)) return; // 非列表态：放行原生
+        e.preventDefault();
+        e.stopPropagation(); // 吸掉：阻断 X 的 back，joint 指针不动、顶层零影响
+      },
+      true
+    );
   }
 
   // ⚠️ 本条目 run_at: document_start：injectStyle 必须在 SSR 首帧渲染前注入，
@@ -182,6 +283,7 @@ button[data-testid="app-bar-back"]:disabled{opacity:.4;pointer-events:none}
     loadHideAds().then(processAds);
     processListHeader();
     hookFrameNav();
+    hookBackBtn();
     processBackBtn();
     let timer = null;
     new MutationObserver(() => {

@@ -336,9 +336,23 @@
     window.addEventListener("resize", syncFramePos); // 位置平移（尺寸不变）RO 捕不到
   }
 
-  // 路由白名单：仅主页与推文详情页显示右列。status 用前缀匹配涵盖 /photo/N 全屏延伸页。
-  const allowedPath = (p) =>
-    /^\/home\/?$/.test(p) || /^\/[^/]+\/status\/\d+/.test(p);
+  // 路由白名单：主页 / 推文详情页 / 用户页族（x.com/{user} 及 with_replies|media|
+  // likes|followers 等子页）。排除 X 保留路由（误判会让保留页错显右列）；
+  // 保留字表与 frame-clean.js 的 PROFILE 判定保持同步（两处各持一份，零耦合纪律）。
+  const RESERVED_PATHS = new Set([
+    "home", "explore", "notifications", "messages", "bookmarks", "lists",
+    "profile", "settings", "i", "search", "compose", "intent", "login",
+    "signup", "grok", "premium", "money", "articles", "following",
+    "creator_studio", "analytics", "connect", "moments", "topics", "safety",
+    "personalization", "data", "account", "share", "live", "hashtag",
+  ]);
+  const PROFILE_PATH =
+    /^\/([^/]+?)(?:\/(?:with_replies|media|likes|following|followers|verified_followers))?\/?$/;
+  function allowedPath(p) {
+    if (/^\/home\/?$/.test(p) || /^\/[^/]+\/status\/\d+/.test(p)) return true;
+    const m = p.match(PROFILE_PATH);
+    return !!m && !RESERVED_PATHS.has(m[1].toLowerCase());
+  }
   const routeAllowed = () => allowedPath(location.pathname);
 
   // 显隐切换：只动 visibility（保 iframe 活性——display:none 会触发 Chrome 冻结，
