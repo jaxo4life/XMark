@@ -7,7 +7,7 @@
 <p align="center">A Chrome extension for X (formerly Twitter): Notes · Screenshots · Ad-filtering</p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/version-6.5.0-blue.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-6.5.1-blue.svg" alt="Version"></a>
   <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Manifest-V3-green.svg" alt="Manifest"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Chrome%20Extension-orange.svg" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL_v3-blue.svg" alt="License"></a>
@@ -32,7 +32,7 @@
 - 🚫 **Ad Filtering** — Auto-detects and hides promoted tweets in your feed; ad-block counts (today / total) at a glance
 - 🧹 **UI Clean** — Customizable hiding of left-nav items (Explore / Grok / Premium / Money / Articles / Following / Creator Studio / More), the right sidebar, and ad tweets; one-click clean-left-nav — applied instantly
 - 🔍 **XFinder Advanced Search** — a floating panel from the top-right fab after hiding the right rail: combine from / keyword / to-interaction / date range, with X native operators (detailed hints behind the ? icon) and one-click history repeat; UI fully aligned with X official
-- 📋 **Right Column Timeline** — after hiding the right rail, a native X List timeline lives in the freed third column: TweetDeck-style tab bar for multi-List switching (click the active tab to force-return to the list), iframe-embedded native page with deep in-frame cleaning, loading veil and background-freeze self-healing; **full in-frame notes / tag badges / screenshots** (frame-coordinate translation + temporarily hiding sticky bars while shooting); managed in popup "Advanced" → "Enhance"
+- 📋 **Right Column Timeline** — after hiding the right rail, a native X List timeline lives in the freed third column: TweetDeck-style tab bar for multi-List switching (click the active tab to force-return to the list), iframe-embedded native page with deep in-frame cleaning, loading veil and background-freeze self-healing; **full in-frame notes / tag badges / screenshots** (frame-coordinate translation + temporarily hiding sticky bars while shooting); shown only on Home and tweet detail pages, with **zero column reload across top-level navigation** (persistent fixed-layer architecture); managed in popup "Advanced" → "Enhance"
 - 🎙 **Podcast Panel XCast** — listen while scrolling X: bottom-left player card (±15s / speed / seekable progress) + idle round dock, draggable with position memory; subscriptions / discover catalog (auto remote updates), RSS parsing, history stats and resume-from-breakpoint; the playback engine runs in an offscreen document — **audio survives page navigation**, auto-reaped after 10 min paused
 - ☁️ **WebDAV Cloud Backup** — Works with Nutstore, Nextcloud, ownCloud, etc.; hourly/daily/weekly/monthly auto-backup, credentials encrypted at rest
 - 🔒 **Secure** — XSS protection, WebDAV SSRF closure, credential encryption, extension-reload tolerance (hardened in v6.0.0)

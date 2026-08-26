@@ -1,5 +1,14 @@
 # 更新日志 / Changelog
 
+## v6.5.1
+
+| 中文 | English |
+|------|----------|
+| 修复：顶层路由切换导致右列 iframe 整帧重载——改双层架构（占位框挂 X 布局 + 列常驻 body fixed 同步对位），iframe 全程零移动零重载 | Fix: top-level navigation reloaded the right-column iframe — rebuilt as a dual-layer architecture (placeholder in X's layout + persistent fixed column on body synced by rect), iframe never moves or reloads |
+| 路由白名单：右列仅主页与推文详情页显示，其余路由 visibility 保活隐藏 | Route whitelist: column shows only on Home and tweet detail pages; hidden (kept alive) elsewhere |
+| 帧内完整导航 veil 平滑过渡；帧内链接点击尝试 SPA 化接管（失败自动禁用并回滚） | In-frame full navigations get a smooth veil transition; in-frame link clicks attempt SPA takeover (auto-disables and rolls back on failure) |
+| 列表时间线页禁用返回按钮（iframe 以列表为首页，返回无处可去） | Back button disabled on the list timeline (the list is the iframe's home; nowhere to go back to) |
+
 ## v6.5.0
 
 | 中文 | English |
