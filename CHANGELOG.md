@@ -1,5 +1,13 @@
 # 更新日志 / Changelog
 
+## v6.5.2
+
+| 中文 | English |
+|------|----------|
+| 修复：帧内返回按钮——恢复原生一层层返回（同文档 popstate 无刷新），返回链退到底时吸掉点击，防止 joint 联合历史越界把主页面劫回首页 | Fix: in-frame back button — restored native step-by-step back (same-document popstate, no reload); once the chain bottoms out at the list, clicks are swallowed to stop the joint session history from spilling over and hijacking the top page back to Home |
+| 帧内点用户名 / 头像 / @提及 → 顶层原生打开用户页（右列零动作，X 主环境全功能浏览）；路由白名单扩至用户页族（含 with_replies / media / likes / followers 子页，31 个保留路由排除） | Clicking usernames / avatars / @mentions in-frame opens the profile top-level natively (column untouched, full X browsing); route whitelist extended to the profile family (with_replies / media / likes / followers sub-pages, 31 reserved routes excluded) |
+| 列表时间线页隐藏返回按钮（列表名顶格，还原原生列表观感） | Back button hidden on the list timeline (list name flush, native list look restored) |
+
 ## v6.5.1
 
 | 中文 | English |

@@ -7,7 +7,7 @@
 <p align="center">专为 X（前推特）打造的备注 · 截图 · 广告过滤 Chrome 扩展</p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/version-6.5.1-blue.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-6.5.2-blue.svg" alt="Version"></a>
   <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Manifest-V3-green.svg" alt="Manifest"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Chrome%20Extension-orange.svg" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL_v3-blue.svg" alt="License"></a>
@@ -32,7 +32,7 @@
 - 🚫 **广告过滤** — 自动识别并隐藏信息流广告推文，去广告数量（今日 / 总计）一目了然
 - 🧹 **界面净化** — 自定义隐藏左侧菜单项（探索 / Grok / Premium / Money / 文章 / 关注 / 创作者工作室 / 更多）、右侧边栏与广告推文；一键清爽左栏，勾选即时生效
 - 🔍 **XFinder 高阶搜索** — 隐藏右栏后右上圆钮弹出浮层面板：from / 关键词 / to 交互账户 / 日期范围组合查询，支持 X 原生操作符（问号有详细提示），搜索历史一键重复；UI 与 X 官方完全统一
-- 📋 **右列 Timeline** — 隐藏右栏后第三格常驻一条 X 原生 List 时间线：TweetDeck 式 tab 条多 List 一键切换（点当前 tab 强制回列表），iframe 嵌原生页 + 帧内深度净化，加载遮罩与后台冻结自愈；**帧内备注 / 标签徽标 / 截图全功能同构**（截图自动换算帧内坐标、临时隐藏 sticky 顶栏）；仅主页与推文详情页显示，**顶层路由切换列零刷新**（常驻 fixed 架构）；管理入口在 popup「高级」→「增强」
+- 📋 **右列 Timeline** — 隐藏右栏后第三格常驻一条 X 原生 List 时间线：TweetDeck 式 tab 条多 List 一键切换（点当前 tab 强制回列表），iframe 嵌原生页 + 帧内深度净化，加载遮罩与后台冻结自愈；**帧内备注 / 标签徽标 / 截图全功能同构**（截图自动换算帧内坐标、临时隐藏 sticky 顶栏）；仅主页 / 推文详情 / 用户页显示，**顶层路由切换列零刷新**（常驻 fixed 架构）；帧内点用户名直达顶层用户页（右列不动）；管理入口在 popup「高级」→「增强」
 - 🎙 **播客面板 XCast** — 边刷 X 边听播客：左下播放卡（±15s / 倍速 / 进度拖拽）+ idle 圆 dock、可拖动记忆位置；订阅 / 发现目录（远程自动更新）、RSS 解析、历史统计与断点续播；播放引擎跑在 offscreen 文档，**页面切换不断播**，暂停 10 分钟自动回收
 - ☁️ **WebDAV 云备份** — 支持坚果云、Nextcloud、ownCloud 等，可按小时 / 天 / 周 / 月自动备份，凭据加密存储
 - 🔒 **安全** — XSS 防护、WebDAV SSRF 收口、凭据加密、扩展重载容错（v6.0.0 安全加固）
