@@ -49,7 +49,7 @@
    ⚠️ 占位框继承原布局约束：host 是 flex 容器必须 flex-shrink:0（否则 598 被主栏挤成 450）；
    grid-column 显式钉最后一列（host 若为 grid 时防 auto-placement 挤压） */
 #xmark-listcol-slot{grid-column:-2/-1;justify-self:end;flex-shrink:0;position:sticky;top:0;width:598px;min-width:0;height:100vh;box-sizing:border-box}
-#xmark-listcol{position:fixed;top:0;left:0;display:flex;flex-direction:column;z-index:1;font-family:inherit;--lc-card:#fff;--lc-line:#eff3f4;--lc-key:#0f1419;--lc-muted:#536471;--lc-hover:#f7f9f9}
+#xmark-listcol{position:fixed;top:0;left:0;display:flex;flex-direction:column;z-index:0;font-family:inherit;--lc-card:#fff;--lc-line:#eff3f4;--lc-key:#0f1419;--lc-muted:#536471;--lc-hover:#f7f9f9}
 #xmark-listcol[data-theme="dark"]{--lc-card:#16181c;--lc-line:#2f3336;--lc-key:#e7e9ea;--lc-muted:#71767b;--lc-hover:#202327}
 /* 列头：对齐原生「为你推荐/正在关注」tab 行——53px 高、通栏贴列线（左线与主栏头边线衔接）、底部分割线 */
 #xmark-listcol .lc-head{flex:none;height:53px;display:flex;align-items:stretch;overflow-x:auto;scrollbar-width:none;background:var(--lc-card);border-bottom:1px solid var(--lc-line);border-left:1px solid var(--lc-line);border-right:1px solid var(--lc-line)}
@@ -328,7 +328,16 @@
     showVeil(); // 初始加载即遮
     renderTabs(settings);
     applyTheme(); // 建出即检测，不等 observer（修刷新时暗色延迟）
-    document.body.appendChild(root); // 列常驻 body——Chrome 移动 iframe=重载，永不移动
+    // 列常驻 body——Chrome 移动 iframe=重载，永不移动。挂载位 + z-index:0 的层叠策略：
+    // 若有 X 浮层容器 #layers（body 直挂，modal/下拉都进它）则插它之前——0 级下按
+    // 文档顺序，浮层全在列之上（不遮挡），而列在 #react_root 之后压过其全宽透明区
+    //（iframe 可点击）；无 #layers 则 appendChild（动态后挂的浮层天然在列后）。
+    const layers = document.getElementById("layers");
+    if (layers && layers.parentElement === document.body) {
+      document.body.insertBefore(root, layers);
+    } else {
+      document.body.appendChild(root);
+    }
     if (!slotRO) {
       slotRO = new ResizeObserver(syncFramePos);
       slotRO.observe(slot);
@@ -369,6 +378,13 @@
 
     if (!routeAllowed()) {
       setShown(false); // 白名单外路由：隐藏保活，等回归
+      return;
+    }
+    // modal 期隐藏（转发/回复/引用/图片灯箱等 aria-modal 浮层会与列争层，索性让位；
+    // /compose 的 pushState 已由 hookTopNav preempt 同步隐藏，此处 DOM 检测兜底
+    // 无 URL 变化的 modal，observer 轮驱动恢复）
+    if (document.querySelector('[aria-modal="true"]')) {
+      setShown(false);
       return;
     }
     if (!host) {
@@ -454,10 +470,68 @@
     frameTarget = ""; // 重建后首帧走 src 赋值而非 replace
   }
 
+  // ---------- modal 让位三层：点击预藏（零重叠窗口）+ 浅层观察器（近同步）+ observer 轮兜底 ----------
+  // X 先渲染 modal 再 pushState（转发面板甚至纯浮层无 URL），任何检测都滞后——
+  // 在触发按钮点击的同步时机藏列，modal 渲染时列已让位。不 preventDefault（只顺带藏）；
+  // 若 modal 实际未开，观察器/轮检测无 modal 自愈恢复。
+  const MODAL_TRIGGERS = [
+    '[data-testid="reply"]', // 回复：直接开 compose modal
+    '[data-testid="Dropdown"] button', // 转发/引用选择菜单里的项（真正开 modal 的点击）
+    '[data-testid="SideNav_NewTweet_Button"]',
+    '[data-testid="tweetPhoto"]',
+  ].join(",");
+  // 注意 retweet 按钮不在此列：第一跳只是「转发还是引用」选择菜单（非 modal、
+  // 不遮列），预藏会被观察器立即恢复成闪烁；真正的 modal 在菜单项点击时拦。
+
+  function hookModalPrehide() {
+    document.addEventListener(
+      "click",
+      (e) => {
+        if (
+          e.button !== 0 ||
+          e.metaKey ||
+          e.ctrlKey ||
+          e.shiftKey ||
+          e.altKey
+        ) {
+          return;
+        }
+        if (!root || root.style.visibility === "hidden") return;
+        if (e.target?.closest?.(MODAL_TRIGGERS)) setShown(false);
+      },
+      true
+    );
+  }
+
+  // modal 观察器：subtree + 50ms 防抖查 aria-modal（modal 可能挂在任意深层容器，
+  // 浅层监不到；50ms 合并高频滚动 mutation，肉眼近瞬时）。高频路径零 storage 读：
+  // 有 modal 即藏（幂等），无 modal 且列已显示则早退——只有「列隐藏且 modal 已退」
+  // 才走 readFlags+ensureUI 恢复。
+  function watchLayers() {
+    let layerTimer = null;
+    const check = async () => {
+      if (!root) return;
+      if (document.querySelector('[aria-modal="true"]')) {
+        setShown(false);
+        return;
+      }
+      if (root.style.visibility !== "hidden") return; // 已显示：无事可做
+      const f = await readFlags();
+      if (f.on && f.rightHidden) ensureUI(f.settings);
+    };
+    const mo = new MutationObserver(() => {
+      clearTimeout(layerTimer);
+      layerTimer = setTimeout(check, 50);
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+  }
+
   async function start() {
     injectStyle();
     await loadLang();
     hookTopNav(); // 抢先冻结必须在任何导航前就位（早于首建也无碍：preempt 判 root）
+    hookModalPrehide();
+    watchLayers();
     const { on, rightHidden, settings } = await readFlags();
     if (on && rightHidden) ensureUI(settings);
 
