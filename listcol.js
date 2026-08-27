@@ -380,10 +380,10 @@
       setShown(false); // 白名单外路由：隐藏保活，等回归
       return;
     }
-    // modal 期隐藏（转发/回复/引用/图片灯箱等 aria-modal 浮层会与列争层，索性让位；
-    // /compose 的 pushState 已由 hookTopNav preempt 同步隐藏，此处 DOM 检测兜底
-    // 无 URL 变化的 modal，observer 轮驱动恢复）
-    if (document.querySelector('[aria-modal="true"]')) {
+    // modal 期隐藏（转发/回复/引用/图片灯箱/Grok 面板/私信抽屉等浮层会与列争层，
+    // 索性让位；/compose 的 pushState 已由 hookTopNav preempt 同步隐藏，此处 DOM
+    // 检测兜底无 URL 变化的 modal，observer 轮驱动恢复）
+    if (layerPresent()) {
       setShown(false);
       return;
     }
@@ -474,11 +474,31 @@
   // X 先渲染 modal 再 pushState（转发面板甚至纯浮层无 URL），任何检测都滞后——
   // 在触发按钮点击的同步时机藏列，modal 渲染时列已让位。不 preventDefault（只顺带藏）；
   // 若 modal 实际未开，观察器/轮检测无 modal 自愈恢复。
+  // 浮层特征集：aria-modal（真 modal）+ role=dialog + DMDrawer（私信抽屉）。
+  // 右下角 Grok/聊天 FAB 展开的面板：内容常驻 DOM（收起时 invisible 或仅 55px FAB），
+  // 存在性判定会把列永久藏掉——用面板自身宽度阈值判定展开态（收起 ~55px，展开数百
+  // px，阈值 150）。⚠️ 判定对象必须是面板本体：Grok 外层是 fixed 全宽容器（r-13qz1uu
+  // = width:100%），测 parentElement 永远超宽——曾致列默认不显示。
+  const LAYER_SIG = '[aria-modal="true"], [role="dialog"], [data-testid="DMDrawer"]';
+  const layerPresent = () => {
+    if (document.querySelector(LAYER_SIG)) return true;
+    const panelOpen = (sel) => {
+      const el = document.querySelector(sel);
+      return !!el && el.getBoundingClientRect().width > 150;
+    };
+    return (
+      panelOpen('[data-testid="GrokDrawerHeader"]') ||
+      panelOpen('[data-testid="dm-container"]')
+    );
+  };
   const MODAL_TRIGGERS = [
     '[data-testid="reply"]', // 回复：直接开 compose modal
     '[data-testid="Dropdown"] button', // 转发/引用选择菜单里的项（真正开 modal 的点击）
     '[data-testid="SideNav_NewTweet_Button"]',
     '[data-testid="tweetPhoto"]',
+    '[data-testid="GrokDrawerHeader"] button', // 右下 Grok FAB：展开聊天面板
+    '[data-testid="chat-drawer-main"]', // 右下聊天 FAB（面板展开后内部点击命中亦幂等）
+    '[data-testid="DMButton"]',
   ].join(",");
   // 注意 retweet 按钮不在此列：第一跳只是「转发还是引用」选择菜单（非 modal、
   // 不遮列），预藏会被观察器立即恢复成闪烁；真正的 modal 在菜单项点击时拦。
@@ -511,7 +531,7 @@
     let layerTimer = null;
     const check = async () => {
       if (!root) return;
-      if (document.querySelector('[aria-modal="true"]')) {
+      if (layerPresent()) {
         setShown(false);
         return;
       }
