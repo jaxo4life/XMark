@@ -1,5 +1,12 @@
 # 更新日志 / Changelog
 
+## v6.5.3
+
+| 中文 | English |
+|------|----------|
+| 修复：右列与 X 浮层的层叠冲突——搜索下拉 / 转发面板被遮挡与 iframe 无法点击两难，定稿 z-index:0 + 挂浮层容器之前 | Fix: stacking conflict between the column and X overlays — solved the dilemma of occluded search dropdown / quote panel vs. unclickable iframe with z-index:0 and mounting before the overlay container |
+| modal 出现时右列三层让位（点击预藏零重叠窗口 / 50ms 观察器 / 轮兜底自愈），关闭 ~50ms 恢复，iframe 内容与滚动全程保留 | Column yields in three layers while a modal is open (synchronous click pre-hide for zero overlap / 50ms observer / poll self-heal), restores within ~50ms after close — iframe content and scroll untouched |
+
 ## v6.5.2
 
 | 中文 | English |
