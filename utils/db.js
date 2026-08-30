@@ -10,7 +10,7 @@ export function dayKey(date) {
 
 export function openDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open("ScreenshotDB", 8); // 版本号 +1
+    const request = indexedDB.open("ScreenshotDB", 11); // v11：follow 快照 id 统一 UTC ISO
     request.onupgradeneeded = (e) => {
       const db = e.target.result;
 
@@ -52,6 +52,39 @@ export function openDB() {
         });
         avatarStore.createIndex("username", "username", { unique: true });
         avatarStore.createIndex("timestamp", "timestamp", { unique: false });
+      }
+
+      // ---- followSnapshots（v9 建，v10 改按采集时刻）----
+      // base=全量基底，delta=与上一次采集的增量（added/removed × following/followers）。
+      // keyPath v9 是 date（一天一条覆盖）→ v10 是 id（ISO 时刻，同日多次采集各自留存）。
+      if (db.objectStoreNames.contains("followSnapshots")) {
+        const store = e.target.transaction.objectStore("followSnapshots");
+        if (store.keyPath !== "id") {
+          // v9→v10+：读旧 → 删表重建 → 写回。旧记录无时刻，以当日本地 12:00 占位，
+          // **必须转 UTC ISO**——纯本地格式串与 toISOString 的比较错位会打乱重放排序（已踩）
+          const req = store.getAll();
+          req.onsuccess = () => {
+            const old = req.result || [];
+            db.deleteObjectStore("followSnapshots");
+            const ns = db.createObjectStore("followSnapshots", { keyPath: "id" });
+            for (const r of old)
+              ns.put({ ...r, id: new Date(`${r.date}T12:00:00`).toISOString() });
+          };
+        } else if (e.oldVersion >= 10) {
+          // v11：修正 v10 早期产生的本地格式占位 id（无 Z 后缀）→ UTC ISO。
+          // 曾致占位 id 字符串大于后续 UTC 采集 id，base 被重放排除、误存第二条 base
+          const req = store.getAll();
+          req.onsuccess = () => {
+            for (const r of req.result || []) {
+              if (r.id && !r.id.endsWith("Z")) {
+                store.delete(r.id);
+                store.put({ ...r, id: new Date(r.id).toISOString() });
+              }
+            }
+          };
+        }
+      } else {
+        db.createObjectStore("followSnapshots", { keyPath: "id" });
       }
     };
 
@@ -957,4 +990,60 @@ export async function getAvatar(username, maxAge = 30 * 24 * 60 * 60 * 1000) {
     console.log("getAvatar error:", err);
     return cached ? cached.base64 : null; // 回退旧缓存
   }
+}
+
+// ===== 关注变动追踪（v6.6.0）=====
+// 记录结构（keyPath=id，ISO 采集时刻，同日多次采集各自留存）：
+//   base : { id, kind:"base",   complete, following:[u], followers:[u] }
+//   delta: { id, kind:"delta",  complete, added:{following:[u],followers:[u]},
+//                                  removed:{following:[u],followers:[u]} }
+//   delta 始终与上一次采集对比（跨日/同日均然）；incomplete 记录 diff/重放均跳过。
+//   u = { id, h(handle), n(name), a(avatar), v(verified 0/1) }——rest_id 即 XMark 备注 userId
+
+export async function saveFollowSnapshot(rec) {
+  const db = await openDB();
+  const tx = db.transaction("followSnapshots", "readwrite");
+  tx.objectStore("followSnapshots").put(rec);
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = (e) => reject(e.target.error);
+  });
+}
+
+// 全部快照（按 id=ISO 时刻 升序；delta 累积 <1MB/年，全读无压力）
+export async function getFollowSnapshots() {
+  const db = await openDB();
+  const tx = db.transaction("followSnapshots", "readonly");
+  const req = tx.objectStore("followSnapshots").getAll();
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () =>
+      resolve((req.result || []).sort((a, b) => (a.id < b.id ? -1 : 1)));
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+// 重放快照链到 untilId（含该时刻）：base 建底，后续 delta 逐次 apply；
+// incomplete 记录跳过（reachedId 自动落到之前最近的有效记录）。
+// 返回 { following:Map(id->u), followers:Map(id->u), reachedId } 或 null（尚无有效基底）。
+export function rebuildFollow(snaps, untilId) {
+  let following = null;
+  let followers = null;
+  let reached = null;
+  for (const s of snaps) {
+    if (s.id > untilId) break;
+    if (!s.complete) continue;
+    if (s.kind === "base") {
+      if (following) continue; // 已有基底（重放链上只认第一条）
+      following = new Map((s.following || []).map((u) => [u.id, u]));
+      followers = new Map((s.followers || []).map((u) => [u.id, u]));
+      reached = s.id;
+    } else if (s.kind === "delta" && following) {
+      for (const u of s.added?.following || []) following.set(u.id, u);
+      for (const u of s.removed?.following || []) following.delete(u.id);
+      for (const u of s.added?.followers || []) followers.set(u.id, u);
+      for (const u of s.removed?.followers || []) followers.delete(u.id);
+      reached = s.id;
+    }
+  }
+  return following ? { following, followers, reachedId: reached } : null;
 }

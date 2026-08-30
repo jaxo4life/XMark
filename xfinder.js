@@ -537,8 +537,12 @@ html[data-xmark-theme="dark"] #xmark-xfinder-fab:hover{background:rgba(0,0,0,.75
   }
 
   // ---------- 注入与生命周期 ----------
+  // 采集 tab 标记：文档注入时锁定（与 listcol 同判；勿实时读 location.search，X 会重写 URL）
+  const FT_TAB = /[?&]xmark-ft/.test(location.search);
+
   async function readFlags() {
     try {
+      if (FT_TAB) return { xfinderOn: false, rightHidden: false };
       const { [SETTINGS_KEY]: xf, uiCleanSettings: uc } =
         await chrome.storage.local.get([SETTINGS_KEY, "uiCleanSettings"]);
       return {

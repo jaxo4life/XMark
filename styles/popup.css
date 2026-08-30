@@ -1289,3 +1289,19 @@ body::-webkit-scrollbar {
 .pod-clear-btns .btn{margin-bottom:0}
 .pod-clear-yes{background:#f4212e;color:#fff}
 .pod-clear-yes:hover{background:#d61f2c}
+
+/* ========== 关注变动卡片（数据统计 tab 顶部，v6.6.0） ========== */
+.ft-card{border:1px solid #eff3f4}
+.ft-head{display:flex;justify-content:space-between;align-items:center}
+.ft-head h3{margin:0}
+.ft-detail{font-size:12px;color:#1d9bf0;cursor:pointer;text-decoration:none}
+.ft-detail:hover{text-decoration:underline}
+.ft-state{font-size:12px;color:#536471;margin:8px 0 10px;min-height:16px}
+.ft-state.ft-busy{color:#1d9bf0}
+.ft-quads{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.ft-quad{text-align:center;padding:8px 2px;border:1px solid #eff3f4;border-radius:10px;background:#f7f9f9}
+.ft-quad-num{font-size:16px;font-weight:800;color:#0f1419;line-height:1.2}
+.ft-quad-label{font-size:10.5px;color:#536471;margin-top:2px}
+.ft-run-btn{width:100%;margin:10px 0 0;font-size:12px;padding:6px 0;border-radius:8px;border:1px solid #1d9bf0;background:#fff;color:#1d9bf0;cursor:pointer;font-family:inherit}
+.ft-run-btn:hover{background:rgba(29,155,240,.08)}
+.ft-run-btn:disabled{opacity:.5;cursor:default}

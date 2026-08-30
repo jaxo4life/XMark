@@ -185,6 +185,7 @@
   }
 
   function navigate(target) {
+    if (!frame || !root) return; // 防御：UI 已拆（visibilitychange 2s 延迟窗口内可能 teardown）
     showVeil();
     if (frameTarget === target) {
       // 点当前 tab / 冻结自愈：强制回列表页（帧内跳走后一键返回；replace 不留历史）
@@ -254,8 +255,15 @@
   }
 
   // ---------- 注入与生命周期（xfinder 同款骨架） ----------
+  // 采集 tab（follow track）标记：**文档注入时锁定成常量**。后台导航 URL 由扩展控制必带
+  // 标记；若实时读 location.search，X 水合重写 URL 清掉 query 后 observer 轮会误判建列
+  // （采集 tab 闪建右列 + 与自愈 visibilitychange 竞态在 frame=null 上崩 navigate，已踩）
+  const FT_TAB = /[?&]xmark-ft/.test(location.search);
+
   async function readFlags() {
     try {
+      if (FT_TAB)
+        return { on: false, rightHidden: false, settings: { lists: [] } };
       const { [SETTINGS_KEY]: lc, uiCleanSettings: uc } =
         await chrome.storage.local.get([SETTINGS_KEY, "uiCleanSettings"]);
       const lists = Array.isArray(lc?.lists) ? lc.lists : [];
@@ -597,6 +605,7 @@
       if (document.hidden || !root || !frameTarget) return;
       if (root.style.visibility === "hidden") return; // 隐藏中（白名单外）：无需探测
       setTimeout(() => {
+        if (document.hidden || !root) return; // 2s 窗口内 UI 可能已拆（采集 tab 等）
         if (!frameAlive()) navigate(frameTarget); // 白屏=假死，重载（盖 veil 走就绪信号流程）
       }, 2000);
     });

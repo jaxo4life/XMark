@@ -55,6 +55,34 @@
     </div>
 
     <div id="stats" class="tab-content active">
+      <!-- 关注变动卡片（数据价值最高，置顶） -->
+      <div class="section ft-card">
+        <div class="ft-head">
+          <h3 data-key="ftTitle">关注变动</h3>
+          <a class="ft-detail" id="ftDetail" title="" data-key="ftDetail">详情</a>
+        </div>
+        <div class="ft-state" id="ftState">…</div>
+        <div class="ft-quads">
+          <div class="ft-quad">
+            <div class="ft-quad-num" id="ftNumNf">–</div>
+            <div class="ft-quad-label" data-key="ftQuadNewFollowers">新粉丝</div>
+          </div>
+          <div class="ft-quad">
+            <div class="ft-quad-num" id="ftNumUf">–</div>
+            <div class="ft-quad-label" data-key="ftQuadUnfollowers">取关我</div>
+          </div>
+          <div class="ft-quad">
+            <div class="ft-quad-num" id="ftNumNfg">–</div>
+            <div class="ft-quad-label" data-key="ftQuadNewFollowing">新关注</div>
+          </div>
+          <div class="ft-quad">
+            <div class="ft-quad-num" id="ftNumMut">–</div>
+            <div class="ft-quad-label" data-key="ftQuadMutualChange">互关变动</div>
+          </div>
+        </div>
+        <button class="ft-run-btn" id="ftRunBtn" data-key="ftRunNow">立即采集</button>
+      </div>
+
       <div class="section">
         <div class="stats">
           <div class="stats-left">
@@ -130,11 +158,6 @@
 
     <div id="features" class="tab-content">
       <div class="section">
-        <div class="auto-backup-header">
-          <span data-key="xfEnabled">启用 XFinder 高阶搜索</span>
-          <div class="toggle-switch" id="toggle-xfinder"></div>
-        </div>
-
         <div class="auto-backup-header">
           <span data-key="TweetCapture">启用推文截图</span>
           <div class="toggle-switch" id="toggle-screenshot"></div>
@@ -465,6 +488,10 @@
           </div>
 
           <div id="advPanelEnhance" class="adv-panel hidden">
+            <div class="auto-backup-header">
+              <span data-key="xfEnabled">启用 XFinder 高阶搜索（需开启隐藏右侧边栏）</span>
+              <div class="toggle-switch" id="toggle-xfinder"></div>
+            </div>
             <div class="auto-backup-header">
               <span data-key="lcEnabled">启用右列 Timeline</span>
               <div class="toggle-switch" id="toggle-listcol"></div>

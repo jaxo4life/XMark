@@ -107,6 +107,99 @@ langBtn.addEventListener("click", () => {
   loadLanguage(newLang);
 });
 
+// 关注变动卡片（数据统计 tab 顶部；消费 background 的 followSummary）
+async function FollowCard() {
+  const stateEl = document.getElementById("ftState");
+  const runBtn = document.getElementById("ftRunBtn");
+  const detail = document.getElementById("ftDetail");
+  if (!stateEl) return;
+
+  const t = (k, fallback) => langData[k] || fallback;
+  const fmt = (k, fallback, vars) =>
+    String(t(k, fallback)).replace(/\{(\w+)\}/g, (_, n) => vars[n] ?? `{${n}}`);
+  const dayLocal = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate()
+    ).padStart(2, "0")}`;
+  };
+
+  const render = (s) => {
+    const today = dayLocal();
+    let stateTxt = "";
+    let btnKey = "ftRunNow";
+    let btnShow = true;
+    if (s.state === "collecting") {
+      stateTxt = fmt("ftStateCollecting", "正在采集 {phase}", {
+        phase:
+          s.phase === "following"
+            ? t("ftPhaseFollowing", "正在关注")
+            : t("ftPhaseFollowers", "粉丝"),
+      });
+      btnShow = false;
+    } else if (s.state === "done" && s.day === today) {
+      stateTxt = t("ftStateDone", "今日已完成");
+      btnKey = "ftRerun";
+    } else if (s.state === "interrupted") {
+      stateTxt = t("ftStateInterrupted", "采集中断，下次启动浏览器自动续跑");
+      btnKey = "ftResume";
+    } else if (s.state === "cancelled") {
+      stateTxt = t("ftStateCancelled", "今日已取消自动采集，可手动重启");
+      btnKey = "ftRunNow";
+    } else if (s.state === "failed") {
+      const REASONS = {
+        login: t("ftErrLogin", "未登录 X"),
+        timeout: t("ftErrTimeout", "超时截断"),
+        nodata: t("ftErrNodata", "未捕获到数据"),
+      };
+      stateTxt = fmt("ftStateFailed", "采集失败：{reason}", {
+        reason: REASONS[s.err] || s.err,
+      });
+    } else if (s.counts && s.day) {
+      stateTxt = `${s.day} · ${t("ftStateDone", "已完成")}`;
+      btnKey = "ftRerun";
+    } else {
+      stateTxt = t("ftNoData", "暂无数据，完成首次采集后展示");
+    }
+    stateEl.textContent = stateTxt;
+    const c = s.counts;
+    const set = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = v;
+    };
+    set("ftNumNf", c ? c.nf : "–");
+    set("ftNumUf", c ? c.uf : "–");
+    set("ftNumNfg", c ? c.nfg : "–");
+    set("ftNumMut", c ? String((c.nm || 0) + (c.lm || 0)) : "–");
+    runBtn.style.display = btnShow ? "" : "none";
+    runBtn.textContent = t(btnKey, "立即采集");
+  };
+
+  const refresh = async () => {
+    try {
+      const s = await chrome.runtime.sendMessage({ action: "followStatus" });
+      render(s || {});
+    } catch (_) {
+      render({});
+    }
+  };
+
+  runBtn.addEventListener("click", async () => {
+    runBtn.disabled = true;
+    try {
+      await chrome.runtime.sendMessage({ action: "followStart" });
+    } catch (_) {}
+    setTimeout(refresh, 800);
+    setTimeout(refresh, 3000);
+  });
+  detail.addEventListener("click", (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL("follows.html") });
+  });
+
+  await refresh();
+}
+
 document.addEventListener("DOMContentLoaded", async function () {
   // 先加载语言
   await loadLanguage(currentLang);
@@ -123,6 +216,9 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   // 加载统计数据
   await loadStats();
+
+  // 加载关注变动卡片
+  await FollowCard();
 
   // 加载推文截图开关
   await Screenshot();

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>XMark · 关注变动</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="styles/tailwind.min.css" />
+    <link rel="stylesheet" href="styles/follows.css" />
+  </head>
+  <body>
+    <!-- 顶栏：状态 + 按天选择 -->
+    <header class="ft-header">
+      <div class="ft-header-in">
+        <img src="public/128.png" class="ft-logo" alt="XMark" />
+        <h1 class="ft-title" data-key="ftPageTitle">关注变动</h1>
+        <span id="ftTodayState" class="ft-state"></span>
+        <div class="flex1"></div>
+        <span id="ftNotice" class="ft-warn hidden"></span>
+        <select id="ftDateSel" class="ft-date-sel" title=""></select>
+      </div>
+    </header>
+
+    <main class="ft-main">
+      <!-- 概要一行：三格总量 -->
+      <section class="ft-summary">
+        <div class="ft-tile">
+          <div class="ft-tile-num" id="ftTotG">–</div>
+          <div class="ft-tile-label" data-key="ftStatFollowing">正在关注</div>
+        </div>
+        <div class="ft-tile">
+          <div class="ft-tile-num" id="ftTotF">–</div>
+          <div class="ft-tile-label" data-key="ftStatFollowers">粉丝</div>
+        </div>
+        <div class="ft-tile">
+          <div class="ft-tile-num" id="ftTotM">–</div>
+          <div class="ft-tile-label" data-key="ftStatMutuals">互关</div>
+        </div>
+      </section>
+
+      <!-- 改名提示条（有改名才出现） -->
+      <div id="ftRenamed" class="ft-renamed hidden"></div>
+
+      <!-- 六类事件卡一行：固定高度，胶囊流内滚 -->
+      <section class="ft-groups" id="ftGroups"></section>
+    </main>
+
+    <script type="module" src="follows.js"></script>
+  </body>
+</html>

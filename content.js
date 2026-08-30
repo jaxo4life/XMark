@@ -1107,14 +1107,19 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
       noteDisplay.style.display = "inline";
 
       if (currentNote.tagId) {
-        chrome.storage.local.get(["noteTags"]).then((result) => {
-          const tags = result.noteTags || {};
-          const tag = tags[currentNote.tagId];
-          if (tag) {
-            noteDisplay.style.backgroundColor = tag.color;
-            noteDisplay.style.color = "white";
-          }
-        });
+        try {
+          chrome.storage.local
+            .get(["noteTags"])
+            .then((result) => {
+              const tags = result.noteTags || {};
+              const tag = tags[currentNote.tagId];
+              if (tag) {
+                noteDisplay.style.backgroundColor = tag.color;
+                noteDisplay.style.color = "white";
+              }
+            })
+            .catch(() => {}); // 扩展重载瞬态（context invalidated）
+        } catch (_) {}
       }
 
       if (noteDescription) {
@@ -1128,18 +1133,25 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
       noteButton.dataset.titleKey = "addNote";
     }
 
-    // 获取截图数据
+    // 获取截图数据（SW 冷启动窗口消息可能无应答/扩展重载瞬态——拿不到就静默跳过徽标，
+    // 不得让 uncaught promise 中断备注 UI 渲染）
     let finalId = userId || "";
     if (!finalId) {
-      finalId = await this.fetchUserIdinDB(username);
+      try {
+        finalId = await this.fetchUserIdinDB(username);
+      } catch (_) {
+        finalId = "";
+      }
     }
 
     if (finalId) {
-      const count = await this.fetchUserScreenshotsNum(finalId);
-      if (count) {
-        screenshotsButton.style.display = "inline";
-        screenshotsButton.title = `${count} ${langData.screenshotCount}`;
-      }
+      try {
+        const count = await this.fetchUserScreenshotsNum(finalId);
+        if (count) {
+          screenshotsButton.style.display = "inline";
+          screenshotsButton.title = `${count} ${langData.screenshotCount}`;
+        }
+      } catch (_) {}
     }
 
     // 绑定事件
