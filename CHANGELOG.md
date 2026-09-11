@@ -1,15 +1,15 @@
 # 更新日志 / Changelog
 
-## v6.6.0
+## v6.6.1
 
 | 中文 | English |
 |------|----------|
-| 新增：关注变动追踪——每日自动后台采集 following / followers 全量（后台 tab 自动滚动驱动 X 自身请求，MAIN world 双 hook fetch+XHR 截获响应，queryId 变动免疫） | New: follow changes tracker — daily background collection of your full following / followers lists (background tab auto-scrolls so X itself sends the requests; MAIN-world dual fetch+XHR hook intercepts responses, immune to queryId churn) |
-| 详情页按天展示六类净变化（新粉丝 / 取关我 / 新关注 / 我取关 / 新增互关 / 互关解除·带归因），日内往返自动抵消，只显示实质变化；账号胶囊点击直达 X 主页，XMark 备注与蓝标随行 | Detail page shows six net-change groups per day (new followers / unfollowed you / new following / you unfollowed / new mutuals / lost mutuals with attribution); same-day round trips cancel out so only real changes show; account pills open profiles in new tabs with inline XMark notes and verified badges |
-| 增量存储模型：首日全量基底 + 每次采集 delta（<1MB/年），重放重建任意时点状态；采集断点续跑（phase 原子）、手动取消当日静默、开始 / 完成 / 失败通知；改名追踪防备注断链 | Incremental storage: full base on day one + per-collection deltas (<1MB/year), replay rebuilds state at any point; phase-atomic resume after interruption, manual cancel silences the day, start/done/fail notifications; rename tracking guards note matching |
-| 采集 tab 带 xmark-ft 标记：listcol / XFinder 识别后不激活（iframe 请求不掺采集链路）；popup 数据统计页顶部关注变动卡片（状态 + 四格数字） | Collection tabs carry the xmark-ft flag: listcol / XFinder stand down (no iframe traffic in the collection path); popup Stats tab gains a follow-changes card on top (status + four counters) |
+| 新增：关注变动追踪——每日自动采集你的 following 列表：页面 hook 截获 X 自身请求样板，service worker 直接重放 cursor 链翻页（零标签页渲染依赖，queryId 改版免疫，无需手动操作），限流退避重试 + 内容终止信号（空页 / 连续重复页，绝不按页数判定）+ 采集卡死自愈 | New: follow-changes tracker — daily collection of your following list: a page hook captures X's own request sample, then the service worker replays the cursor chain itself (no tab rendering involved, immune to queryId churn, zero manual work); rate-limit backoff, content-based termination (empty / repeated pages — never a fixed page count), and stuck-state self-healing |
+| 核心场景：互关关系变化——谁「取关我」（followed_by 翻转）/ 谁「回关我」，连同「新关注 / 取消关注」共四类净变化，日内往返双向抵消只显示实质变化 | Core use case: mutual-follow changes — who unfollowed you (followed_by flips) / who refollowed you, plus new-following and unfollowed; four net-change groups, same-day round trips cancel out so only real changes show |
+| 详情页月历视图：事件日红 / 绿角标 = 取关我 / 回关我数，点开当日两列表，账号行点击直达 X 主页；popup 数据统计页顶部关注变动卡片（状态 + 四格数字 + 立即采集 / 详情 / 两段式重置）；首次使用无样板时自动闪开前台标签页抓取凭证 | Detail page is a month calendar: red / green day badges = unfollowed / refollowed counts, click a day for the two lists, account rows open profiles; popup Stats tab gains a follow card (status + four counters + collect now / details / two-step reset); first run auto-grabs credentials via a brief foreground tab when no sample exists yet |
+| 增量存储：首日全量基底 + 每次采集 delta（<1MB/年），重放重建任意时点状态；改名追踪防备注断链，XMark 备注随行显示 | Incremental storage: full base on day one + per-collection deltas (<1MB/year), replay rebuilds state at any point; rename tracking guards note matching, inline XMark notes |
 | 修复：粉丝页用户卡截图徽标链路 SW 冷启动 no response 未捕获、扩展重载瞬态 context invalidated 报错 | Fix: uncaught "no response" on the follower-card screenshot badge path during SW cold start, and transient "Extension context invalidated" errors on extension reload |
-| IndexedDB 升 v9→v11：followSnapshots 表（v9 按日 → v10 按采集时刻 → v11 时刻 id 统一 UTC ISO，自动迁移） | IndexedDB v9→v11: followSnapshots store (v9 per-day → v10 per-collection → v11 unified UTC ISO ids, auto-migrated) |
+| IndexedDB 升 v9→v11：followSnapshots 表（v9 按日 → v10 按采集时刻 → v11 时刻 id 统一 UTC ISO，自动迁移；占位 id 转 UTC ISO 修正重放排序错位） | IndexedDB v9→v11: followSnapshots store (v9 per-day → v10 per-collection → v11 unified UTC ISO ids, auto-migrated; placeholder ids converted to UTC ISO fixing replay-order misalignment) |
 
 ## v6.5.3
 

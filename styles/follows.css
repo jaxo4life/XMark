@@ -1,4 +1,4 @@
-/* follows.css — 关注变动（按天 · 单页 · 六卡胶囊墙） */
+/* follows.css — 关注变动（极简版：月历 + 取关我/回关我两列表） */
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -7,21 +7,19 @@ body {
   font: 14px/1.5 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
     "PingFang SC", "Microsoft YaHei", sans-serif;
 }
-body::-webkit-scrollbar, .ft-list::-webkit-scrollbar, .ft-pills::-webkit-scrollbar { width: 0; height: 0; display: none; }
+::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .hidden { display: none !important; }
 .flex1 { flex: 1; }
 
-/* ---------- 顶栏 ---------- */
 .ft-header {
   background: rgba(255, 255, 255, .92); backdrop-filter: blur(12px);
   border-bottom: 1px solid #e2e8f0;
 }
 .ft-header-in {
-  max-width: 1200px; margin: 0 auto; width: 100%;
-  padding: 8px 20px;
-  display: flex; align-items: center; gap: 12px; min-height: 52px;
+  max-width: 720px; margin: 0 auto; width: 100%;
+  padding: 8px 20px; display: flex; align-items: center; gap: 12px; min-height: 52px;
 }
-.ft-logo { width: 30px; height: 30px; border-radius: 9px; }
+.ft-logo { width: 28px; height: 28px; border-radius: 8px; }
 .ft-title {
   font-size: 18px; font-weight: 800; margin: 0; letter-spacing: -.02em;
   background: linear-gradient(90deg, #4f46e5, #3b82f6);
@@ -33,78 +31,72 @@ body::-webkit-scrollbar, .ft-list::-webkit-scrollbar, .ft-pills::-webkit-scrollb
   background: #1d9bf0; margin-right: 6px; animation: ftpulse 1.2s ease-in-out infinite;
 }
 @keyframes ftpulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
-.ft-warn {
-  font-size: 11.5px; color: #d97706; background: #fef3c7;
-  border-radius: 999px; padding: 3px 10px;
-}
-.ft-date-sel {
-  height: 32px; border-radius: 10px; border: 1px solid #cbd5e1; background: #fff;
-  padding: 0 10px; font-size: 13px; color: #0f172a; font-family: inherit;
-  outline: none; cursor: pointer;
-}
+.ft-warn { font-size: 11.5px; color: #d97706; background: #fef3c7; border-radius: 999px; padding: 3px 10px; }
 
-/* ---------- 主区（限宽居中，自然高度） ---------- */
-.ft-main {
-  max-width: 1200px; margin: 0 auto; width: 100%;
-  display: flex; flex-direction: column; gap: 10px;
-  padding: 12px 20px 20px;
-}
+.ft-main { max-width: 720px; margin: 0 auto; width: 100%; padding: 14px 20px 30px; display: flex; flex-direction: column; gap: 12px; }
+.ft-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 14px; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
 
-/* 概要三格一行 */
-.ft-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.ft-tile {
-  display: flex; align-items: baseline; gap: 8px; justify-content: center;
-  background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 8px 12px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+/* ---------- 月历 ---------- */
+.ft-cal-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.ft-cal-head b { font-size: 15px; min-width: 110px; text-align: center; }
+.ft-cal-nav {
+  width: 26px; height: 26px; border-radius: 8px; border: 1px solid #e2e8f0;
+  background: #fff; color: #334155; cursor: pointer; font-size: 15px; line-height: 1; font-family: inherit;
 }
-.ft-tile-num { font-size: 20px; font-weight: 800; }
-.ft-tile-label { font-size: 11.5px; color: #64748b; }
+.ft-cal-nav:hover:not(:disabled) { background: #f1f5f9; }
+.ft-cal-nav:disabled { opacity: .35; cursor: default; }
+.ft-cal-legend { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #64748b; }
+.ft-cal-legend i { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
+.ft-cal-legend .k-uf { background: #dc2626; }
+.ft-cal-legend .k-rf { background: #16a34a; }
+.ft-cal-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px; }
+.ft-cal-week span { text-align: center; font-size: 11px; color: #94a3b8; }
+.ft-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.ft-day {
+  position: relative; height: 40px; border-radius: 10px; border: 1px solid transparent;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12.5px; color: #334155; cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.ft-day:hover { background: #f1f5f9; }
+.ft-day.blank { cursor: default; visibility: hidden; }
+.ft-day.today { border-color: #bfdbfe; }
+.ft-day.sel { background: #eff6ff; border-color: #93c5fd; font-weight: 700; }
+.ft-day .dot-uf, .ft-day .dot-rf {
+  position: absolute; bottom: 3px; font-size: 9.5px; font-weight: 700;
+  border-radius: 999px; padding: 0 4px; line-height: 1.5;
+}
+.ft-day .dot-uf { left: 5px; background: #fee2e2; color: #b91c1c; }
+.ft-day .dot-rf { right: 5px; background: #dcfce7; color: #15803d; }
 
-/* 改名提示条（有才出现） */
-.ft-renamed {
-  font-size: 12px; color: #475569; background: #fff;
-  border: 1px solid #e2e8f0; border-radius: 12px; padding: 6px 14px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.ft-renamed b { font-weight: 700; color: #0f172a; }
-
-/* ---------- 六类事件卡（2 行 × 3 列，卡高固定） ---------- */
-.ft-groups {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
-}
-@media (max-width: 900px) { .ft-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 600px) { .ft-groups { grid-template-columns: 1fr; } }
-.ft-group {
-  display: flex; flex-direction: column;
-  background: #fff; border: 1px solid #e2e8f0; border-radius: 14px;
-  overflow: hidden; box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
-}
+/* ---------- 两列表 ---------- */
+.ft-lists { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 640px) { .ft-lists { grid-template-columns: 1fr; } }
+.ft-group { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
 .ft-group-head {
-  flex: none; display: flex; align-items: center; justify-content: space-between;
-  gap: 6px; padding: 9px 12px; border-bottom: 1px solid #f1f5f9;
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  border-bottom: 1px solid #f1f5f9; font-size: 13px; font-weight: 800;
 }
-.ft-group-title { font-size: 12.5px; font-weight: 800; }
-.ft-count { font-size: 11.5px; font-weight: 700; padding: 1px 9px; border-radius: 999px; flex: none; }
-.ft-count.add { background: #dcfce7; color: #15803d; }
-.ft-count.sub { background: #fee2e2; color: #b91c1c; }
-.ft-count.mut { background: #dbeafe; color: #1d4ed8; }
+.ft-group-head i { width: 9px; height: 9px; border-radius: 999px; flex: none; }
+.ft-group-head.g-uf i { background: #dc2626; }
+.ft-group-head.g-rf i { background: #16a34a; }
+.ft-count { margin-left: auto; font-size: 11.5px; font-weight: 700; padding: 1px 9px; border-radius: 999px; }
+.ft-count.uf { background: #fee2e2; color: #b91c1c; }
+.ft-count.rf { background: #dcfce7; color: #15803d; }
+.ft-list { max-height: 380px; overflow-y: auto; }
+.ft-empty { padding: 14px; font-size: 12.5px; color: #94a3b8; }
+.ft-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
+.ft-row:last-child { border-bottom: none; }
+.ft-row:hover { background: #f8fafc; }
+.ft-ava { width: 30px; height: 30px; border-radius: 999px; object-fit: cover; flex-shrink: 0; background: #e2e8f0; }
+.ft-main-u { min-width: 0; flex: 1; }
+.ft-name { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; }
+.ft-name svg { flex-shrink: none; }
+.ft-name .v { color: #1d9bf0; font-size: 11px; }
+.ft-handle { font-size: 11.5px; color: #64748b; }
+.ft-note { font-size: 11.5px; color: #0369a1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* 胶囊流：卡内滚动，滚动条隐藏 */
-.ft-pills {
-  height: 280px; /* 卡高固定；胶囊多则卡内滚动（滚动条隐藏） */
-  overflow-y: auto; scrollbar-width: none;
-  display: flex; flex-wrap: wrap; gap: 6px; padding: 10px;
-  align-content: flex-start;
+/* 全页空态 */
+.ft-empty-page {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 16px;
+  padding: 40px 16px; text-align: center; color: #94a3b8; font-size: 13px;
 }
-.ft-empty { font-size: 12px; color: #94a3b8; padding: 2px; }
-.ft-pill {
-  display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
-  padding: 2px 9px 2px 3px; border-radius: 999px;
-  border: 1px solid #e2e8f0; background: #fff; cursor: pointer;
-}
-.ft-pill:hover { border-color: #1d9bf0; background: #f0f9ff; }
-.ft-pill img { width: 20px; height: 20px; border-radius: 999px; object-fit: cover; background: #e2e8f0; flex: none; }
-.ft-pill .p-name { font-size: 11.5px; font-weight: 600; max-width: 110px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ft-pill .p-tag { font-size: 10px; color: #94a3b8; flex: none; }
-.ft-pill .p-blue { color: #1d9bf0; font-size: 10.5px; font-weight: 800; flex: none; }
-.ft-pill .p-note { color: #0369a1; }

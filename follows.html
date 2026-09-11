@@ -4,11 +4,9 @@
     <meta charset="UTF-8" />
     <title>XMark · 关注变动</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="styles/tailwind.min.css" />
     <link rel="stylesheet" href="styles/follows.css" />
   </head>
   <body>
-    <!-- 顶栏：状态 + 按天选择 -->
     <header class="ft-header">
       <div class="ft-header-in">
         <img src="public/128.png" class="ft-logo" alt="XMark" />
@@ -16,32 +14,27 @@
         <span id="ftTodayState" class="ft-state"></span>
         <div class="flex1"></div>
         <span id="ftNotice" class="ft-warn hidden"></span>
-        <select id="ftDateSel" class="ft-date-sel" title=""></select>
       </div>
     </header>
 
     <main class="ft-main">
-      <!-- 概要一行：三格总量 -->
-      <section class="ft-summary">
-        <div class="ft-tile">
-          <div class="ft-tile-num" id="ftTotG">–</div>
-          <div class="ft-tile-label" data-key="ftStatFollowing">正在关注</div>
+      <!-- 月历：有变动的日子标角标（红=取关我，绿=回关我），点选 -->
+      <section class="ft-card">
+        <div class="ft-cal-head">
+          <button class="ft-cal-nav" id="ftPrevMonth">‹</button>
+          <b id="ftMonthLabel"></b>
+          <button class="ft-cal-nav" id="ftNextMonth">›</button>
+          <span class="ft-cal-legend">
+            <i class="k-uf"></i><span data-key="ftQuadUnfollowers">取关我</span>
+            <i class="k-rf"></i><span data-key="ftQuadRefollowed">回关我</span>
+          </span>
         </div>
-        <div class="ft-tile">
-          <div class="ft-tile-num" id="ftTotF">–</div>
-          <div class="ft-tile-label" data-key="ftStatFollowers">粉丝</div>
-        </div>
-        <div class="ft-tile">
-          <div class="ft-tile-num" id="ftTotM">–</div>
-          <div class="ft-tile-label" data-key="ftStatMutuals">互关</div>
-        </div>
+        <div class="ft-cal-week" id="ftCalWeek"></div>
+        <div class="ft-cal-grid" id="ftCalGrid"></div>
       </section>
 
-      <!-- 改名提示条（有改名才出现） -->
-      <div id="ftRenamed" class="ft-renamed hidden"></div>
-
-      <!-- 六类事件卡一行：固定高度，胶囊流内滚 -->
-      <section class="ft-groups" id="ftGroups"></section>
+      <!-- 选中日的两列表 -->
+      <section class="ft-lists" id="ftLists"></section>
     </main>
 
     <script type="module" src="follows.js"></script>

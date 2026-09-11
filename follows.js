@@ -1,13 +1,17 @@
-// follows.js — 关注变动（按天 · 单页 · 六卡胶囊墙）
-// 按天聚合：当天所有 delta 的事件并集（同日关注又取关的人两组都出现——真实发生了两次）；
-// 互关两类 = 当天开始前态与当天结束态的交集差集（rebuildFollow 重放）。
-// 数据：IndexedDB followSnapshots + storage followSummary / twitterNotes。
+// follows.js — 关注变动（极简版：月历 + 当日「取关我 / 回关我」两列表）
+// 数据：IndexedDB followSnapshots（base + delta，delta 含 unfollowed/refollowed fb 翻转）
+//      + storage followSummary / twitterNotes。
+// 按天聚合：同日多次采集的 unfollowed/refollowed 取并集，日内往返（先取关又回关
+// 或反之）双向抵消——只显示当日实质变化。
+// v6.6.0 旧双列表 delta（added/removed 嵌套格式）无 fb 翻转数据，自然不产事件。
 
-import { getFollowSnapshots, rebuildFollow, dayKey } from "./utils/db.js";
+import { getFollowSnapshots, dayKey } from "./utils/db.js";
 
 let langData = {};
 let snaps = []; // 升序（id=ISO 时刻）
 let notes = {};
+let curMonth = ""; // YYYY-MM（当前显示月）
+let selDay = ""; // YYYY-MM-DD（选中日）
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
@@ -22,6 +26,7 @@ const fmt = (k, fb, vars) =>
     vars?.[n] !== undefined ? vars[n] : `{${n}}`
   );
 const dayLocal = () => dayKey(Date.now());
+const isZh = () => (localStorage.getItem("lang") || "zh") === "zh";
 
 async function loadLang() {
   const lang = localStorage.getItem("lang") || "zh";
@@ -37,14 +42,13 @@ async function loadLang() {
   });
 }
 
-// 备注匹配（对齐 content.js getUserNote：userId key 优先，回落 username）
 function findNote(u) {
   if (notes[u.id]) return notes[u.id];
   const byName = Object.values(notes).find((n) => n && n.username === u.h);
   return byName || null;
 }
 
-// ---------- 今日状态（followSummary，采集中 30s 轮询）----------
+// ---------- 今日状态 ----------
 async function renderTodayState() {
   let s = {};
   try {
@@ -55,201 +59,159 @@ async function renderTodayState() {
   if (s.state === "collecting") {
     box.append(
       el("span", "ft-busy-dot"),
-      el(
-        "span",
-        "",
-        fmt("ftStateCollecting", "正在采集 {phase}", {
-          phase:
-            s.phase === "following"
-              ? t("ftPhaseFollowing", "正在关注")
-              : t("ftPhaseFollowers", "粉丝"),
-        })
-      )
+      el("span", "", `${t("ftStateCollecting", "正在采集")}${s.cur ? " " + s.cur : ""}`)
     );
     setTimeout(renderTodayState, 30000);
   } else if (s.state === "done" && s.day === dayLocal()) {
     box.append(el("span", "", t("ftStateDone", "今日已完成")));
   } else if (s.state === "interrupted") {
-    box.append(
-      el("span", "", t("ftStateInterrupted", "采集中断，下次启动浏览器自动续跑"))
-    );
+    box.append(el("span", "", t("ftStateInterrupted", "采集中断，下次启动浏览器自动续跑")));
   } else if (s.state === "cancelled") {
-    box.append(
-      el("span", "", t("ftStateCancelled", "今日已取消自动采集，可手动重启"))
-    );
+    box.append(el("span", "", t("ftStateCancelled", "今日已取消自动采集，可手动重启")));
   } else if (s.state === "failed") {
     const REASONS = {
       login: t("ftErrLogin", "未登录 X"),
+      nosample: t("ftErrNosample", "未取到采集凭证"),
+      network: t("ftErrNetwork", "网络异常"),
       timeout: t("ftErrTimeout", "超时截断"),
       nodata: t("ftErrNodata", "未捕获到数据"),
     };
     box.append(
-      el(
-        "span",
-        "",
-        fmt("ftStateFailed", "采集失败：{reason}", { reason: REASONS[s.err] || s.err })
-      )
+      el("span", "", fmt("ftStateFailed", "采集失败：{reason}", {
+        reason: REASONS[s.err] || s.err,
+      }))
     );
   }
 }
 
-// ---------- 账号胶囊 ----------
-function pill(u, tagText) {
-  const p = el("span", "ft-pill");
-  const img = document.createElement("img");
-  if (u.a) img.src = u.a;
-  img.alt = "";
-  img.loading = "lazy";
-  img.referrerPolicy = "no-referrer";
-  img.onerror = () => {
-    img.style.visibility = "hidden";
+// ---------- 日聚合（净变化）----------
+function dayEvents(day) {
+  const uf = new Map();
+  const rf = new Map();
+  for (const r of snaps) {
+    if (r.kind !== "delta" || r.id.slice(0, 10) !== day) continue;
+    for (const u of r.unfollowed || []) uf.set(u.id, u);
+    for (const u of r.refollowed || []) rf.set(u.id, u);
+  }
+  // 日内往返抵消：先取关又回关（或反之）= 无实质变化
+  for (const id of [...uf.keys()])
+    if (rf.has(id)) {
+      uf.delete(id);
+      rf.delete(id);
+    }
+  return { uf: [...uf.values()], rf: [...rf.values()] };
+}
+
+// 有事件的日 → 角标数
+function monthMarks() {
+  const marks = new Map(); // day -> {uf, rf}
+  for (const r of snaps) {
+    if (r.kind !== "delta") continue;
+    const day = r.id.slice(0, 10);
+    const m = marks.get(day) || { uf: 0, rf: 0 };
+    m.uf += (r.unfollowed || []).length;
+    m.rf += (r.refollowed || []).length;
+    marks.set(day, m);
+  }
+  return marks;
+}
+
+// ---------- 月历 ----------
+const WEEK = () => (isZh() ? ["一", "二", "三", "四", "五", "六", "日"] : ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]);
+
+function renderCal() {
+  const [y, m] = curMonth.split("-").map(Number);
+  $("ftMonthLabel").textContent = isZh()
+    ? `${y} 年 ${m} 月`
+    : new Date(y, m - 1, 1).toLocaleString("en", { month: "long", year: "numeric" });
+
+  const week = $("ftCalWeek");
+  week.textContent = "";
+  WEEK().forEach((w) => week.append(el("span", "", w)));
+
+  const grid = $("ftCalGrid");
+  grid.textContent = "";
+  const first = new Date(y, m - 1, 1);
+  const offset = (first.getDay() + 6) % 7; // 周一为首
+  const days = new Date(y, m, 0).getDate();
+  const marks = monthMarks();
+  const today = dayLocal();
+
+  for (let i = 0; i < offset; i++) grid.append(el("div", "ft-day blank"));
+  for (let d = 1; d <= days; d++) {
+    const day = `${curMonth}-${String(d).padStart(2, "0")}`;
+    const cell = el("div", "ft-day", String(d));
+    if (day === today) cell.classList.add("today");
+    if (day === selDay) cell.classList.add("sel");
+    const mark = marks.get(day);
+    if (mark) {
+      if (mark.uf) cell.append(el("span", "dot-uf", String(mark.uf)));
+      if (mark.rf) cell.append(el("span", "dot-rf", String(mark.rf)));
+    }
+    cell.addEventListener("click", () => {
+      selDay = day;
+      renderCal();
+      renderLists();
+    });
+    grid.append(cell);
+  }
+
+  // 月导航禁用：晚于最新事件月不可去（未来无意义）
+  const latest = snaps.filter((s) => s.kind === "delta").pop()?.id.slice(0, 7) || curMonth;
+  $("ftNextMonth").disabled = curMonth >= latest;
+}
+
+// ---------- 两列表 ----------
+function userRow(u) {
+  const row = el("div", "ft-row");
+  const ava = document.createElement("img");
+  ava.className = "ft-ava";
+  if (u.a) ava.src = u.a;
+  ava.alt = "";
+  ava.loading = "lazy";
+  ava.referrerPolicy = "no-referrer";
+  ava.onerror = () => {
+    ava.style.visibility = "hidden";
   };
-  const name = el("span", "p-name", u.n || u.h || u.id);
-  if (u.v) p.append(el("span", "p-blue", "✓"));
+  const main = el("div", "ft-main-u");
+  const nameLine = el("div", "ft-name");
+  nameLine.append(document.createTextNode(u.n || u.h || u.id));
+  if (u.v) nameLine.append(el("span", "v", "✓"));
+  main.append(nameLine, el("div", "ft-handle", `@${u.h}`));
   const note = findNote(u);
-  if (note?.name) name.classList.add("p-note");
-  p.append(img, name);
-  if (tagText) p.append(el("span", "p-tag", tagText));
-  p.title = `${u.n || ""} @${u.h}${note?.name ? ` · 📝 ${note.name}` : ""}${tagText ? ` · ${tagText}` : ""}`;
-  p.addEventListener("click", () =>
+  if (note?.name) main.append(el("div", "ft-note", `📝 ${note.name}`));
+  row.append(ava, main);
+  row.title = `@${u.h}${note?.name ? ` · 📝 ${note.name}` : ""}`;
+  row.addEventListener("click", () =>
     window.open(`https://x.com/${u.h}`, "_blank", "noopener")
   );
-  return p;
+  return row;
 }
 
-// ---------- 事件卡 ----------
-function renderGroup(key, tone, users, tagOf) {
-  const box = el("div", "ft-group");
-  const head = el("div", "ft-group-head");
-  head.append(
-    el("span", "ft-group-title", t(key, key)),
-    el("span", `ft-count ${tone}`, String(users.length))
+function renderLists() {
+  const box = $("ftLists");
+  box.textContent = "";
+  if (!selDay) return;
+  const { uf, rf } = dayEvents(selDay);
+  const make = (cls, titleKey, users, countCls) => {
+    const g = el("div", "ft-group");
+    const head = el("div", `ft-group-head ${cls}`);
+    head.append(
+      el("i"),
+      el("span", "", t(titleKey, titleKey)),
+      el("span", `ft-count ${countCls}`, String(users.length))
+    );
+    const list = el("div", "ft-list");
+    if (!users.length)
+      list.append(el("div", "ft-empty", t("ftEmptyGroup", "无变动")));
+    else users.forEach((u) => list.append(userRow(u)));
+    g.append(head, list);
+    return g;
+  };
+  box.append(
+    make("g-uf", "ftQuadUnfollowers", uf, "uf"),
+    make("g-rf", "ftQuadRefollowed", rf, "rf")
   );
-  const pills = el("div", "ft-pills");
-  if (!users.length) {
-    pills.append(el("span", "ft-empty", t("ftEmptyGroup", "无变动")));
-  } else {
-    users.forEach((u) => pills.append(pill(u, tagOf?.(u))));
-  }
-  box.append(head, pills);
-  return box;
-}
-
-// ---------- 按天渲染 ----------
-function renderDay(day) {
-  const groupsBox = $("ftGroups");
-  groupsBox.textContent = "";
-  $("ftNotice").classList.add("hidden");
-  $("ftRenamed").classList.add("hidden");
-
-  // 当天全部 delta 记录
-  const dayRecs = snaps.filter((s) => s.kind === "delta" && s.id.slice(0, 10) === day);
-  if (!dayRecs.length) return;
-  if (dayRecs.some((r) => r.complete === false)) {
-    const n = $("ftNotice");
-    n.textContent = t("ftIncompleteDay", "当日有采集未完成，数据可能不全");
-    n.classList.remove("hidden");
-  }
-
-  // 事件并集（同 id 当日多次出现按事件组各自保留）
-  const union = (list, key) => {
-    const seen = new Set();
-    const out = [];
-    for (const r of list) {
-      for (const u of r[key]?.followers || []) if (!seen.has(u.id)) { seen.add(u.id); out.push(u); }
-    }
-    return out;
-  };
-  const unionG = (list, key) => {
-    const seen = new Set();
-    const out = [];
-    for (const r of list) {
-      for (const u of r[key]?.following || []) if (!seen.has(u.id)) { seen.add(u.id); out.push(u); }
-    }
-    return out;
-  };
-  const addedF = union(dayRecs, "added");
-  const removedF = union(dayRecs, "removed");
-  const addedG = unionG(dayRecs, "added");
-  const removedG = unionG(dayRecs, "removed");
-
-  // 互关事件：当天开始前态 vs 当天结束态（重放自动跳 incomplete）
-  const prevDayId = snaps.filter((s) => s.id < day).pop()?.id || "";
-  const prev = prevDayId ? rebuildFollow(snaps, prevDayId) : null;
-  const today = rebuildFollow(snaps, dayRecs[dayRecs.length - 1].id);
-  let newMutuals = [];
-  let lostMutuals = [];
-  if (prev && today) {
-    const mPrev = new Set(
-      [...prev.following.keys()].filter((id) => prev.followers.has(id))
-    );
-    const mToday = new Set(
-      [...today.following.keys()].filter((id) => today.followers.has(id))
-    );
-    const findUser = (uid) =>
-      today.following.get(uid) ||
-      today.followers.get(uid) ||
-      prev.following.get(uid) ||
-      prev.followers.get(uid) ||
-      { id: uid, h: "", n: "", a: "" };
-    newMutuals = [...mToday].filter((id) => !mPrev.has(id)).map(findUser);
-    lostMutuals = [...mPrev].filter((id) => !mToday.has(id)).map(findUser);
-  }
-
-  // 净变化过滤：日内往返（先关注又取关 / 先取关又关注）视为无变化，双向剔除不显示；
-  // 互关两类本身是前后态差集（理论上无交集），防御性同过滤
-  const netFilter = (add, sub) => {
-    const addIds = new Set(add.map((u) => u.id));
-    const subIds = new Set(sub.map((u) => u.id));
-    return [add.filter((u) => !subIds.has(u.id)), sub.filter((u) => !addIds.has(u.id))];
-  };
-  const [netAddedF, netRemovedF] = netFilter(addedF, removedF);
-  const [netAddedG, netRemovedG] = netFilter(addedG, removedG);
-  const [netNewM, netLostM] = netFilter(newMutuals, lostMutuals);
-
-  // 互关解除归因：对方取关 / 我取关
-  const removedFIds = new Set(netRemovedF.map((u) => u.id));
-  const removedGIds = new Set(netRemovedG.map((u) => u.id));
-  const lostTag = (u) =>
-    removedFIds.has(u.id)
-      ? t("ftByThem", "对方取关")
-      : removedGIds.has(u.id)
-      ? t("ftByMe", "我取关")
-      : "";
-
-  // 总量三格 = 当天结束态
-  if (today) {
-    let mutual = 0;
-    for (const id of today.following.keys())
-      if (today.followers.has(id)) mutual++;
-    $("ftTotG").textContent = today.following.size;
-    $("ftTotF").textContent = today.followers.size;
-    $("ftTotM").textContent = mutual;
-  }
-
-  // 顺序：第一行 正向（新粉丝/新关注/新增互关），第二行 负向（取关我/我取关/互关解除），上下对仗
-  groupsBox.append(
-    renderGroup("ftGNewFollowers", "add", netAddedF),
-    renderGroup("ftGNewFollowing", "add", netAddedG),
-    renderGroup("ftGNewMutuals", "mut", netNewM),
-    renderGroup("ftGUnfollowers", "sub", netRemovedF),
-    renderGroup("ftGUnfollowing", "sub", netRemovedG),
-    renderGroup("ftGLostMutuals", "sub", netLostM, lostTag)
-  );
-
-  // 改名（当天合并，提示条）
-  const renamed = dayRecs.flatMap((r) => r.renamed || []);
-  if (renamed.length) {
-    const bar = $("ftRenamed");
-    bar.textContent = "";
-    bar.append(
-      el("b", "", t("ftGRenamed", "改名") + "："),
-      document.createTextNode(
-        " " + renamed.map((r) => `${r.on || r.oh} → ${r.nn || r.nh}（@${r.oh}→@${r.nh}）`).join("；")
-      )
-    );
-    bar.classList.remove("hidden");
-  }
 }
 
 // ---------- 主流程 ----------
@@ -257,44 +219,45 @@ async function main() {
   await loadLang();
   snaps = await getFollowSnapshots();
   notes = (await chrome.storage.local.get("twitterNotes")).twitterNotes || {};
-
   renderTodayState();
 
-  // 有 delta 的天（倒序）
-  const days = [
-    ...new Set(
-      snaps.filter((s) => s.kind === "delta").map((s) => s.id.slice(0, 10))
-    ),
-  ].sort((a, b) => (a < b ? 1 : -1));
-
-  const sel = $("ftDateSel");
-  if (!days.length) {
+  const deltas = snaps.filter((s) => s.kind === "delta");
+  if (!deltas.length) {
     const hasBase = snaps.some((s) => s.kind === "base");
-    const n = $("ftNotice");
-    n.textContent = hasBase
-      ? t("ftFirstDay", "基底快照（首日），无对比")
+    const main_ = document.querySelector(".ft-main");
+    main_.textContent = "";
+    const empty = el("div", "ft-empty-page");
+    empty.textContent = hasBase
+      ? t("ftFirstDay", "基底已建立，明日起开始对比变动")
       : t("ftNoData", "暂无数据，完成首次采集后展示");
-    n.classList.remove("hidden");
-    sel.disabled = true;
-    // 无对比时三格给最新态
-    const latest = rebuildFollow(snaps, "9999");
-    if (latest) {
-      let mutual = 0;
-      for (const id of latest.following.keys())
-        if (latest.followers.has(id)) mutual++;
-      $("ftTotG").textContent = latest.following.size;
-      $("ftTotF").textContent = latest.followers.size;
-      $("ftTotM").textContent = mutual;
-    }
+    main_.append(empty);
     return;
   }
-  days.forEach((d) => {
-    const o = el("option", "", d);
-    o.value = d;
-    sel.append(o);
+
+  // 默认：最新事件月 + 选中最新事件日
+  const latestDay = deltas[deltas.length - 1].id.slice(0, 10);
+  curMonth = latestDay.slice(0, 7);
+  selDay = latestDay;
+
+  $("ftPrevMonth").addEventListener("click", () => {
+    const [y, m] = curMonth.split("-").map(Number);
+    const d = new Date(y, m - 2, 1);
+    curMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    selDay = "";
+    renderCal();
+    renderLists();
   });
-  sel.addEventListener("change", () => renderDay(sel.value));
-  renderDay(days[0]);
+  $("ftNextMonth").addEventListener("click", () => {
+    const [y, m] = curMonth.split("-").map(Number);
+    const d = new Date(y, m, 1);
+    curMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    selDay = "";
+    renderCal();
+    renderLists();
+  });
+
+  renderCal();
+  renderLists();
 }
 
 main().catch((e) => {

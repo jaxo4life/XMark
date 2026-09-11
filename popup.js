@@ -149,6 +149,8 @@ async function FollowCard() {
     } else if (s.state === "failed") {
       const REASONS = {
         login: t("ftErrLogin", "未登录 X"),
+        nosample: t("ftErrNosample", "未取到采集凭证"),
+        network: t("ftErrNetwork", "网络异常"),
         timeout: t("ftErrTimeout", "超时截断"),
         nodata: t("ftErrNodata", "未捕获到数据"),
       };
@@ -167,10 +169,11 @@ async function FollowCard() {
       const el = document.getElementById(id);
       if (el) el.textContent = v;
     };
-    set("ftNumNf", c ? c.nf : "–");
+    // 四格（v6.6.1 收窄语义：取关我/回关我/新关注/取消关注）
     set("ftNumUf", c ? c.uf : "–");
+    set("ftNumRf", c ? c.rf : "–");
     set("ftNumNfg", c ? c.nfg : "–");
-    set("ftNumMut", c ? String((c.nm || 0) + (c.lm || 0)) : "–");
+    set("ftNumUfg", c ? c.ufg : "–");
     runBtn.style.display = btnShow ? "" : "none";
     runBtn.textContent = t(btnKey, "立即采集");
   };
@@ -192,6 +195,31 @@ async function FollowCard() {
     setTimeout(refresh, 800);
     setTimeout(refresh, 3000);
   });
+  // 重置（两段式，3s 未确认自动复原）：清快照表 + 运行态 + 摘要，下次采集重新当基底
+  const resetBtn = document.getElementById("ftReset");
+  let resetArmed = null;
+  resetBtn.addEventListener("click", async () => {
+    if (resetArmed) {
+      clearTimeout(resetArmed);
+      resetArmed = null;
+      resetBtn.classList.remove("armed");
+      resetBtn.textContent = t("ftReset", "重置");
+      resetBtn.disabled = true;
+      try {
+        await chrome.runtime.sendMessage({ action: "followReset" });
+      } catch (_) {}
+      setTimeout(refresh, 600);
+      return;
+    }
+    resetBtn.classList.add("armed");
+    resetBtn.textContent = t("ftResetConfirm", "确认重置？");
+    resetArmed = setTimeout(() => {
+      resetArmed = null;
+      resetBtn.classList.remove("armed");
+      resetBtn.textContent = t("ftReset", "重置");
+    }, 3000);
+  });
+
   detail.addEventListener("click", (e) => {
     e.preventDefault();
     chrome.tabs.create({ url: chrome.runtime.getURL("follows.html") });

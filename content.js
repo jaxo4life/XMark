@@ -174,11 +174,11 @@ class TwitterNotes {
     if (document.getElementById("xmark-tags-style")) return;
     const css = `
 /* 贴边把手式抽屉：容器只负责定位/过渡，无背景——收起时左缘只露把手自己的 20×100 玻璃条 */
-#xmark-tags-drawer{position:fixed;left:0;top:20%;transform:translateY(-50%) translateX(calc(-100% + 20px));display:flex;align-items:center;z-index:2;transition:transform .25s ease;font-family:inherit;box-sizing:border-box;--xt-hover:#f7f9f9;--xt-fg:#0f1419;--xt-muted:#536471}
+#xmark-tags-drawer{position:fixed;left:0;top:30%;transform:translateY(-50%) translateX(calc(-100% + 20px));display:flex;align-items:center;z-index:2;transition:transform .25s ease;font-family:inherit;box-sizing:border-box;--xt-hover:#f7f9f9;--xt-fg:#0f1419;--xt-muted:#536471}
 #xmark-tags-drawer.open{transform:translateY(-50%) translateX(0)}
 html[data-xmark-theme="dark"] #xmark-tags-drawer{--xt-hover:rgba(101,119,134,.18);--xt-fg:#e7e9ea;--xt-muted:#71767b}
 /* 面板卡片（毛玻璃，左贴屏直角、右接把手） */
-#xmark-tags-drawer .xt-card{width:200px;max-height:min(70vh,560px);display:flex;flex-direction:column;background:rgba(255,255,255,.85);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid rgb(159,181,195);border-bottom:1px solid rgb(159,181,195);box-shadow:0 0 15px rgba(101,119,134,.2),0 0 3px 1px rgba(101,119,134,.15)}
+#xmark-tags-drawer .xt-card{width:200px;max-height:min(60vh,480px);display:flex;flex-direction:column;background:rgba(255,255,255,.85);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid rgb(159,181,195);border-bottom:1px solid rgb(159,181,195);box-shadow:0 0 15px rgba(101,119,134,.2),0 0 3px 1px rgba(101,119,134,.15)}
 html[data-xmark-theme="dark"] #xmark-tags-drawer .xt-card{background:rgba(0,0,0,.65);border-color:rgb(75,78,82);box-shadow:rgba(255,255,255,.2) 0 0 18px,rgba(255,255,255,.15) 0 0 4px 2px}
 /* 固定标题头（不随列表滚动） */
 #xmark-tags-drawer .xt-head{flex:none;padding:12px 14px 8px;font-size:15px;font-weight:800;color:var(--xt-fg);border-bottom:1px solid rgba(159,181,195,.35)}

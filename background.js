@@ -9,6 +9,7 @@ import {
   getAvatar,
   saveFollowSnapshot,
   getFollowSnapshots,
+  clearFollowSnapshots,
   rebuildFollow,
   dayKey,
 } from "./utils/db.js";
@@ -191,9 +192,6 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   // 关注变动：便捷采集 / 跨天巡逻 / 采集中 30s 踢活（后台 tab 节流兜底）
   if (alarm.name === "followKick" || alarm.name === "followPatrol") {
     followKickCheck();
-  }
-  if (alarm.name === "followTick") {
-    followTickKick();
   }
 });
 
@@ -1251,20 +1249,18 @@ chrome.runtime.onMessage.addListener((msg) => {
   return false; // 不占 sendResponse 通道
 });
 
-// ===== 关注变动追踪（v6.6.0，follow-main.js / follow-collect.js / popup 消费）=====
-// 编排：启动 10min 后便捷采集（今日未采才跑）+ 6h 巡逻兜底跨天；采集 = 后台 tab 开自己
-// following/followers 页自动滚到底（fetch hook 截响应）；phase 为原子单位——中断后已完成
-// 的 phase 保留、未完成的整个重跑（翻页 cursor 在页面内存，tab 关即失效）；每批即时落
-// storage（SW 休眠安全）。落库走增量：首日 base，之后每日 delta（见 utils/db.js）。
+// ===== 关注变动追踪（v6.6.1 收窄：仅 following 单列表 + SW 重放翻页）=====
+// 架构：请求样板由页面 hook 截获存储（用户浏览 following 页即自动续新），
+// 翻页由 SW 直接 fetch 重放 cursor 链——零 tab 渲染依赖（后台 tab 不水合的 X 页面
+// 滚了也白滚，已实测），几页翻完不触限流。核心语义：following 响应每人带
+// followed_by（TA 是否关注我），单列表即可派生互关集与「对方取关我」。
 
 const todayKey = () => dayKey(Date.now());
 
 async function ftGet() {
   return (await chrome.storage.local.get("followTrack")).followTrack || {
     state: "idle",
-    phasesDone: [],
     following: [],
-    followers: [],
   };
 }
 async function ftSet(patch) {
@@ -1281,7 +1277,6 @@ async function ftSummary(patch) {
 }
 
 function followNotify(id, message) {
-  // 通知文案写死中文（仅用户本人可见，不引入 lang 依赖）
   chrome.notifications
     .create(id, {
       type: "basic",
@@ -1292,7 +1287,6 @@ function followNotify(id, message) {
     .catch(() => {});
 }
 
-// 通知点击 → 打开详情页
 chrome.notifications.onClicked.addListener((id) => {
   if (id === "ftStart" || id === "ftDone" || id === "ftFail") {
     chrome.tabs
@@ -1301,234 +1295,319 @@ chrome.notifications.onClicked.addListener((id) => {
   }
 });
 
+// ---------- 响应解析（SW 重放自产自解）----------
+function extractFollowing(json) {
+  const out = [];
+  const instructions =
+    json?.data?.user?.result?.timeline?.timeline?.instructions || [];
+  for (const ins of instructions) {
+    for (const entry of ins?.entries || []) {
+      const r = entry?.content?.itemContent?.user_results?.result;
+      if (r?.__typename !== "User") continue;
+      out.push({
+        id: r.rest_id || "",
+        h: r?.core?.screen_name || "",
+        n: r?.core?.name || "",
+        a: r?.avatar?.image_url || "",
+        v: r?.is_blue_verified ? 1 : 0,
+        fr: r?.relationship_counts?.followers || 0,
+        fg: r?.relationship_counts?.following || 0,
+        tw: r?.tweet_counts?.tweets || 0,
+        ca: Math.floor(Date.parse(r?.core?.created_at || 0) / 864e5) || 0,
+        p: r?.privacy?.protected ? 1 : 0,
+        fb: r?.relationship_perspectives?.followed_by ? 1 : 0, // TA 是否关注我（互关判定核心）
+      });
+    }
+  }
+  return out;
+}
+
+function findBottomCursor(json) {
+  const instructions =
+    json?.data?.user?.result?.timeline?.timeline?.instructions || [];
+  for (const ins of instructions) {
+    for (const entry of ins?.entries || []) {
+      const c = entry?.content;
+      if (
+        (c?.entryType === "TimelineTimelineCursor" ||
+          c?.__typename === "TimelineTimelineCursor") &&
+        c?.cursorType === "Bottom"
+      )
+        return c.value || "";
+    }
+  }
+  return "";
+}
+
+// ---------- 样板管理 ----------
+async function getSample() {
+  return (await chrome.storage.local.get("followSample")).followSample || null;
+}
+
+// 任意页面 hook 到 Following 请求 → 更新样板（幂等）。若正等样板（首次流程）则放行
+let sampleWaiters = [];
+async function onFollowSample(req) {
+  if (!req.url || !/\/graphql\/[^/]+\/Following\?/.test(req.url)) return;
+  await chrome.storage.local.set({
+    followSample: { url: req.url, headers: req.headers || {}, ts: Date.now() },
+  });
+  const ws = sampleWaiters;
+  sampleWaiters = [];
+  ws.forEach((fn) => fn());
+}
+
+// 无样板时：前台 tab 打开自己的 following 页几秒（hook 抓首屏请求样板）→ 还原焦点。
+// 无 handle 先开 home 由 collect 扒 handle（followHandle 消息导航至 following 页）
+function ensureSample(handle) {
+  return new Promise(async (resolve) => {
+    let tab = null;
+    let timer = 0;
+    let prevTab = null;
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const i = sampleWaiters.indexOf(onGot);
+      if (i >= 0) sampleWaiters.splice(i, 1);
+      if (prevTab != null)
+        chrome.tabs.update(prevTab, { active: true }).catch(() => {});
+      if (tab?.id) chrome.tabs.remove(tab.id).catch(() => {});
+      resolve(ok);
+    };
+    const onGot = () => finish(true);
+    sampleWaiters.push(onGot);
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      prevTab = tabs[0]?.id ?? null;
+      tab = await chrome.tabs.create({
+        url: handle
+          ? "https://x.com/" + handle + "/following?xmark-ft=1"
+          : "https://x.com/home?xmark-ft=1",
+        active: true,
+      });
+      await ftSet({ tabId: tab.id });
+      chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
+        if (tabId === tab.id && info.status === "complete") {
+          chrome.tabs.onUpdated.removeListener(listener);
+          chrome.tabs.sendMessage(tab.id, { cmd: "followActivate" }).catch(() => {});
+        }
+      });
+    } catch (e) {
+      return finish(false);
+    }
+    timer = setTimeout(() => finish(false), 45000);
+  });
+}
+
+// ---------- SW 重放循环 ----------
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// fetch 规范禁设的请求头（authorization / x-csrf-token / x-client-* 可照抄）
+const HDROP = new Set([
+  "content-length", "host", "connection", "accept-encoding", "cookie", "cookie2",
+  "date", "dnt", "expect", "keep-alive", "origin", "referer", "te", "trailer",
+  "transfer-encoding", "upgrade", "via", "user-agent",
+]);
+const sampleHeaders = (headers) => {
+  const out = {};
+  for (const [k, v] of Object.entries(headers || {})) {
+    const lk = String(k).toLowerCase();
+    if (HDROP.has(lk) || lk.startsWith("proxy-") || lk.startsWith("sec-")) continue;
+    out[k] = v;
+  }
+  return out;
+};
+
+function buildReplayUrl(sampleUrl, cursor) {
+  const u = new URL(sampleUrl);
+  let vars = {};
+  try {
+    vars = JSON.parse(u.searchParams.get("variables") || "{}");
+  } catch (_) {}
+  if (cursor) vars.cursor = cursor;
+  else delete vars.cursor;
+  u.searchParams.set("variables", JSON.stringify(vars));
+  return u.toString();
+}
+
 async function startFollowCollection(force = false) {
   const track = await ftGet();
   const today = todayKey();
-  // 已在采集：tab 活着则跳过（挂了则转中断续跑）
-  if (track.state === "collecting" && track.tabId) {
-    try {
-      await chrome.tabs.get(track.tabId);
-      return; // 采集中，勿重复开 tab
-    } catch (_) {
-      await ftSet({ state: "interrupted" });
-    }
+  if (track.state === "collecting") {
+    // 僵死自愈：SW 重启会杀死重放循环，collecting 态超时视为死态重跑
+    // （自动调度阈值 10min；用户手动 force 放宽到 2min——卡住时点了就该动）
+    const stale = Date.now() - (track.startedAt || 0);
+    if (stale < (force ? 2 : 10) * 60 * 1000) return; // 进行中
+    console.warn("[XMark] follow: stale collecting, restarting");
   }
   if (!force && track.state === "done" && track.day === today) return;
-  // 断点续跑：同日中断保留已完成 phase；跨天残数据作废重来
+  if (track.state === "cancelled" && track.day === today && !force) return;
+  // 断点续跑：同日中断保留已采列表与 cursor；跨天/失败作废重来
   const resume = track.state === "interrupted" && track.day === today;
-  const phasesDone = resume ? track.phasesDone || [] : [];
-  const following =
-    resume && phasesDone.includes("following") ? track.following : [];
-  const handle = track.handle || "";
-  const startPhase =
-    phasesDone.includes("following") && following.length ? "followers" : "following";
+  const following = resume ? track.following || [] : [];
   await ftSet({
     state: "collecting",
     day: today,
-    phasesDone,
     following,
-    followers: [], // followers 永远从头采（完成即 finish，不存在"followers 已完成未 finish"态）
-    handle,
-    phase: null,
+    cursor: resume ? track.cursor || "" : "",
+    handle: track.handle || "",
     err: "",
-    tabId: null,
     startedAt: Date.now(),
   });
   await ftSummary({
     day: today,
     state: "collecting",
-    phase: "",
-    cur: 0,
-    total: 0,
+    cur: following.length,
   });
-  chrome.alarms.create("followTick", { periodInMinutes: 0.5 });
-  followNotify("ftStart", "正在后台采集关注数据，期间请保持浏览器运行");
-  // xmark-ft 标记：listcol/xfinder 识别后不激活（采集 tab 纯净，iframe 请求不掺采集链路）
-  const url = handle
-    ? `https://x.com/${handle}/${startPhase}?xmark-ft=1`
-    : "https://x.com/home?xmark-ft=1"; // 无 handle：先开 home 由 content 扒自己 handle
-  const tab = await chrome.tabs.create({ url, active: false });
-  await ftSet({ tabId: tab.id });
+
+  let sample = await getSample();
+  if (!sample) {
+    followNotify("ftStart", "正在获取采集凭证（会短暂切换标签页）…");
+    const ok = await ensureSample(track.handle || "");
+    if (!ok) return failFollow("nosample");
+    sample = await getSample();
+    if (!sample) return failFollow("nosample");
+    followNotify("ftStart", "正在后台采集关注数据，期间请保持浏览器运行");
+  } else {
+    followNotify("ftStart", "正在后台采集关注数据，期间请保持浏览器运行");
+  }
+  await replayLoop(sample);
+}
+
+async function replayLoop(sample) {
+  const headers = sampleHeaders(sample.headers);
+  const t0 = await ftGet();
+  const seen = new Set((t0.following || []).map((u) => u.id));
+  let cursor = t0.cursor || "";
+  let lastCursor = "";
+  let fails = 0;
+  let emptyPages = 0;
+
+  while (true) {
+    let json = null;
+    try {
+      const res = await fetch(buildReplayUrl(sample.url, cursor), {
+        headers,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      json = await res.json();
+    } catch (e) {
+      if (++fails >= 3) return failFollow("network");
+      await sleep(1500 * fails * fails); // 1.5s / 6s / 13.5s 退避
+      continue;
+    }
+    fails = 0;
+
+    const raw = extractFollowing(json);
+    // 终止信号①：原始 0 条目 = 尾后空页（X 翻到尾后 cursor 可能仍返回新值但无内容，
+    // 曾致 538/540 无限空翻——差额是不可见账号，列表永远翻不满，不能等数量）
+    if (!raw.length) return finishFollowCollection();
+    const users = raw.filter((u) => u.id && !seen.has(u.id));
+    for (const u of users) seen.add(u.id);
+    if (users.length) emptyPages = 0;
+    else if (++emptyPages >= 3) return finishFollowCollection(); // ②：连续 3 页全是重复（cursor 值循环）
+    const track = await ftGet();
+    if (track.state !== "collecting") return; // 中途被取消/重置
+    const following = track.following || [];
+    following.push(...users);
+    const nextCursor = findBottomCursor(json);
+    await ftSet({ following, cursor: nextCursor });
+    await ftSummary({ cur: following.length });
+
+    // 到底：无 bottom cursor 或 cursor 停滞（重放模式下这就是真到底，无需计数判定）
+    if (!nextCursor || nextCursor === lastCursor)
+      return finishFollowCollection();
+    lastCursor = nextCursor;
+    cursor = nextCursor;
+    await sleep(1400 + Math.random() * 600); // ~1.7s/页：限流安全
+  }
 }
 
 async function failFollow(reason) {
   const track = await ftGet();
-  await ftSet({ state: "failed", err: reason, phase: null, tabId: null });
-  await ftSummary({ state: "failed", err: reason });
-  chrome.alarms.clear("followTick");
   if (track.tabId) chrome.tabs.remove(track.tabId).catch(() => {});
+  await ftSet({ state: "failed", err: reason, cursor: "", tabId: null });
+  await ftSummary({ state: "failed", err: reason });
   const MSG = {
     login: "未登录 X",
+    nosample: "未能获取采集凭证（X 页面未发出接口请求）",
+    network: "网络异常，稍后自动重试",
     timeout: "超时截断，稍后自动重试",
     nodata: "未捕获到数据（X 接口可能变动）",
   };
-  followNotify("ftFail", `采集失败（${MSG[reason] || reason}），可从扩展弹窗手动重试`);
-}
-
-// 当前态聚合直方图（finish 时内存全量现算，嵌进快照 rec.agg）
-// c=三计数；vg/vf=蓝标数；pf=锁推数；zf=零推文数；rf=关注比异常数(fg>2000 且 fg/fr>10)；
-// tf=粉丝量级 6 桶（<10/<100/<1K/<1万/<10万/≥10万）；af=账龄 5 桶（<90天/<1年/<3年/<6年/≥6年）
-function buildFollowAgg(following, followers) {
-  const TIER_EDGES = [10, 100, 1e3, 1e4, 1e5, Infinity];
-  const AGE_EDGES = [90, 365, 1095, 2190, Infinity];
-  const tf = new Array(TIER_EDGES.length).fill(0);
-  const af = new Array(AGE_EDGES.length).fill(0);
-  let mutual = 0;
-  let vg = 0;
-  const fIds = new Set(followers.map((u) => u.id));
-  for (const u of following) {
-    if (u.v) vg++;
-    if (fIds.has(u.id)) mutual++;
-  }
-  let vf = 0,
-    pf = 0,
-    zf = 0,
-    rf = 0;
-  const today = Math.floor(Date.now() / 864e5);
-  for (const u of followers) {
-    if (u.v) vf++;
-    if (u.p) pf++;
-    if (!u.tw) zf++;
-    if (u.fg > 2000 && u.fg / (u.fr || 1) > 10) rf++;
-    tf[TIER_EDGES.findIndex((e) => (u.fr || 0) < e)]++;
-    af[AGE_EDGES.findIndex((e) => today - (u.ca || today) < e)]++;
-  }
-  return { c: { g: following.length, f: followers.length, m: mutual }, vg, vf, pf, zf, rf, tf, af };
+  followNotify("ftFail", "采集失败（" + (MSG[reason] || reason) + "），可从扩展弹窗手动重试");
 }
 
 async function finishFollowCollection() {
   const track = await ftGet();
   const today = todayKey();
   const snaps = await getFollowSnapshots();
-  // 与上一次采集对比（跨日/同日均然）：本次结果尚未入库，重放到此刻即上次态；
-  // incomplete 记录在重放中自动跳过（基准自动落到更早的有效记录）
   const now = new Date().toISOString();
   const prev = rebuildFollow(snaps, now);
-  let counts = null;
+  const curIds = new Set(track.following.map((u) => u.id));
+
   const rec = { id: now, complete: true };
+  let counts;
   if (!prev) {
-    // 首日基底
     rec.kind = "base";
     rec.following = track.following;
-    rec.followers = track.followers;
+    counts = null;
   } else {
-    const fIds = new Set(track.followers.map((u) => u.id));
-    const gIds = new Set(track.following.map((u) => u.id));
-    const addedF = track.followers.filter((u) => !prev.followers.has(u.id));
-    const removedF = [...prev.followers.values()].filter((u) => !fIds.has(u.id));
-    const addedG = track.following.filter((u) => !prev.following.has(u.id));
-    const removedG = [...prev.following.values()].filter((u) => !gIds.has(u.id));
-    rec.kind = "delta";
-    rec.added = { following: addedG, followers: addedF };
-    rec.removed = { following: removedG, followers: removedF };
-    // 互关变动数量（事件明细由详情页从 delta 派生，不落库）
-    const mPrev = new Set(
-      [...prev.following.keys()].filter((id) => prev.followers.has(id))
-    );
-    const mToday = new Set([...gIds].filter((id) => fIds.has(id)));
-    counts = {
-      nf: addedF.length,
-      uf: removedF.length,
-      nfg: addedG.length,
-      nm: [...mToday].filter((id) => !mPrev.has(id)).length,
-      lm: [...mPrev].filter((id) => !mToday.has(id)).length,
-    };
-
-    // 改名追踪（零体积成本；XMark 备注回落匹配靠 username，改名即断链——预警价值）
-    const rnSeen = new Set();
+    const added = track.following.filter((u) => !prev.following.has(u.id));
+    const removed = [...prev.following.values()].filter((u) => !curIds.has(u.id));
+    // fb 翻转（只有旧值明确的 1/0 才判——老基底无 fb 字段，过渡期不产事件）
+    const unfollowed = [];
+    const refollowed = [];
     const renamed = [];
-    for (const [list, prevMap] of [
-      [track.following, prev.following],
-      [track.followers, prev.followers],
-    ]) {
-      for (const u of list) {
-        const old = prevMap.get(u.id);
-        if (old && !rnSeen.has(u.id) && (old.h !== u.h || old.n !== u.n)) {
-          rnSeen.add(u.id);
-          renamed.push({ id: u.id, oh: old.h, nh: u.h, on: old.n, nn: u.n });
-        }
+    const rnSeen = new Set();
+    for (const u of track.following) {
+      const p = prev.following.get(u.id);
+      if (!p) continue;
+      if (p.fb === 1 && !u.fb) unfollowed.push(u);
+      else if (p.fb === 0 && u.fb) refollowed.push(u);
+      if (!rnSeen.has(u.id) && (p.h !== u.h || p.n !== u.n)) {
+        rnSeen.add(u.id);
+        renamed.push({ id: u.id, oh: p.h, nh: u.h, on: p.n, nn: u.n });
       }
     }
+    rec.kind = "delta";
+    rec.added = added;
+    rec.removed = removed;
+    if (unfollowed.length) rec.unfollowed = unfollowed;
+    if (refollowed.length) rec.refollowed = refollowed;
     if (renamed.length) rec.renamed = renamed;
-
-    // 升级回填：老 base 用户对象无扩字段（fr/fg/tw/ca），用本次全量新鲜属性一次性补齐
-    // （重放链自动带上；幂等——首人已有 fr 字段即跳过。base 里本次已离开的人保留旧值）
-    const baseRec = snaps.find((s) => s.kind === "base" && s.complete);
-    if (
-      baseRec &&
-      baseRec.following?.length &&
-      baseRec.following[0].fr === undefined
-    ) {
-      const fmap = new Map(track.followers.map((u) => [u.id, u]));
-      const gmap = new Map(track.following.map((u) => [u.id, u]));
-      baseRec.following = baseRec.following.map((u) => gmap.get(u.id) || u);
-      baseRec.followers = baseRec.followers.map((u) => fmap.get(u.id) || u);
-      await saveFollowSnapshot(baseRec);
-    }
+    counts = {
+      uf: unfollowed.length, // 对方取关我（核心）
+      rf: refollowed.length, // 对方（回）关我
+      nfg: added.length,     // 我新关注
+      ufg: removed.length,   // 我取消关注
+    };
   }
-  // 当前态聚合直方图（嵌本条快照，~500B/次；base 也算，曲线自首日起）。
-  // 语义红线：面板「当前态分布」只读 agg（重放态旧属性会随时间失真）；「事件画像」
-  // 只用 delta 用户属性（事件时点快照），两者不得混用
-  rec.agg = buildFollowAgg(track.following, track.followers);
-  await saveFollowSnapshot(rec); // 同日重跑 = put 覆盖（幂等）；增量方案 <1MB/年，不清理
-  await ftSet({ state: "done", phase: null, tabId: null });
+  await saveFollowSnapshot(rec);
+  await ftSet({ state: "done", cursor: "" });
   await ftSummary({ day: today, state: "done", counts, lastDone: today });
-  chrome.alarms.clear("followTick");
-  if (track.tabId) chrome.tabs.remove(track.tabId).catch(() => {});
   followNotify(
     "ftDone",
     counts
-      ? `采集完成：新粉丝 ${counts.nf} · 取关我 ${counts.uf} · 新关注 ${counts.nfg} · 互关变动 ${counts.nm + counts.lm}`
-      : "采集完成：首日基底已建立，明日起开始对比变动"
+      ? "采集完成：取关我 " + counts.uf + " · 回关我 " + counts.rf + " · 新关注 " + counts.nfg + " · 取消关注 " + counts.ufg
+      : "采集完成：基底已建立，明日起开始对比变动"
   );
 }
 
 async function onFollowHandle(req, sender) {
   const track = await ftGet();
-  if (track.state !== "collecting" || sender.tab?.id !== track.tabId) return;
+  if (track.state !== "collecting") return;
   if (req.error) return failFollow("login");
   await ftSet({ handle: req.handle });
-  await chrome.tabs.update(track.tabId, {
-    url: `https://x.com/${req.handle}/following?xmark-ft=1`,
-  });
-}
-
-async function onFollowPhaseStart(req, sender) {
-  const track = await ftGet();
-  if (track.state !== "collecting" || sender.tab?.id !== track.tabId) return;
-  await ftSummary({ phase: req.kind, total: req.total || 0 });
-}
-
-async function onFollowBatch(req, sender) {
-  const track = await ftGet();
-  if (track.state !== "collecting" || sender.tab?.id !== track.tabId) return;
-  const key = req.kind === "following" ? "following" : "followers";
-  const seen = new Set((track[key] || []).map((u) => u.id));
-  const fresh = (req.users || []).filter((u) => u.id && !seen.has(u.id));
-  if (!fresh.length) return;
-  await ftSet({ [key]: [...(track[key] || []), ...fresh] }); // 即时落盘（SW 休眠安全）
-  await ftSummary({
-    day: track.day,
-    state: "collecting",
-    phase: key,
-    cur: req.cur,
-    total: req.total || 0,
-  });
-}
-
-async function onFollowPhaseDone(req, sender) {
-  const track = await ftGet();
-  if (track.state !== "collecting" || sender.tab?.id !== track.tabId) return;
-  if (!req.complete) return failFollow(req.reason || "timeout");
-  const phasesDone = [...new Set([...(track.phasesDone || []), req.kind])];
-  await ftSet({ phasesDone });
-  if (req.kind === "following") {
-    await chrome.tabs.update(track.tabId, {
-      url: `https://x.com/${track.handle}/followers?xmark-ft=1`,
-    });
-  } else {
-    await finishFollowCollection();
-  }
+  // ensureSample 流程中（从 home 起步）：扒到 handle 后导航 following 页抓样板；
+  // 已有 handle 时 tab 已在 following 页，勿重复导航（同 URL update 会重载）
+  const tabId = track.handle ? null : sender.tab?.id;
+  if (tabId)
+    chrome.tabs
+      .update(tabId, { url: "https://x.com/" + req.handle + "/following?xmark-ft=1" })
+      .catch(() => {});
 }
 
 async function handleFollowMessage(req, sender, sendResponse) {
@@ -1538,13 +1617,15 @@ async function handleFollowMessage(req, sender, sendResponse) {
     else if (req.action === "followStatus")
       resp =
         (await chrome.storage.local.get("followSummary")).followSummary || {};
+    else if (req.action === "followSample") await onFollowSample(req);
     else if (req.action === "followHandle") await onFollowHandle(req, sender);
-    else if (req.action === "followPhaseStart")
-      await onFollowPhaseStart(req, sender);
-    else if (req.action === "followBatch") await onFollowBatch(req, sender);
-    else if (req.action === "followPhaseDone")
-      await onFollowPhaseDone(req, sender);
-    else resp = { ok: false };
+    else if (req.action === "followReset") {
+      const track = await ftGet();
+      if (track.tabId) chrome.tabs.remove(track.tabId).catch(() => {});
+      await clearFollowSnapshots();
+      await chrome.storage.local.remove(["followTrack", "followSummary"]);
+      await ftSet({ state: "idle", following: [], cursor: "" });
+    } else resp = { ok: false };
   } catch (e) {
     console.error("[XMark] follow:", e);
     resp = { ok: false, error: String(e?.message || e) };
@@ -1552,55 +1633,21 @@ async function handleFollowMessage(req, sender, sendResponse) {
   sendResponse(resp); // 所有分支必应答（项目已知坑）
 }
 
-// tab 导航完成 → 激活采集（页面每次导航文档重建，collect 状态自然清零）
-chrome.tabs.onUpdated.addListener((tabId, info) => {
-  if (info.status !== "complete") return;
-  ftGet().then((t) => {
-    if (t.state === "collecting" && t.tabId === tabId)
-      chrome.tabs.sendMessage(tabId, { cmd: "followActivate" }).catch(() => {});
-  });
-});
-
-// 采集 tab 被关 → 用户主动取消（浏览器整体关闭不触发 onRemoved，那是 interrupted 链路）。
-// cancelled：当日不再自动跑（patrol/kick 跳过），手动「立即采集」随时可重启
+// tab 被关：重放模式 SW 无常驻 tab；仅 ensureSample 的临时 tab 被关由其自身超时兜住
 chrome.tabs.onRemoved.addListener((tabId) => {
   ftGet().then(async (t) => {
     if (t.state === "collecting" && t.tabId === tabId) {
-      await ftSet({ state: "cancelled" });
-      await ftSummary({ state: "cancelled" });
-      chrome.alarms.clear("followTick");
+      await ftSet({ state: "interrupted" });
+      await ftSummary({ state: "interrupted" });
     }
   });
 });
 
-// 便捷采集检查（onStartup 10min 延迟 alarm + 6h 巡逻共用）
+// 便捷采集检查（onStartup 1min 延迟 alarm + 6h 巡逻共用）
 async function followKickCheck() {
   const track = await ftGet();
   const today = todayKey();
-  if (track.state === "collecting") {
-    // SW 重启后 tab 可能还在采：重建踢活 alarm 继续
-    if (track.tabId) {
-      try {
-        await chrome.tabs.get(track.tabId);
-        chrome.alarms.create("followTick", { periodInMinutes: 0.5 });
-        return;
-      } catch (_) {
-        await ftSet({ state: "interrupted" });
-      }
-    }
-  }
-  if (track.state === "done" && track.day === today) return; // 今日已完成
-  if (track.state === "cancelled" && track.day === today) return; // 用户取消：今日不再自动跑
+  if (track.state === "done" && track.day === today) return;
+  if (track.state === "cancelled" && track.day === today) return;
   await startFollowCollection();
-}
-
-// 30s 踢活：后台 tab timer 节流兜底（消息执行不受页面 timer 节流）
-async function followTickKick() {
-  const t = await ftGet();
-  if (t.state !== "collecting" || !t.tabId) {
-    chrome.alarms.clear("followTick");
-    return;
-  }
-  // 导航间隙 content script 未就绪会 reject——静默（tab 还在，等 onUpdated 再激活）
-  chrome.tabs.sendMessage(t.tabId, { cmd: "followTick" }).catch(() => {});
 }

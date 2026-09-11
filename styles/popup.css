@@ -1305,3 +1305,8 @@ body::-webkit-scrollbar {
 .ft-run-btn{width:100%;margin:10px 0 0;font-size:12px;padding:6px 0;border-radius:8px;border:1px solid #1d9bf0;background:#fff;color:#1d9bf0;cursor:pointer;font-family:inherit}
 .ft-run-btn:hover{background:rgba(29,155,240,.08)}
 .ft-run-btn:disabled{opacity:.5;cursor:default}
+
+.ft-head-links{display:flex;gap:10px;align-items:center}
+.ft-reset{font-size:12px;color:#536471;cursor:pointer;text-decoration:none}
+.ft-reset:hover{color:#0f1419}
+.ft-reset.armed{color:#f4212e;font-weight:700}

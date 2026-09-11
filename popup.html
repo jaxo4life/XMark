@@ -59,25 +59,28 @@
       <div class="section ft-card">
         <div class="ft-head">
           <h3 data-key="ftTitle">关注变动</h3>
-          <a class="ft-detail" id="ftDetail" title="" data-key="ftDetail">详情</a>
+          <span class="ft-head-links">
+            <a class="ft-detail" id="ftDetail" title="" data-key="ftDetail">详情</a>
+            <a class="ft-reset" id="ftReset" title="" data-key="ftReset">重置</a>
+          </span>
         </div>
         <div class="ft-state" id="ftState">…</div>
         <div class="ft-quads">
           <div class="ft-quad">
-            <div class="ft-quad-num" id="ftNumNf">–</div>
-            <div class="ft-quad-label" data-key="ftQuadNewFollowers">新粉丝</div>
-          </div>
-          <div class="ft-quad">
             <div class="ft-quad-num" id="ftNumUf">–</div>
             <div class="ft-quad-label" data-key="ftQuadUnfollowers">取关我</div>
+          </div>
+          <div class="ft-quad">
+            <div class="ft-quad-num" id="ftNumRf">–</div>
+            <div class="ft-quad-label" data-key="ftQuadRefollowed">回关我</div>
           </div>
           <div class="ft-quad">
             <div class="ft-quad-num" id="ftNumNfg">–</div>
             <div class="ft-quad-label" data-key="ftQuadNewFollowing">新关注</div>
           </div>
           <div class="ft-quad">
-            <div class="ft-quad-num" id="ftNumMut">–</div>
-            <div class="ft-quad-label" data-key="ftQuadMutualChange">互关变动</div>
+            <div class="ft-quad-num" id="ftNumUfg">–</div>
+            <div class="ft-quad-label" data-key="ftQuadUnfollowed">取消关注</div>
           </div>
         </div>
         <button class="ft-run-btn" id="ftRunBtn" data-key="ftRunNow">立即采集</button>

@@ -1010,6 +1010,17 @@ export async function saveFollowSnapshot(rec) {
   });
 }
 
+// 清空快照表（popup「重置」入口；运行态/摘要由 background 一并清理）
+export async function clearFollowSnapshots() {
+  const db = await openDB();
+  const tx = db.transaction("followSnapshots", "readwrite");
+  tx.objectStore("followSnapshots").clear();
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = (e) => reject(e.target.error);
+  });
+}
+
 // 全部快照（按 id=ISO 时刻 升序；delta 累积 <1MB/年，全读无压力）
 export async function getFollowSnapshots() {
   const db = await openDB();
@@ -1038,6 +1049,18 @@ export function rebuildFollow(snaps, untilId) {
       followers = new Map((s.followers || []).map((u) => [u.id, u]));
       reached = s.id;
     } else if (s.kind === "delta" && following) {
+      // 新单列表格式（v6.6.1）：added/removed 平铺数组 + fb 翻转就地更新
+      if (Array.isArray(s.added)) for (const u of s.added) following.set(u.id, u);
+      if (Array.isArray(s.removed)) for (const u of s.removed) following.delete(u.id);
+      for (const u of s.unfollowed || []) {
+        const c = following.get(u.id);
+        if (c) following.set(u.id, { ...c, fb: 0 });
+      }
+      for (const u of s.refollowed || []) {
+        const c = following.get(u.id);
+        if (c) following.set(u.id, { ...c, fb: 1 });
+      }
+      // 旧双列表格式（v6.6.0 记录）兼容
       for (const u of s.added?.following || []) following.set(u.id, u);
       for (const u of s.removed?.following || []) following.delete(u.id);
       for (const u of s.added?.followers || []) followers.set(u.id, u);
