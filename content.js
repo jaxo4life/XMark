@@ -1114,6 +1114,17 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
     screenshotsButton.textContent = "\u{1F4F8}";
     screenshotsButton.style.display = "none";
 
+    const threadButton = document.createElement("button");
+    threadButton.className = "twitter-notes-inline-button";
+    threadButton.textContent = "\u{1F9F5}"; // 🧵
+    threadButton.style.display = "none";
+    // 仅推文详情页（真详情页，非时间线 modal——modal 内数据不全不提供入口）
+    if (this.isTweetDetailPage()) {
+      threadButton.style.display = "inline";
+      threadButton.dataset.titleKey = "threadExportBtn";
+      threadButton.title = langData.threadExportBtn;
+    }
+
     const currentNote = this.getUserNote(username, userId);
 
     if (currentNote) {
@@ -1208,11 +1219,26 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
       chrome.runtime.sendMessage({ action: "openTimelineWithUserId", finalId });
     });
 
+    threadButton.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.exportThread();
+    });
+
     noteContainer.appendChild(noteDisplay);
     noteContainer.appendChild(noteButton);
     noteContainer.appendChild(detailButton);
     noteContainer.appendChild(screenshotsButton);
+    noteContainer.appendChild(threadButton);
     targetElement.appendChild(noteContainer);
+  }
+
+  // 是否处于可导出的推文详情页：顶层（非右列帧）+ /<handle>/status/<id> 路由 + 无 modal 打开
+  // （时间线点开的推文是 modal，URL 同为 /status/，aria-modal 存在即可区分）
+  isTweetDetailPage() {
+    if (IN_FRAME) return false;
+    if (!/\/[^/]+\/status\/\d+/.test(location.pathname)) return false;
+    return !document.querySelector('[aria-modal="true"]');
   }
 
   addProfileNoteButton(container, userId, username) {
