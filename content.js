@@ -1280,22 +1280,62 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
 
     this.showNotification(langData.threadExpanding);
     const startPath = location.pathname;
-    const expandedThread = await this._expandThreadFold();
-    const expandedText = await this._expandShowMoreLinks(startPath);
-    await this._scrollToLoadAll();
-    if (location.pathname !== startPath) {
-      // 展开过程触发导航（意外跳页）——中止
-      this.showNotification(langData.threadFail, "error");
-      return;
-    }
 
-    const { tweets, warnings } = this._collectThread(handle);
+    // 边滚边采：X 虚拟列表是移除式回收（滚走即丢 DOM），「滚完再一次性扫描」必丢推——
+    // 每轮滚动后立刻收割当前 DOM 进内存 Map（statusId 去重），交替滚底/顶触发两向懒加载
+    const got = new Map();
+    let stable = 0;
+    let lastGot = -1;
+    let lastDom = -1;
+    for (let round = 0; round < 50; round++) {
+      this._harvestTweets(handle, got);
+      this._clickThreadFolds();
+      this._clickShowMores();
+      if (location.pathname !== startPath) {
+        // 展开/滚动过程触发导航（意外跳页）——中止
+        this.showNotification(langData.threadFail, "error");
+        return;
+      }
+      window.scrollTo(
+        0,
+        round % 2 === 0
+          ? document.documentElement.scrollHeight
+          : 0
+      );
+      await this._threadSleep(700);
+      // 稳定判定：已采数 + DOM 推文数双信号连续 4 轮不变才收工
+      const domCount = document.querySelectorAll('[data-testid="tweet"]').length;
+      if (got.size === lastGot && domCount === lastDom) stable++;
+      else stable = 0;
+      lastGot = got.size;
+      lastDom = domCount;
+      if (stable >= 4) break;
+    }
+    this._harvestTweets(handle, got); // 最后补采一轮
+    window.scrollTo(0, 0);
+
+    // 按推文 id 数值排序（thread 顺序 = 时间顺序 = id 单调递增），不依赖 DOM 顺序
+    const tweets = [...got.values()].sort(
+      (a, b) => Number(a.statusId) - Number(b.statusId)
+    );
     if (!tweets.length) {
       this.showNotification(langData.threadNotFound, "error");
       return;
     }
-    if (!expandedThread) warnings.unshift({ idx: 0, reason: "missingHead" });
-    if (!expandedText) warnings.push({ idx: -1, reason: "showMoreFailed" });
+
+    // 完整性自检：正文以省略号收尾且较长（长推截断特征；全文自然省略号会误报——宁误报不静默）
+    const warnings = [];
+    tweets.forEach((tw, i) => {
+      const plain = tw.segments
+        .map((s) => (s.type === "link" ? s.text : s.s))
+        .join("");
+      if (plain.length > 200 && /[……]|\.\.\.$/.test(plain.trim()))
+        warnings.push({ idx: i + 1, reason: "truncated" });
+    });
+    // 残留折叠线/截断按钮 = 展开失败信号（串头缺 / show-more 没点掉）
+    if (this._findThreadFold()) warnings.unshift({ idx: 0, reason: "missingHead" });
+    if (document.querySelector('[data-testid="tweet-text-show-more-link"]'))
+      warnings.push({ idx: -1, reason: "showMoreFailed" });
 
     // toast 警告（不阻断导出，HTML 内同步标注）
     warnings.forEach((w) => {
@@ -1327,102 +1367,85 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
     );
   }
 
-  // 展开「显示此推文串」折叠线：文本特征定位（无稳定 testid），限主栏内
-  // 返回 false = 展开后仍有折叠线（串头缺——用户从中段进入且上文无法展开）
-  async _expandThreadFold() {
-    const RX = /^(显示此推文串|Show this thread)$/;
-    for (let round = 0; round < 15; round++) {
-      const col = document.querySelector('[data-testid="primaryColumn"]');
-      if (!col) return true;
-      const btn = [...col.querySelectorAll('[role="button"]')].find((el) =>
-        RX.test((el.textContent || "").trim())
-      );
-      if (!btn) return true;
+  // 「显示此推文串」折叠线：文本特征定位（无稳定 testid），限主栏内；命中即点
+  _clickThreadFolds() {
+    let clicked = 0;
+    for (const btn of this._findThreadFolds()) {
       btn.click();
-      await this._threadSleep(700);
+      clicked++;
     }
-    return false;
+    return clicked;
   }
 
-  // 展开正文截断（长推 Show more）：testid 稳定（用户实测提供）
-  // 返回 false = 循环耗尽仍有按钮（展开失败的推文将带 ⚠）
-  async _expandShowMoreLinks(startPath) {
-    for (let round = 0; round < 20; round++) {
-      const btns = document.querySelectorAll(
-        '[data-testid="tweet-text-show-more-link"]'
-      );
-      if (!btns.length) return true;
-      btns.forEach((b) => b.click());
-      await this._threadSleep(600);
-      if (location.pathname !== startPath) return false; // 触发导航，上层中止
-    }
-    return !document.querySelector('[data-testid="tweet-text-show-more-link"]');
+  _findThreadFold() {
+    return this._findThreadFolds()[0] || null;
   }
 
-  // 滚到底触发懒加载，直到推文数连续 3 轮稳定（40 轮上限 ≈ 20s 兜底）
-  async _scrollToLoadAll() {
-    let last = -1;
-    let stable = 0;
-    for (let i = 0; i < 40 && stable < 3; i++) {
-      window.scrollTo(0, document.documentElement.scrollHeight);
-      await this._threadSleep(500);
-      const n = document.querySelectorAll('[data-testid="tweet"]').length;
-      if (n === last) stable++;
-      else {
-        stable = 0;
-        last = n;
+  _findThreadFolds() {
+    const col = document.querySelector('[data-testid="primaryColumn"]');
+    if (!col) return [];
+    const RX = /^(显示此推文串|Show this thread)$/;
+    return [...col.querySelectorAll('[role="button"]')].filter((el) =>
+      RX.test((el.textContent || "").trim())
+    );
+  }
+
+  // 正文截断（长推 Show more）：testid 优先（用户实测提供）+ 主栏内文本兜底按钮
+  _clickShowMores() {
+    let clicked = 0;
+    document
+      .querySelectorAll('[data-testid="tweet-text-show-more-link"]')
+      .forEach((b) => {
+        b.click();
+        clicked++;
+      });
+    const col = document.querySelector('[data-testid="primaryColumn"]');
+    if (col) {
+      const RX = /^(显示更多|Show more)$/;
+      for (const el of col.querySelectorAll('[role="button"]')) {
+        if (RX.test((el.textContent || "").trim())) {
+          el.click();
+          clicked++;
+        }
       }
     }
-    window.scrollTo(0, 0);
-    await this._threadSleep(400);
+    return clicked;
   }
 
-  // 扫描主栏全部推文，过滤串主（User-Name 内存在 pathname === "/<handle>" 的作者链接），
-  // querySelectorAll 天然按文档序；display:none 的虚拟回收格子照读（X 回收不移除 DOM）
-  _collectThread(handle) {
+  // 收割当前 DOM 的串主推文进 got（Map 按 statusId 去重，幂等；移除式回收前已采数据不丢）
+  _harvestTweets(handle, got) {
     const col = document.querySelector('[data-testid="primaryColumn"]');
-    const all = col ? [...col.querySelectorAll('[data-testid="tweet"]')] : [];
-    const mine = all.filter((t) => {
+    if (!col) return;
+    for (const t of col.querySelectorAll('[data-testid="tweet"]')) {
       const link = [
         ...t.querySelectorAll('[data-testid="User-Name"] a[href^="/"]'),
       ].find((a) => a.pathname === "/" + handle);
-      return !!link;
-    });
-
-    const tweets = mine.map((t) => {
-      const textEl = t.querySelector('[data-testid="tweetText"]');
+      if (!link) continue; // 他人回复/嵌套引用作者不符——跳过
       const timeEl = t.querySelector("time");
       const perma = timeEl ? timeEl.closest("a") : null;
+      if (!perma) continue;
+      const m = perma.href.match(/status\/(\d+)/);
+      if (!m || got.has(m[1])) continue;
+
+      const textEl = t.querySelector('[data-testid="tweetText"]');
       const player = t.querySelector('[data-testid="videoPlayer"]');
       const poster =
         (player &&
           (player.querySelector("video[poster]")?.poster ||
             player.querySelector("img")?.src)) ||
         null;
-      return {
+      got.set(m[1], {
+        statusId: m[1],
         segments: textEl ? this._extractRichText(textEl) : [],
         images: [...t.querySelectorAll('[data-testid="tweetPhoto"] img')].map(
           (img) => img.src
         ),
-        video: player
-          ? { poster, url: perma ? perma.href : location.href }
-          : null,
-        time: timeEl ? timeEl.getAttribute("datetime") : null,
-        url: perma ? perma.href : location.href,
+        video: player ? { poster, url: perma.href } : null,
+        time: timeEl.getAttribute("datetime"),
+        url: perma.href,
         replyingTo: this._getReplyingTo(t, handle),
-      };
-    });
-
-    // 完整性自检：正文以省略号收尾且较长（长推截断特征；全文自然省略号会误报——宁误报不静默）
-    const warnings = [];
-    tweets.forEach((tw, i) => {
-      const plain = tw.segments
-        .map((s) => (s.type === "link" ? s.text : s.s))
-        .join("");
-      if (plain.length > 200 && /[……]|\.\.\.$/.test(plain.trim()))
-        warnings.push({ idx: i + 1, reason: "truncated" });
-    });
-    return { tweets, warnings };
+      });
+    }
   }
 
   // 「回复给 @xxx」标记：返回被回复 handle（无则 null；文本特征，中/英）

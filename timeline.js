@@ -19,6 +19,9 @@ import {
   getScreenshotsByCategory,
   getAvatar,
   getDBStats,
+  getAllThreads,
+  getThreadHtml,
+  deleteThreadById,
   dayKey,
 } from "../utils/db.js";
 import { updateTexts, getLang, resetLangData } from "../utils/lang.js";
@@ -1122,9 +1125,78 @@ document.querySelectorAll(".tab-button").forEach((tab) => {
       renderStatCards(stats, byDay);
       renderDailyChart(byDay);
       renderHeatmap();
+    } else if (name === "threads") {
+      updateTexts();
+      await renderThreads();
     }
   });
 });
+
+// ---------- Threads（推文串存档） ----------
+// 列表渲染：元数据行（作者/日期/推数/⚠ 数）+ 打开/删除；纯 createElement/textContent 防注入
+async function renderThreads() {
+  const listEl = document.getElementById("threads-list");
+  if (!listEl) return;
+  const threads = await getAllThreads();
+  listEl.replaceChildren();
+
+  if (!threads.length) {
+    const empty = document.createElement("p");
+    empty.className = "text-slate-400 py-10 text-center";
+    empty.dataset.key = "threadsEmpty";
+    empty.textContent = "暂无导出的推文串";
+    listEl.appendChild(empty);
+    updateTexts();
+    return;
+  }
+
+  for (const t of threads) {
+    const row = document.createElement("div");
+    row.className =
+      "glass p-4 rounded-xl shadow-sm flex items-center gap-4 flex-wrap";
+
+    const info = document.createElement("div");
+    info.className = "flex-1 min-w-0";
+    const name = document.createElement("div");
+    name.className = "font-semibold truncate";
+    name.textContent =
+      (t.authorName || t.handle) +
+      (t.handle ? ` @${t.handle}` : "") +
+      (t.warnings ? " ⚠" + t.warnings : "");
+    const sub = document.createElement("div");
+    sub.className = "text-sm text-slate-500";
+    sub.textContent = `${t.firstDate || ""} · ${t.tweetCount} ${getLang(
+      "threadTweetUnit"
+    )} · ${dayKey(t.createdAt || Date.now())}`;
+    info.append(name, sub);
+
+    const openBtn = document.createElement("button");
+    openBtn.className =
+      "rounded-xl px-4 py-1.5 bg-gradient-to-r from-blue-400 to-indigo-500 hover:from-blue-500 hover:to-indigo-600 text-white font-semibold shadow-md transition-all";
+    openBtn.dataset.key = "threadOpen";
+    openBtn.textContent = "打开";
+    openBtn.addEventListener("click", async () => {
+      const blob = await getThreadHtml(t.id);
+      if (!blob) return;
+      // blob URL 新 tab 打开（内容加载后不依赖源页；刷新会失效，存档阅读够用）
+      window.open(URL.createObjectURL(blob), "_blank");
+    });
+
+    const delBtn = document.createElement("button");
+    delBtn.className =
+      "rounded-xl px-4 py-1.5 bg-gradient-to-r from-red-400 to-red-600 hover:from-red-600 hover:to-red-800 text-white font-semibold shadow-md transition-all";
+    delBtn.dataset.key = "threadDelete";
+    delBtn.textContent = "删除";
+    delBtn.addEventListener("click", async () => {
+      await deleteThreadById(t.id);
+      await renderThreads();
+    });
+
+    row.append(info, openBtn, delBtn);
+    listEl.appendChild(row);
+  }
+  updateTexts();
+}
 
 document.getElementById("clearUser").addEventListener("click", async () => {
   filterUserId = null;

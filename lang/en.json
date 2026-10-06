@@ -417,7 +417,7 @@
   "podClearConfirm": "Clear all listening history and stats? (subscriptions are kept)",
   "threadExportBtn": "Export thread",
   "threadExpanding": "Expanding thread…",
-  "threadSuccess": "Thread exported",
+  "threadSuccess": "Thread saved (see Timeline → Threads tab)",
   "threadFail": "Export failed, please retry",
   "threadIncomplete": "Tweet #{n} may be incomplete, marked ⚠",
   "threadMissingHead": "Thread head missing from this page, export may lack the beginning",
@@ -425,5 +425,9 @@
   "threadVideoLabel": "Video",
   "threadTweetUnit": "tweets",
   "threadSuspicious": "May be incomplete",
-  "threadExportedAt": "Exported at"
+  "threadExportedAt": "Exported at",
+  "threadsTab": "Threads",
+  "threadOpen": "Open",
+  "threadDelete": "Delete",
+  "threadsEmpty": "No exported threads yet — export from a tweet detail page via 🧵"
 }

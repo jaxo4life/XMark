@@ -11,6 +11,7 @@ import {
   getFollowSnapshots,
   clearFollowSnapshots,
   rebuildFollow,
+  saveThreadToDB,
   dayKey,
 } from "./utils/db.js";
 
@@ -967,7 +968,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === "exportThread") {
     exportThreadHTML(request.payload)
-      .then((filename) => sendResponse({ success: true, filename }))
+      .then((meta) => sendResponse({ success: true, count: meta.tweetCount }))
       .catch((err) => {
         console.error("exportThread error:", err);
         sendResponse({ success: false, error: err?.message || String(err) });
@@ -1855,29 +1856,20 @@ ${tweetHtmls.join("")}
 </body>
 </html>`;
 
-  const blob = new Blob([html], { type: "text/html" });
-  const dataUrl = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error("readAsDataURL failed"));
-    reader.readAsDataURL(blob);
-  });
-
+  // 存 IndexedDB threads 表（v12），timeline 页「推文串」tab 打开查看；不落本地文件
   const idMatch = firstUrl.match(/status\/(\d+)/);
-  const id8 = idMatch ? idMatch[1].slice(0, 8) : Date.now().toString(36);
-  const filename = `XMark/Thread/thread_${p.handle}_${firstDate.replace(
-    /-/g,
-    ""
-  )}_${id8}.html`;
-
-  return await new Promise((resolve, reject) => {
-    chrome.downloads.download(
-      { url: dataUrl, filename, saveAs: false },
-      (downloadId) => {
-        if (chrome.runtime.lastError)
-          reject(new Error(chrome.runtime.lastError.message));
-        else resolve(filename);
-      }
-    );
-  });
+  const threadId = idMatch ? idMatch[1] : Date.now().toString(36);
+  const meta = {
+    id: threadId, // 串首推文 id：同串重复导出幂等覆盖
+    handle: p.handle,
+    authorName: p.authorName,
+    tweetCount: p.tweets.length,
+    firstDate,
+    firstUrl,
+    warnings: (p.warnings || []).filter((w) => w.idx > 0).length,
+    html: new Blob([html], { type: "text/html" }),
+    createdAt: new Date().toISOString(),
+  };
+  await saveThreadToDB(meta);
+  return meta;
 }
