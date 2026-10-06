@@ -880,13 +880,15 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
     tweets.forEach((tweet) => {
       if (tweet.hasAttribute("data-twitter-notes-processed")) return;
 
-      // 去除广告推文
+      // 去除广告推文：inlinePrompt 结构特征（X 自带标识，零误伤）优先，关键词兜底
       const hintKeywords = ["广告", "推荐", "Promoted", "Recommended", "Ad"];
 
-      const isAd = [...tweet.querySelectorAll('div[dir="ltr"] span')].some(
-        (span) =>
-          hintKeywords.includes((span.textContent || "").trim())
-      );
+      const isAd =
+        !!tweet.querySelector('[data-testid="inlinePrompt"]') ||
+        [...tweet.querySelectorAll('div[dir="ltr"] span')].some(
+          (span) =>
+            hintKeywords.includes((span.textContent || "").trim())
+        );
 
       // 去广告开关关闭时不隐藏，广告推文走正常备注流程
       if (isAd && this._hideAds) {
@@ -908,6 +910,22 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
       this.addTweetNoteElements(tweet, null, username, userNameElement, true);
       tweet.setAttribute("data-twitter-notes-processed", "true");
     });
+
+    // 新广告样式若为独立格子（inlinePrompt 不在推文内），隐藏其所属推文格容器；
+    // 复用 data-xmark-ad-hidden 标记，restoreHiddenAds 还原路径零改动
+    if (this._hideAds) {
+      document
+        .querySelectorAll('[data-testid="inlinePrompt"]')
+        .forEach((prompt) => {
+          if (prompt.closest('[data-testid="tweet"]')) return; // 推文内已走上面分支
+          const cell =
+            prompt.closest('[data-testid="cellInnerDiv"]') || prompt;
+          if (cell.hasAttribute("data-xmark-ad-hidden")) return;
+          cell.setAttribute("data-xmark-ad-hidden", "true");
+          cell.style.display = "none";
+          this.incrementAdBlockedCount();
+        });
+    }
   }
 
   // 去除广告计数：今日已去除 + 总计已去除，按自然日重置今日计数

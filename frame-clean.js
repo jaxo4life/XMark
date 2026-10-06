@@ -75,18 +75,31 @@ button[data-testid="app-bar-back"]:disabled{opacity:.4;pointer-events:none}
   }
 
   // 广告隐藏：与 content.js processHomePage 同款逻辑 + 幂等标记
+  // inlinePrompt 结构特征（X 自带标识，零误伤）优先，关键词兜底
   function processAds() {
     if (!hideAds) return;
     document.querySelectorAll('[data-testid="tweet"]').forEach((tweet) => {
       if (tweet.hasAttribute("data-xmark-frame-ad")) return;
-      const isAd = [...tweet.querySelectorAll('div[dir="ltr"] span')].some(
-        (span) => ADS_KEYWORDS.includes((span.textContent || "").trim())
-      );
+      const isAd =
+        !!tweet.querySelector('[data-testid="inlinePrompt"]') ||
+        [...tweet.querySelectorAll('div[dir="ltr"] span')].some(
+          (span) => ADS_KEYWORDS.includes((span.textContent || "").trim())
+        );
       if (isAd) {
         tweet.setAttribute("data-xmark-frame-ad", "1");
         tweet.style.display = "none";
       }
     });
+    // 独立格子形态（inlinePrompt 不在推文内）→ 隐藏所属推文格容器
+    document
+      .querySelectorAll('[data-testid="inlinePrompt"]')
+      .forEach((prompt) => {
+        if (prompt.closest('[data-testid="tweet"]')) return;
+        const cell = prompt.closest('[data-testid="cellInnerDiv"]') || prompt;
+        if (cell.hasAttribute("data-xmark-frame-ad")) return;
+        cell.setAttribute("data-xmark-frame-ad", "1");
+        cell.style.display = "none";
+      });
   }
 
   async function loadHideAds() {
