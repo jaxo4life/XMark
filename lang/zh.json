@@ -414,5 +414,16 @@
   "podUnsub": "删除订阅",
   "podImported": "已导入",
   "podImportErr": "导入失败",
-  "podClearConfirm": "确认清空全部收听记录与统计？（不影响订阅）"
+  "podClearConfirm": "确认清空全部收听记录与统计？（不影响订阅）",
+  "threadExportBtn": "导出推文串",
+  "threadExpanding": "正在展开推文串…",
+  "threadSuccess": "推文串已导出",
+  "threadFail": "导出失败，请重试",
+  "threadIncomplete": "第 {n} 条疑似不完整，已标 ⚠",
+  "threadMissingHead": "串首不在当前页，导出可能缺头部",
+  "threadNotFound": "未找到推文串主推，请刷新后重试",
+  "threadVideoLabel": "视频",
+  "threadTweetUnit": "推",
+  "threadSuspicious": "疑似不完整",
+  "threadExportedAt": "导出于"
 }
