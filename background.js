@@ -965,6 +965,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // 异步响应
   }
 
+  if (request.action === "exportThread") {
+    exportThreadHTML(request.payload)
+      .then((filename) => sendResponse({ success: true, filename }))
+      .catch((err) => {
+        console.error("exportThread error:", err);
+        sendResponse({ success: false, error: err?.message || String(err) });
+      });
+    return true; // 异步响应
+  }
+
   if (request.action === "getScreenshotCountByUserId") {
     getScreenshotCountByUserId(request.userId)
       .then((res) => {
@@ -1650,4 +1660,224 @@ async function followKickCheck() {
   if (track.state === "done" && track.day === today) return;
   if (track.state === "cancelled" && track.day === today) return;
   await startFollowCollection();
+}
+
+/* ==========================Thread 导出（组装下载侧）========================== */
+
+// Thread 导出文案：bg 无 DOM/data-key 机制，按扩展 locale 读一次 lang JSON
+let threadI18n = null;
+async function getThreadI18n() {
+  if (threadI18n) return threadI18n;
+  const locale = chrome.i18n.getUILanguage().startsWith("zh") ? "zh" : "en";
+  try {
+    const resp = await fetch(chrome.runtime.getURL(`lang/${locale}.json`));
+    threadI18n = await resp.json();
+  } catch (_) {
+    threadI18n = {};
+  }
+  return threadI18n;
+}
+
+// pbs.twimg.com 图片 URL 改 name=large（~1536px，体积约 orig 1/5~1/10，阅读无损感）
+function threadImgUrl(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname === "pbs.twimg.com" && u.pathname.startsWith("/media/"))
+      u.searchParams.set("name", "large");
+    return u.href;
+  } catch (_) {
+    return url;
+  }
+}
+
+async function fetchAsDataURL(url) {
+  try {
+    const resp = await fetch(url, { credentials: "omit" });
+    if (!resp.ok) return null;
+    const blob = await resp.blob();
+    return await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch (_) {
+    return null; // 单图失败降级占位，不中断整串
+  }
+}
+
+function threadEscapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+async function exportThreadHTML(p) {
+  const i18n = await getThreadI18n();
+  const langIso = chrome.i18n.getUILanguage().startsWith("zh") ? "zh" : "en";
+  const threadVideoLabel = i18n.threadVideoLabel || "Video";
+  const threadSuspicious = i18n.threadSuspicious || "May be incomplete";
+  const threadTweetUnit = i18n.threadTweetUnit || "tweets";
+  const threadMissingHead =
+    i18n.threadMissingHead || "Thread head missing from this page";
+  const threadExportedAt = i18n.threadExportedAt || "Exported at";
+
+  const warnIdx = new Set(
+    (p.warnings || []).filter((w) => w.idx > 0).map((w) => w.idx)
+  );
+  const missingHead = (p.warnings || []).some((w) => w.reason === "missingHead");
+
+  // 头像（拿不到→首字母圆占位，纯 CSS）
+  const avatar = (p.avatarUrl && (await fetchAsDataURL(p.avatarUrl))) || null;
+
+  // 逐推图片预取（串行，防几十并发打 CDN；单图失败为 null→占位）
+  const tweetHtmls = [];
+  for (let i = 0; i < p.tweets.length; i++) {
+    const t = p.tweets[i];
+    const imgs = [];
+    for (const src of t.images) {
+      imgs.push(await fetchAsDataURL(threadImgUrl(src)));
+    }
+    const videoPoster =
+      t.video && t.video.poster
+        ? await fetchAsDataURL(threadImgUrl(t.video.poster))
+        : null;
+
+    const segHtml = t.segments
+      .map((seg) =>
+        seg.type === "link"
+          ? `<a href="${threadEscapeHtml(seg.href)}" target="_blank" rel="noopener">${threadEscapeHtml(seg.text)}</a>`
+          : threadEscapeHtml(seg.s)
+      )
+      .join("");
+
+    const imgsHtml = imgs
+      .map(
+        (d) =>
+          d
+            ? `<img class="media" src="${d}" alt="" loading="lazy">`
+            : `<div class="media ph">🖼</div>`
+      )
+      .join("");
+
+    const videoHtml = t.video
+      ? `<a class="video" href="${threadEscapeHtml(t.video.url)}" target="_blank" rel="noopener">${
+          videoPoster
+            ? `<img class="media" src="${videoPoster}" alt="">`
+            : `<div class="media ph">📹</div>`
+        }<span>📹 ${threadVideoLabel}</span></a>`
+      : "";
+
+    const replyHtml =
+      i === 0 && t.replyingTo
+        ? `<div class="replying">↩ @${threadEscapeHtml(t.replyingTo)}</div>`
+        : "";
+
+    const warnHtml = warnIdx.has(i + 1)
+      ? `<span class="warn" title="${threadSuspicious}">⚠</span>`
+      : "";
+
+    tweetHtmls.push(`
+      <article class="tweet">
+        <div class="head"><span class="idx">${i + 1}</span>${warnHtml}<time class="t">${threadEscapeHtml(
+      t.time || ""
+    )}</time></div>
+        ${replyHtml}
+        <div class="text">${segHtml}</div>
+        ${imgsHtml}${videoHtml}
+      </article>`);
+  }
+
+  const firstUrl = p.tweets[0] ? p.tweets[0].url : "";
+  const firstDate =
+    p.tweets[0] && p.tweets[0].time ? p.tweets[0].time.slice(0, 10) : "";
+  const initial = threadEscapeHtml(
+    (p.authorName || "?").trim().charAt(0).toUpperCase()
+  );
+  const avatarHtml = avatar
+    ? `<img class="avatar" src="${avatar}" alt="">`
+    : `<div class="avatar ph-avatar">${initial}</div>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="${langIso}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${threadEscapeHtml(p.authorName)} (@${threadEscapeHtml(p.handle)}) · thread</title>
+<style>
+:root{--bg:#fff;--fg:#0f1419;--muted:#536471;--line:#eff3f4;--accent:#1d9bf0;--block:#f7f9f9}
+@media (prefers-color-scheme:dark){:root{--bg:#15202b;--fg:#e7e9ea;--muted:#8b98a5;--line:#38444d;--accent:#1d9bf0;--block:#1e2732}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif}
+main{max-width:680px;margin:0 auto;padding:48px 24px 64px}
+header{display:flex;gap:14px;align-items:center;margin-bottom:8px}
+.avatar{width:48px;height:48px;border-radius:50%;object-fit:cover}
+.ph-avatar{display:flex;align-items:center;justify-content:center;background:var(--block);color:var(--muted);font-size:22px;font-weight:700}
+.who{display:flex;flex-direction:column}
+.name{font-weight:700;font-size:17px}
+.at{color:var(--muted);font-size:14px}
+.sub{color:var(--muted);font-size:13px;margin:10px 0 0}
+.sub a{color:var(--accent);text-decoration:none}
+.missing{margin:14px 0;padding:10px 14px;border:1px solid #f0af4b;border-radius:10px;color:#f0af4b;font-size:13px}
+article.tweet{padding:22px 0;border-bottom:1px solid var(--line)}
+article.tweet:last-of-type{border-bottom:none}
+.head{display:flex;align-items:baseline;gap:10px;margin-bottom:6px}
+.idx{font-size:13px;font-weight:700;color:var(--muted)}
+.t{margin-left:auto;color:var(--muted);font-size:12px}
+.warn{color:#f0af4b;font-size:14px}
+.replying{color:var(--muted);font-size:13px;margin-bottom:4px}
+.text{white-space:pre-wrap;word-break:break-word;font-size:17px}
+.text a,.video span{color:var(--accent);text-decoration:none}
+img.media{width:100%;border-radius:12px;display:block;margin:12px 0 2px}
+.media.ph{display:flex;align-items:center;justify-content:center;aspect-ratio:16/9;background:var(--block);color:var(--muted);font-size:28px}
+.video{display:block;position:relative}
+.video span{position:absolute;left:12px;bottom:10px;background:rgba(0,0,0,.65);color:#fff;padding:2px 10px;border-radius:999px;font-size:12px}
+footer{margin-top:28px;color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<main>
+<header>${avatarHtml}<div class="who"><span class="name">${threadEscapeHtml(
+    p.authorName
+  )}</span><span class="at">@${threadEscapeHtml(p.handle)}</span></div></header>
+<div class="sub">${firstDate} · ${p.tweets.length} ${threadTweetUnit} · <a href="${threadEscapeHtml(
+    firstUrl
+  )}" target="_blank" rel="noopener">x.com</a></div>
+${missingHead ? `<div class="missing">${threadMissingHead}</div>` : ""}
+${tweetHtmls.join("")}
+<footer>${threadExportedAt} ${new Date()
+    .toISOString()
+    .slice(0, 16)
+    .replace("T", " ")} UTC · XMark</footer>
+</main>
+</body>
+</html>`;
+
+  const blob = new Blob([html], { type: "text/html" });
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("readAsDataURL failed"));
+    reader.readAsDataURL(blob);
+  });
+
+  const idMatch = firstUrl.match(/status\/(\d+)/);
+  const id8 = idMatch ? idMatch[1].slice(0, 8) : Date.now().toString(36);
+  const filename = `XMark/Thread/thread_${p.handle}_${firstDate.replace(
+    /-/g,
+    ""
+  )}_${id8}.html`;
+
+  return await new Promise((resolve, reject) => {
+    chrome.downloads.download(
+      { url: dataUrl, filename, saveAs: false },
+      (downloadId) => {
+        if (chrome.runtime.lastError)
+          reject(new Error(chrome.runtime.lastError.message));
+        else resolve(filename);
+      }
+    );
+  });
 }
