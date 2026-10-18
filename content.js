@@ -712,6 +712,12 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
 
     // 主 MutationObserver：同时监听 childList（新增节点）和 attributes（class / aria-selected 等）
     const observer = new MutationObserver((mutations) => {
+      // 孤儿自停：扩展重载后旧 content script 的 chrome.storage 全部失效（调了就抛
+      // "Extension context invalidated" 刷屏），检测 runtime.id 已空则断开主循环安静退出
+      if (!chrome.runtime?.id) {
+        observer.disconnect();
+        return;
+      }
       let shouldProcess = false;
       for (const m of mutations) {
         if (m.type === "childList" && m.addedNodes.length) {
@@ -948,7 +954,12 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
         stats.totalCount += 1;
         await chrome.storage.local.set({ adBlockedStats: stats });
       })
-      .catch((err) => console.error("广告计数失败:", err));
+      .catch((err) => {
+        // 扩展重载后的孤儿脚本调用（主 observer 已自停，此处是链上最后一次）：静默
+        if (String(err?.message || "").includes("Extension context invalidated"))
+          return;
+        console.error("广告计数失败:", err);
+      });
     return this._adCountChain;
   }
 
@@ -1114,17 +1125,6 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
     screenshotsButton.textContent = "\u{1F4F8}";
     screenshotsButton.style.display = "none";
 
-    const threadButton = document.createElement("button");
-    threadButton.className = "twitter-notes-inline-button";
-    threadButton.textContent = "\u{1F9F5}"; // 🧵
-    threadButton.style.display = "none";
-    // 仅推文详情页（真详情页，非时间线 modal——modal 内数据不全不提供入口）
-    if (this.isTweetDetailPage()) {
-      threadButton.style.display = "inline";
-      threadButton.dataset.titleKey = "threadExportBtn";
-      threadButton.title = langData.threadExportBtn;
-    }
-
     const currentNote = this.getUserNote(username, userId);
 
     if (currentNote) {
@@ -1219,278 +1219,11 @@ html[data-xmark-theme="dark"] #twitterTagPanel{--xt-bg:#16181c;--xt-line:#2f3336
       chrome.runtime.sendMessage({ action: "openTimelineWithUserId", finalId });
     });
 
-    threadButton.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.exportThread();
-    });
-
     noteContainer.appendChild(noteDisplay);
     noteContainer.appendChild(noteButton);
     noteContainer.appendChild(detailButton);
     noteContainer.appendChild(screenshotsButton);
-    noteContainer.appendChild(threadButton);
     targetElement.appendChild(noteContainer);
-  }
-
-  // 是否处于可导出的推文详情页：顶层（非右列帧）+ /<handle>/status/<id> 路由 + 无 modal 打开
-  // （时间线点开的推文是 modal，URL 同为 /status/，aria-modal 存在即可区分）
-  isTweetDetailPage() {
-    if (IN_FRAME) return false;
-    if (!/\/[^/]+\/status\/\d+/.test(location.pathname)) return false;
-    return !document.querySelector('[aria-modal="true"]');
-  }
-
-  /* ==========================Thread 导出（采集侧）========================== */
-
-  _threadSleep(ms) {
-    return new Promise((r) => setTimeout(r, ms));
-  }
-
-  // 详情页主推：URL 的 status id 对应的推文节点（点串中任何一条的 🧵 都以它定串主）
-  getFocusTweet() {
-    const m = location.pathname.match(/\/([^/]+)\/status\/(\d+)/);
-    if (!m) return null;
-    const timeLink = document.querySelector(`a[href*="/status/${m[2]}"] time`);
-    return timeLink ? timeLink.closest('[data-testid="tweet"]') : null;
-  }
-
-  async exportThread() {
-    const focus = this.getFocusTweet();
-    if (!focus) {
-      this.showNotification(langData.threadNotFound, "error");
-      return;
-    }
-    // 串主 handle：主推 User-Name 内第一个作者链接的 pathname（"/handle"）
-    const authorLink = focus.querySelector(
-      '[data-testid="User-Name"] a[href^="/"]'
-    );
-    const handle = authorLink
-      ? authorLink.pathname.replace(/^\//, "").split("/")[0]
-      : null;
-    if (!handle) {
-      this.showNotification(langData.threadNotFound, "error");
-      return;
-    }
-    const authorName = (authorLink && authorLink.textContent.trim()) || handle;
-    const avatarImg =
-      focus.querySelector('[data-testid="Tweet-User-Avatar"] img') ||
-      focus.querySelector('img[src*="profile_images"]');
-    const avatarUrl = avatarImg ? avatarImg.src : null;
-
-    this.showNotification(langData.threadExpanding);
-    const startPath = location.pathname;
-
-    // 边滚边采：X 虚拟列表是移除式回收（滚走即丢 DOM），「滚完再一次性扫描」必丢推——
-    // 每轮滚动后立刻收割当前 DOM 进内存 Map（statusId 去重），交替滚底/顶触发两向懒加载
-    const got = new Map();
-    let stable = 0;
-    let lastGot = -1;
-    let lastDom = -1;
-    for (let round = 0; round < 50; round++) {
-      this._harvestTweets(handle, got);
-      this._clickThreadFolds();
-      this._clickShowMores();
-      if (location.pathname !== startPath) {
-        // 展开/滚动过程触发导航（意外跳页）——中止
-        this.showNotification(langData.threadFail, "error");
-        return;
-      }
-      window.scrollTo(
-        0,
-        round % 2 === 0
-          ? document.documentElement.scrollHeight
-          : 0
-      );
-      await this._threadSleep(700);
-      // 稳定判定：已采数 + DOM 推文数双信号连续 4 轮不变才收工
-      const domCount = document.querySelectorAll('[data-testid="tweet"]').length;
-      if (got.size === lastGot && domCount === lastDom) stable++;
-      else stable = 0;
-      lastGot = got.size;
-      lastDom = domCount;
-      if (stable >= 4) break;
-    }
-    this._harvestTweets(handle, got); // 最后补采一轮
-    window.scrollTo(0, 0);
-
-    // 按推文 id 数值排序（thread 顺序 = 时间顺序 = id 单调递增），不依赖 DOM 顺序
-    const tweets = [...got.values()].sort(
-      (a, b) => Number(a.statusId) - Number(b.statusId)
-    );
-    if (!tweets.length) {
-      this.showNotification(langData.threadNotFound, "error");
-      return;
-    }
-
-    // 完整性自检：正文以省略号收尾且较长（长推截断特征；全文自然省略号会误报——宁误报不静默）
-    const warnings = [];
-    tweets.forEach((tw, i) => {
-      const plain = tw.segments
-        .map((s) => (s.type === "link" ? s.text : s.s))
-        .join("");
-      if (plain.length > 200 && /[……]|\.\.\.$/.test(plain.trim()))
-        warnings.push({ idx: i + 1, reason: "truncated" });
-    });
-    // 残留折叠线/截断按钮 = 展开失败信号（串头缺 / show-more 没点掉）
-    if (this._findThreadFold()) warnings.unshift({ idx: 0, reason: "missingHead" });
-    if (document.querySelector('[data-testid="tweet-text-show-more-link"]'))
-      warnings.push({ idx: -1, reason: "showMoreFailed" });
-
-    // toast 警告（不阻断导出，HTML 内同步标注）
-    warnings.forEach((w) => {
-      if (w.reason === "missingHead")
-        this.showNotification(langData.threadMissingHead, "error");
-      else if (w.idx > 0)
-        this.showNotification(
-          langData.threadIncomplete.replace("{n}", String(w.idx)),
-          "error"
-        );
-    });
-
-    chrome.runtime.sendMessage(
-      {
-        action: "exportThread",
-        payload: {
-          handle,
-          authorName,
-          avatarUrl,
-          tweets,
-          warnings, // [{idx(1起,-1=整页), reason:"missingHead"|"truncated"|"showMoreFailed"}]
-        },
-      },
-      (resp) => {
-        // SW 冷启动窗口消息可能无应答（项目已知竞态）——resp 判空
-        if (resp && resp.success) this.showNotification(langData.threadSuccess);
-        else this.showNotification(langData.threadFail, "error");
-      }
-    );
-  }
-
-  // 「显示此推文串」折叠线：文本特征定位（无稳定 testid），限主栏内；命中即点
-  _clickThreadFolds() {
-    let clicked = 0;
-    for (const btn of this._findThreadFolds()) {
-      btn.click();
-      clicked++;
-    }
-    return clicked;
-  }
-
-  _findThreadFold() {
-    return this._findThreadFolds()[0] || null;
-  }
-
-  _findThreadFolds() {
-    const col = document.querySelector('[data-testid="primaryColumn"]');
-    if (!col) return [];
-    const RX = /^(显示此推文串|Show this thread)$/;
-    return [...col.querySelectorAll('[role="button"]')].filter((el) =>
-      RX.test((el.textContent || "").trim())
-    );
-  }
-
-  // 正文截断（长推 Show more）：testid 优先（用户实测提供）+ 主栏内文本兜底按钮
-  _clickShowMores() {
-    let clicked = 0;
-    document
-      .querySelectorAll('[data-testid="tweet-text-show-more-link"]')
-      .forEach((b) => {
-        b.click();
-        clicked++;
-      });
-    const col = document.querySelector('[data-testid="primaryColumn"]');
-    if (col) {
-      const RX = /^(显示更多|Show more)$/;
-      for (const el of col.querySelectorAll('[role="button"]')) {
-        if (RX.test((el.textContent || "").trim())) {
-          el.click();
-          clicked++;
-        }
-      }
-    }
-    return clicked;
-  }
-
-  // 收割当前 DOM 的串主推文进 got（Map 按 statusId 去重，幂等；移除式回收前已采数据不丢）
-  _harvestTweets(handle, got) {
-    const col = document.querySelector('[data-testid="primaryColumn"]');
-    if (!col) return;
-    for (const t of col.querySelectorAll('[data-testid="tweet"]')) {
-      const link = [
-        ...t.querySelectorAll('[data-testid="User-Name"] a[href^="/"]'),
-      ].find((a) => a.pathname === "/" + handle);
-      if (!link) continue; // 他人回复/嵌套引用作者不符——跳过
-      const timeEl = t.querySelector("time");
-      const perma = timeEl ? timeEl.closest("a") : null;
-      if (!perma) continue;
-      const m = perma.href.match(/status\/(\d+)/);
-      if (!m || got.has(m[1])) continue;
-
-      const textEl = t.querySelector('[data-testid="tweetText"]');
-      const player = t.querySelector('[data-testid="videoPlayer"]');
-      const poster =
-        (player &&
-          (player.querySelector("video[poster]")?.poster ||
-            player.querySelector("img")?.src)) ||
-        null;
-      got.set(m[1], {
-        statusId: m[1],
-        segments: textEl ? this._extractRichText(textEl) : [],
-        images: [...t.querySelectorAll('[data-testid="tweetPhoto"] img')].map(
-          (img) => img.src
-        ),
-        video: player ? { poster, url: perma.href } : null,
-        time: timeEl.getAttribute("datetime"),
-        url: perma.href,
-        replyingTo: this._getReplyingTo(t, handle),
-      });
-    }
-  }
-
-  // 「回复给 @xxx」标记：返回被回复 handle（无则 null；文本特征，中/英）
-  _getReplyingTo(tweet, selfHandle) {
-    const els = tweet.querySelectorAll('div[dir="auto"]');
-    for (const el of els) {
-      const txt = (el.textContent || "").trim();
-      const m = txt.match(/^(?:回复给|Replying to)\s*@?([A-Za-z0-9_]+)/);
-      if (m) return m[1] === selfHandle ? selfHandle : m[1];
-    }
-    return null;
-  }
-
-  // 正文结构化提取：递归遍历，a→link 段（t.co 还原），br→换行，其余文本累积
-  _extractRichText(rootEl) {
-    const segments = [];
-    let buf = "";
-    const flush = () => {
-      if (buf) {
-        segments.push({ type: "text", s: buf });
-        buf = "";
-      }
-    };
-    const walk = (el) => {
-      for (const child of el.childNodes) {
-        if (child.nodeType === Node.TEXT_NODE) {
-          buf += child.textContent;
-        } else if (child.nodeType === Node.ELEMENT_NODE) {
-          if (child.tagName === "BR") {
-            buf += "\n";
-          } else if (child.tagName === "A") {
-            flush();
-            const href = child.getAttribute("href") || "";
-            const text = (child.textContent || "").trim();
-            segments.push({ type: "link", text, href });
-            // 不深入 a：其文本已整体取走，避免重复
-          } else {
-            walk(child);
-          }
-        }
-      }
-    };
-    walk(rootEl);
-    flush();
-    return segments;
   }
 
   addProfileNoteButton(container, userId, username) {
