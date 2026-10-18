@@ -1,5 +1,16 @@
 # 更新日志 / Changelog
 
+## v6.7.0
+
+| 中文 | English |
+|------|----------|
+| 新增只读模式（克制发言）：一键进入「只能看」——隐藏全部发帖入口（左栏发帖按钮 / home 输入框 / 详情页回复框）与推文操作栏写按钮（回复 / 转推 / 点赞 / 书签 / 分享 / 分析，仅留截图按钮并自动居中），拦截 n / r / l / t / b 写操作快捷键；右列 Timeline 帧内同步生效 | New read-only mode (impulse control): one toggle turns X into look-only — all compose entry points hidden (nav post button / home composer / detail-page reply box) plus tweet action-bar write buttons (reply / repost / like / bookmark / share / analytics; only the screenshot button remains, auto-centered), with n / r / l / t / b shortcuts intercepted; synced inside the right-column iframe |
+| 只读开启自动联动净化环境：隐藏广告 + 右侧边栏 + 左栏全部项一并打开（单项可再自选），关闭只读不影响净化设置 | Enabling read-only also turns on the clean environment — ad hiding, right sidebar and all left-nav items at once (each still individually adjustable); turning it back off leaves those untouched |
+| 适配 2026-10 X 改版：关注（Follow_Link / connect_people）、创作者工作室（/i/jf/creators，nav 与 header 双前缀兜底）；新增「呼叫」菜单项隐藏 | Adapted to the Oct 2026 X update: Following (Follow_Link / connect_people), Creator Studio (/i/jf/creators, dual nav/header fallback); new "Calls" nav-item hiding |
+| 修复：推文详情页主推文被只读模式误隐藏（离屏回复框与主推文同格，composer 规则加 :not(:has(article)) 精准分离）；界面净化文本兜底 CSS 规则误删回归 | Fixes: detail-page main tweet wrongly hidden by read-only mode (the offscreen reply box shares its cell; compose rules now use :not(:has(article))); regression that dropped the text-fallback CSS rule |
+| 修复：IndexedDB 版本防御（open 12 + threads 表占位，防降版本 VersionError 炸掉全部 IDB 功能）；关注采集收尾异常兜底（防「每次打开 Chrome 都在采集」死循环）；扩展重载后旧页面孤儿脚本自停（不再刷「广告计数失败」） | Fixes: IndexedDB version guard (open 12 + threads table placeholder, preventing VersionError from a downgrade); follow-collection finalizer exception guard (fixes the \"collecting on every Chrome start\" loop); orphaned page scripts self-stop after extension reload (no more \"ad count failed\" spam) |
+| v6.6.0 / v6.6.1 的关注变动追踪随本版一并发布（条目见下） | The follow-changes tracker from v6.6.0 / v6.6.1 ships with this release (entry below) |
+
 ## v6.6.1
 
 | 中文 | English |

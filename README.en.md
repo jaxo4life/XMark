@@ -7,7 +7,7 @@
 <p align="center">A Chrome extension for X (formerly Twitter): Notes · Screenshots · Ad-filtering</p>
 
 <p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/version-6.6.1-blue.svg" alt="Version"></a>
+  <a href="#"><img src="https://img.shields.io/badge/version-6.7.0-blue.svg" alt="Version"></a>
   <a href="https://developer.chrome.com/docs/extensions/mv3/intro/"><img src="https://img.shields.io/badge/Manifest-V3-green.svg" alt="Manifest"></a>
   <a href="#"><img src="https://img.shields.io/badge/Platform-Chrome%20Extension-orange.svg" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL_v3-blue.svg" alt="License"></a>
@@ -30,7 +30,8 @@
 - 🗂 **Timeline** — All screenshots auto-archived; search by user / date / category / keyword, with an activity heatmap
 - 🏷 **Tag Management** — Tagging, drag-to-reorder, filter users by tag (edge-handle drawer + count badges), independent tag import/export
 - 🚫 **Ad Filtering** — Auto-detects and hides promoted tweets in your feed; ad-block counts (today / total) at a glance
-- 🧹 **UI Clean** — Customizable hiding of left-nav items (Explore / Grok / Premium / Money / Articles / Following / Creator Studio / More), the right sidebar, and ad tweets; one-click clean-left-nav — applied instantly
+- 🧹 **UI Clean** — Customizable hiding of left-nav items (Explore / Grok / Premium / Money / Articles / Following / Calls / Creator Studio / More), the right sidebar, and ad tweets; one-click clean-left-nav — applied instantly
+- 🔕 **Read-only Mode** — One toggle turns X into look-only: all compose entry points and tweet action-bar write buttons hidden (only the screenshot button remains, auto-centered), n / r / l / t / b shortcuts intercepted, synced in-frame; enabling it also turns on the clean environment — an impulse control for posting
 - 🔍 **XFinder Advanced Search** — a floating panel from the top-right fab after hiding the right rail: combine from / keyword / to-interaction / date range, with X native operators (detailed hints behind the ? icon) and one-click history repeat; UI fully aligned with X official
 - 📋 **Right Column Timeline** — after hiding the right rail, a native X List timeline lives in the freed third column: TweetDeck-style tab bar for multi-List switching (click the active tab to force-return to the list), iframe-embedded native page with deep in-frame cleaning, loading veil and background-freeze self-healing; **full in-frame notes / tag badges / screenshots** (frame-coordinate translation + temporarily hiding sticky bars while shooting); shown on Home / tweet detail / profile pages, with **zero column reload across top-level navigation** (persistent fixed-layer architecture); clicking a username in-frame opens the profile top-level natively (column untouched); managed in popup "Advanced" → "Enhance"
 - 📊 **Follow Changes Tracker** — daily collection of your following list (a page hook captures X's own request sample and the service worker replays the cursor chain — immune to queryId churn, zero manual work); focuses on mutual-follow changes: who unfollowed / refollowed you (followed_by flips), four net-change groups with same-day round trips cancelling out; calendar-badged detail page with per-day lists; incremental storage <1MB/year, rename tracking and inline XMark notes
