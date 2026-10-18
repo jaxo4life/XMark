@@ -7,6 +7,8 @@
  *   3. 广告推文隐藏（跟随「界面净化·隐藏广告推文」开关 uiCleanSettings.hideAds）
  *   4. 帧内导航接管：X 对 iframe 有意降级为完整文档导航（文档销毁/滚动丢失），
  *      拦截 <a> 点击转 pushState + popstate 交 X 路由 SPA 渲染（失败自禁用并回滚）
+ *   5. 只读模式（跟随 uiCleanSettings.readOnly）：藏帧内操作栏写按钮/发帖入口 +
+ *      拦写操作快捷键——清单与 ui-clean.js 各持一份，改动须两处同步
  *
  * 顶层页面（window.top === window.self）直接 return——顶层净化由 ui-clean.js 负责，
  * 防重入零成本（实测：content script 默认 all_frames:false 不进帧，本条目显式 true）。
@@ -43,6 +45,27 @@ div.r-1pz39u2:has([data-testid="share-button"]){display:none!important}
 [data-testid="primaryColumn"]{border-left:none!important;border-right:none!important}
 /* 列表时间线页的返回按钮禁用态（iframe 以列表为首页，返回无处可去） */
 button[data-testid="app-bar-back"]:disabled{opacity:.4;pointer-events:none}
+/* 只读模式静态层（body 类由 processReadOnly 挂；⚠️ 逗号后选择器不继承前缀，逐条写）
+   ——清单与 ui-clean.js 的 READ_ONLY 同步维护 */
+body.xmark-readonly [data-testid="reply"]{display:none!important}
+body.xmark-readonly [data-testid="retweet"]{display:none!important}
+body.xmark-readonly [data-testid="unretweet"]{display:none!important}
+body.xmark-readonly [data-testid="like"]{display:none!important}
+body.xmark-readonly [data-testid="unlike"]{display:none!important}
+body.xmark-readonly [data-testid="bookmark"]{display:none!important}
+body.xmark-readonly [data-testid="removeBookmark"]{display:none!important}
+body.xmark-readonly a[href$="/analytics"]{display:none!important}
+body.xmark-readonly [role="group"] button[aria-haspopup="menu"]:not([data-testid]){display:none!important}
+body.xmark-readonly [data-testid="SideNav_NewTweet_Button"]{display:none!important}
+/* composer 格必须 :not(:has(article))——详情页主推文格 cellInnerDiv 内含离屏回复框
+   （tweetTextarea_0 在 inline_reply_offscreen 里），裸 :has 误杀整条主推文 */
+body.xmark-readonly [data-testid="cellInnerDiv"]:has([data-testid="tweetTextarea_0"]):not(:has(article)){display:none!important}
+body.xmark-readonly [data-testid="cellInnerDiv"]:has([data-testid="tweetTextareaInline"]):not(:has(article)){display:none!important}
+body.xmark-readonly [data-testid="inline_reply_offscreen"]{display:none!important}
+body.xmark-readonly [data-testid="FloatingActionButtons_Column"]{display:none!important}
+/* 只读模式操作栏只剩截图按钮 → 水平居中（flex 行容器内 margin auto 吃满余空） */
+body.xmark-readonly [role="group"] > .screenshot-btn{margin:0 auto}
+body.xmark-readonly .xmark-ro-hidden{display:none!important}
 `;
     const style = document.createElement("style");
     style.id = "xmark-frame-clean-style";
@@ -51,6 +74,7 @@ button[data-testid="app-bar-back"]:disabled{opacity:.4;pointer-events:none}
   }
 
   let hideAds = true; // 默认开，与 uiCleanSettings.hideAds 默认一致
+  let readOnly = false; // 只读模式，默认关（与 uiCleanSettings.readOnly 同步）
 
   // 列表 header 格 + 页面标题 bar JS 兜底（CSS :has() 双保险，目标同 injectStyle 注释）
   function processListHeader() {
@@ -108,6 +132,7 @@ button[data-testid="app-bar-back"]:disabled{opacity:.4;pointer-events:none}
         "uiCleanSettings",
       ]);
       hideAds = uiCleanSettings?.hideAds !== false;
+      readOnly = !!uiCleanSettings?.readOnly;
       if (!hideAds) {
         document.querySelectorAll("[data-xmark-frame-ad]").forEach((tweet) => {
           tweet.removeAttribute("data-xmark-frame-ad");
@@ -116,6 +141,29 @@ button[data-testid="app-bar-back"]:disabled{opacity:.4;pointer-events:none}
       }
     } catch (e) {
       /* ignore */
+    }
+  }
+
+  // 只读模式：body 类切静态 CSS + group 级 JS 兜底（除截图按钮外子级全藏，
+  // screenshot-btn 由 content.js 帧内模式注入；不含写按钮的 group 不误伤）
+  function processReadOnly() {
+    if (!document.body) return;
+    document.body.classList.toggle("xmark-readonly", readOnly);
+    if (readOnly) {
+      document
+        .querySelectorAll(
+          '[role="group"]:has([data-testid="reply"]), [role="group"]:has([data-testid="retweet"]), [role="group"]:has([data-testid="like"])'
+        )
+        .forEach((g) => {
+          for (const child of g.children) {
+            if (!child.classList.contains("screenshot-btn"))
+              child.classList.add("xmark-ro-hidden");
+          }
+        });
+    } else {
+      document.querySelectorAll(".xmark-ro-hidden").forEach((el) =>
+        el.classList.remove("xmark-ro-hidden")
+      );
     }
   }
 
@@ -293,11 +341,34 @@ button[data-testid="app-bar-back"]:disabled{opacity:.4;pointer-events:none}
   //    X 水合计算虚拟列表布局时 header 格已 display:none → 后续格子无缝顶上；
   //    body 相关（observer/扫描）等 DOMContentLoaded
   function boot() {
-    loadHideAds().then(processAds);
+    loadHideAds().then(() => {
+      processAds();
+      processReadOnly();
+    });
     processListHeader();
     hookFrameNav();
     hookBackBtn();
     processBackBtn();
+    // 只读快捷键拦截（iframe 独立键盘上下文）：n 新推/r 回复/l 点赞/t 转推/b 书签；
+    // capture 先于 X 监听；输入框/contentEditable 放行（正常打字不能被吃）
+    document.addEventListener(
+      "keydown",
+      (e) => {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (!document.body?.classList.contains("xmark-readonly")) return;
+        const t = e.target;
+        if (
+          t &&
+          (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
+        )
+          return;
+        if (["n", "r", "l", "t", "b"].includes(e.key.toLowerCase())) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      },
+      true
+    );
     let timer = null;
     new MutationObserver(() => {
       clearTimeout(timer);
@@ -305,6 +376,7 @@ button[data-testid="app-bar-back"]:disabled{opacity:.4;pointer-events:none}
         processAds();
         processListHeader();
         processBackBtn();
+        processReadOnly();
       }, 400);
     }).observe(document.body, { childList: true, subtree: true });
   }
@@ -312,7 +384,10 @@ button[data-testid="app-bar-back"]:disabled{opacity:.4;pointer-events:none}
   try {
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== "local" || !changes.uiCleanSettings) return;
-      loadHideAds().then(processAds);
+      loadHideAds().then(() => {
+        processAds();
+        processReadOnly();
+      });
     });
   } catch (e) {
     /* ignore */

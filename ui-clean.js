@@ -2,7 +2,8 @@
  * XMark 界面净化（独立模块，自包含，与 content.js 零耦合）
  *
  * 功能：隐藏 X 左侧菜单指定项（探索/Grok/Premium/Money/文章）+ 右侧边栏（搜索/趋势/推荐关注）
- * 设置：chrome.storage.local.uiCleanSettings = { <id>: true/false, rightSidebar: true/false }
+ *       + 只读模式（隐藏发帖入口与推文操作栏写按钮、拦截写操作快捷键，克制发言用）
+ * 设置：chrome.storage.local.uiCleanSettings = { <id>: true/false, rightSidebar: true/false, readOnly: true/false }
  *       由 popup「功能」tab 的控制面板写入；storage.onChanged 实时生效，无需刷新页面
  *
  * 实现策略（选择器三重兜底，抗 X 改版）：
@@ -46,16 +47,24 @@
         'nav a[data-testid="AppTabBar_Articles_Link"], nav a[href="/i/articles"]',
     },
     {
+      id: "calls",
+      labels: ["呼叫", "Calls"],
+      selectors: 'nav a[data-testid="AppTabBar_Calls_Link"], nav a[href="/i/calls"]',
+    },
+    {
       id: "following",
       labels: ["关注", "Following"],
+      // 2026-10 X 改版：testid Follow_Link、href /i/connect_people（旧值保留兼容灰度）
       selectors:
-        'nav a[data-testid="AppTabBar_Following_Link"], nav a[href="/following"]',
+        'nav a[data-testid="AppTabBar_Following_Link"], nav a[data-testid="AppTabBar_Follow_Link"], nav a[href="/following"], nav a[href="/i/connect_people"]',
     },
     {
       id: "creatorStudio",
       labels: ["创作者工作室", "Creator Studio"],
+      // 2026-10 X 改版：迁至 /i/jf/creators/*；且该项可能渲染在 nav 外（header 左栏
+      // 其它容器）——nav 与 header[role=banner] 双前缀防漏（正文链接不受 header 前缀误伤）
       selectors:
-        'nav a[data-testid="AppTabBar_CreatorStudio_Link"], nav a[href="/creatorstudio"], nav a[href^="/i/creator"]',
+        'nav a[data-testid="AppTabBar_CreatorStudio_Link"], nav a[href="/creatorstudio"], nav a[href^="/i/creator"], nav a[href^="/i/jf/creators"], header[role="banner"] a[href^="/i/jf/creators"]',
     },
     {
       id: "more",
@@ -67,6 +76,40 @@
   const RIGHT_SIDEBAR = {
     id: "rightSidebar",
     selectors: '[data-testid="sidebarColumn"]',
+  };
+
+  // 只读模式：克制发言的自我管控工具。操作栏只留截图按钮（.screenshot-btn 由
+  // content.js 注入 group 直接子级），发帖入口全藏，写操作快捷键拦于 capture。
+  // ⚠️ 选择器清单与 frame-clean.js 各持一份（零耦合纪律），改动须两处同步。
+  const READ_ONLY = {
+    bodyClass: "xmark-readonly",
+    hiddenClass: "xmark-ro-hidden",
+    // 操作栏写按钮（含已赞/已转/已收藏状态变体，漏一个就漏藏）+ 分析链接 +
+    // 分享按钮（无 testid，实测 DOM 证实；group 内带弹出菜单属性且无 testid 的仅它）
+    actionSelectors: [
+      '[data-testid="reply"]',
+      '[data-testid="retweet"]',
+      '[data-testid="unretweet"]',
+      '[data-testid="like"]',
+      '[data-testid="unlike"]',
+      '[data-testid="bookmark"]',
+      '[data-testid="removeBookmark"]',
+      'a[href$="/analytics"]',
+      '[role="group"] button[aria-haspopup="menu"]:not([data-testid])',
+    ],
+    // 发帖入口：左栏发帖大按钮 / home composer 整格 / 详情页内联回复框 / 移动端 FAB
+    // ⚠️ composer 格必须 :not(:has(article))——推文详情页主推文格的 cellInnerDiv 内
+    // 也含离屏回复框（tweetTextarea_0 挂在 inline_reply_offscreen 里），裸 :has 会
+    // 误杀整条主推文；详情页回复框单独藏 inline_reply_offscreen 容器本身
+    composeSelectors: [
+      '[data-testid="SideNav_NewTweet_Button"]',
+      '[data-testid="cellInnerDiv"]:has([data-testid="tweetTextarea_0"]):not(:has(article))',
+      '[data-testid="cellInnerDiv"]:has([data-testid="tweetTextareaInline"]):not(:has(article))',
+      '[data-testid="inline_reply_offscreen"]',
+      '[data-testid="FloatingActionButtons_Column"]',
+    ],
+    // X 写操作快捷键：n 新推文 / r 回复 / l 点赞 / t 转推 / b 书签
+    hotkeys: new Set(["n", "r", "l", "t", "b"]),
   };
 
   let settings = {}; // 当前生效的勾选
@@ -85,7 +128,15 @@
       ...NAV_ITEMS.flatMap((it) =>
         prefixed(`xmark-hide-${it.id}`, it.selectors)
       ),
+      // 只读模式静态层：新渲染元素即时命中（JS 兜底管漏网，见 apply）
+      ...prefixed(
+        READ_ONLY.bodyClass,
+        [...READ_ONLY.actionSelectors, ...READ_ONLY.composeSelectors].join(",")
+      ),
       ".xmark-ui-nav-hidden{display:none!important}",
+      // 只读模式操作栏只剩截图按钮 → 水平居中（flex 行容器内 margin auto 吃满余空）
+      'body.xmark-readonly [role="group"] > .screenshot-btn{margin:0 auto}',
+      `.${READ_ONLY.hiddenClass}{display:none!important}`,
     ];
     const style = document.createElement("style");
     style.id = "xmark-ui-clean-style";
@@ -104,13 +155,37 @@
         !!settings[RIGHT_SIDEBAR.id]
       );
 
+      // 只读模式：body 类切静态 CSS；JS 兜底对含已知写按钮的 group，
+      // 除截图按钮（.screenshot-btn，group 直接子级）外子级全挂隐藏类——
+      // 纯结构判定，未来 X 新增操作按钮自动被藏；不含写按钮的 group（如
+      // 轮播指示点）不误伤。关闭时全量摘类还原。
+      document.body.classList.toggle(READ_ONLY.bodyClass, !!settings.readOnly);
+      if (settings.readOnly) {
+        const groups = document.querySelectorAll(
+          '[role="group"]:has([data-testid="reply"]), [role="group"]:has([data-testid="retweet"]), [role="group"]:has([data-testid="like"])'
+        );
+        groups.forEach((g) => {
+          for (const child of g.children) {
+            if (!child.classList.contains("screenshot-btn"))
+              child.classList.add(READ_ONLY.hiddenClass);
+          }
+        });
+      } else {
+        document
+          .querySelectorAll(`.${READ_ONLY.hiddenClass}`)
+          .forEach((el) => el.classList.remove(READ_ONLY.hiddenClass));
+      }
+
       // 文本兜底：只有"已启用项"的 label 才隐藏（关闭项即使文本命中也要还原）
-      // 扫描范围含 button——「更多」等按钮型菜单项无 href
+      // 扫描范围含 button（「更多」等按钮型菜单项无 href）+ header 左栏容器
+      // （「创作者工作室」等项可能渲染在 nav 外的 header 子容器里）
       const hiddenLabels = new Set(
         NAV_ITEMS.filter((it) => settings[it.id]).flatMap((it) => it.labels)
       );
       document
-        .querySelectorAll("nav a[href], nav button")
+        .querySelectorAll(
+          'nav a[href], nav button, header[role="banner"] a[href], header[role="banner"] button'
+        )
         .forEach((a) => {
           const t = (a.textContent || "").trim();
           if (t && hiddenLabels.has(t)) a.classList.add("xmark-ui-nav-hidden");
@@ -144,6 +219,28 @@
     injectStyle();
     loadAndApply();
     observer.observe(document.body, { childList: true, subtree: true });
+
+    // 只读模式：capture 拦 X 写操作快捷键（n/r/l/t/b），先于 X 自身监听收到。
+    // 放行：输入框/文本域/contentEditable（正常打字不能被吃）+ ctrl/meta/alt 组合键。
+    document.addEventListener(
+      "keydown",
+      (e) => {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (!document.body?.classList.contains(READ_ONLY.bodyClass)) return;
+        const t = e.target;
+        if (
+          t &&
+          (t.isContentEditable ||
+            /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
+        )
+          return;
+        if (READ_ONLY.hotkeys.has(e.key.toLowerCase())) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      },
+      true
+    );
     try {
       chrome.storage.onChanged.addListener((changes, area) => {
         if (area === "local" && changes.uiCleanSettings) {

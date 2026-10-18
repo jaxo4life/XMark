@@ -521,6 +521,7 @@ const UI_CLEAN_ITEMS = [
   { id: "premium", key: "hidePremium", label: "Premium" },
   { id: "money", key: "hideMoney", label: "Money" },
   { id: "articles", key: "hideArticles", label: "文章" },
+  { id: "calls", key: "hideCalls", label: "呼叫" },
   { id: "following", key: "hideFollowing", label: "关注" },
   { id: "creatorStudio", key: "hideCreatorStudio", label: "创作者工作室" },
   { id: "more", key: "hideMore", label: "更多" },
@@ -643,6 +644,37 @@ async function initUIClean() {
     chrome.storage.local.set({ uiCleanSettings: cur });
     syncCleanAll();
   });
+
+  // 只读模式专用开关（不参与「全部净化」全选）：打开时单向联动净化族——
+  // 隐藏广告 + 右侧边栏 + 左栏全部项一并开启（只读=干净环境），单项用户可再自选；
+  // 关闭只读不反向关掉净化项
+  const readonlyToggle = document.getElementById("toggle-readonly");
+  if (readonlyToggle) {
+    readonlyToggle.classList.toggle("active", !!uiCleanSettings.readOnly);
+    readonlyToggle.addEventListener("click", async () => {
+      const active = readonlyToggle.classList.toggle("active");
+      const cur =
+        (await chrome.storage.local.get(["uiCleanSettings"])).uiCleanSettings ||
+        {};
+      cur.readOnly = active;
+      if (active) {
+        cur.hideAds = true;
+        cur.rightSidebar = true;
+        UI_CLEAN_ITEMS.forEach((it) => {
+          cur[it.id] = true;
+        });
+      }
+      Object.assign(uiCleanSettings, cur);
+      chrome.storage.local.set({ uiCleanSettings: cur });
+      // 同步面板勾选态（复选行 + 三个 toggle），content 侧走 storage.onChanged 实时生效
+      container.querySelectorAll("input[data-ui-clean-id]").forEach((cb) => {
+        cb.checked = !!cur[cb.dataset.uiCleanId];
+      });
+      adsToggle?.classList.toggle("active", cur.hideAds !== false);
+      rightToggle.classList.toggle("active", !!cur.rightSidebar);
+      syncCleanAll();
+    });
+  }
 }
 
 // XFinder 高阶搜索开关（content 侧 xfinder.js 消费，storage.onChanged 实时显隐）
