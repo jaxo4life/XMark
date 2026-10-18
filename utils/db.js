@@ -10,7 +10,9 @@ export function dayKey(date) {
 
 export function openDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open("ScreenshotDB", 12); // v12：threads 推文串存档
+    // ⚠️ 版本号只升不降：thread 功能（v12 建 threads 表）虽已回退，但实测期间用户库已升到 12，
+    // 代码 open(11) 会 VersionError 炸掉全部 IDB 功能——版本号与建表占位必须永久保留
+    const request = indexedDB.open("ScreenshotDB", 12);
     request.onupgradeneeded = (e) => {
       const db = e.target.result;
 
@@ -87,9 +89,9 @@ export function openDB() {
         db.createObjectStore("followSnapshots", { keyPath: "id" });
       }
 
-      // ---- threads（v12：thread 导出存档，html 为单文件 Blob）----
+      // ---- threads（v12 占位：thread 导出功能已回退，建表保留仅为不降版本；空表无人读写无害）----
       if (!db.objectStoreNames.contains("threads")) {
-        db.createObjectStore("threads", { keyPath: "id" }); // id = 串首推文 id
+        db.createObjectStore("threads", { keyPath: "id" });
       }
     };
 
@@ -1074,61 +1076,4 @@ export function rebuildFollow(snaps, untilId) {
     }
   }
   return following ? { following, followers, reachedId: reached } : null;
-}
-
-// -------- threads（thread 导出存档） --------
-// id = 串首推文 id（字符串），html 为组装好的单文件 Blob，元数据供 timeline 列表用
-export function saveThreadToDB(meta) {
-  return openDB().then(
-    (db) =>
-      new Promise((resolve, reject) => {
-        const tx = db.transaction("threads", "readwrite");
-        tx.objectStore("threads").put(meta);
-        tx.oncomplete = () => resolve(meta);
-        tx.onerror = (e) => reject(e.target.error);
-      })
-  );
-}
-
-// 列表元数据（不物化 html Blob，防全量拉取）
-export function getAllThreads() {
-  return openDB().then(
-    (db) =>
-      new Promise((resolve, reject) => {
-        const tx = db.transaction("threads", "readonly");
-        const req = tx.objectStore("threads").getAll();
-        req.onsuccess = () => {
-          const list = (req.result || []).map(
-            ({ html, ...rest }) => rest // eslint-disable-line no-unused-vars
-          );
-          list.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
-          resolve(list);
-        };
-        req.onerror = (e) => reject(e.target.error);
-      })
-  );
-}
-
-export function getThreadHtml(id) {
-  return openDB().then(
-    (db) =>
-      new Promise((resolve, reject) => {
-        const tx = db.transaction("threads", "readonly");
-        const req = tx.objectStore("threads").get(id);
-        req.onsuccess = () => resolve(req.result ? req.result.html : null);
-        req.onerror = (e) => reject(e.target.error);
-      })
-  );
-}
-
-export function deleteThreadById(id) {
-  return openDB().then(
-    (db) =>
-      new Promise((resolve, reject) => {
-        const tx = db.transaction("threads", "readwrite");
-        tx.objectStore("threads").delete(id);
-        tx.oncomplete = () => resolve();
-        tx.onerror = (e) => reject(e.target.error);
-      })
-  );
 }
