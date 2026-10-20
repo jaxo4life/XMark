@@ -1,5 +1,11 @@
 # 更新日志 / Changelog
 
+## v6.7.1
+
+| 中文 | English |
+|------|----------|
+| 修复：只读模式下点开推文大图，整个弹层被误隐藏——图片、主帖与评论区全消失，只余底下时间线且滚动锁死。根因：大图弹层最外层容器恰为 `role="group"`，被操作栏兜底的裸 `:has` 后代匹配误伤成「操作栏」；已收紧为隔代结构判定（group > 按钮 wrapper > 写按钮），ui-clean 与 frame-clean 两处同步 | Fix: with read-only mode on, opening a tweet's photo hid the entire overlay — image, main tweet and replies all vanished, leaving only the timeline underneath with scrolling locked. The photo overlay's outermost container is itself `role="group"`, so the action-bar fallback's broad descendant `:has` mistook it for an action bar; tightened to a two-level structural match (group > button wrapper > write button), synced in both ui-clean and frame-clean |
+
 ## v6.7.0
 
 | 中文 | English |
