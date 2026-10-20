@@ -144,15 +144,16 @@ body.xmark-readonly .xmark-ro-hidden{display:none!important}
     }
   }
 
-  // 只读模式：body 类切静态 CSS + group 级 JS 兜底（除截图按钮外子级全藏，
-  // screenshot-btn 由 content.js 帧内模式注入；不含写按钮的 group 不误伤）
+  // 只读模式：body 类切静态 CSS + 操作栏 group 级 JS 兜底（结构 group >
+  // 按钮 wrapper > 写按钮，隔代收紧防大图 modal 外层 role=group 容器误伤，
+  // 见 ui-clean.js 同款注释；除截图按钮外子级全藏，关闭全量摘类）
   function processReadOnly() {
     if (!document.body) return;
     document.body.classList.toggle("xmark-readonly", readOnly);
     if (readOnly) {
       document
         .querySelectorAll(
-          '[role="group"]:has([data-testid="reply"]), [role="group"]:has([data-testid="retweet"]), [role="group"]:has([data-testid="like"])'
+          '[role="group"]:has(> * > [data-testid="reply"]), [role="group"]:has(> * > [data-testid="retweet"]), [role="group"]:has(> * > [data-testid="like"])'
         )
         .forEach((g) => {
           for (const child of g.children) {

@@ -155,14 +155,16 @@
         !!settings[RIGHT_SIDEBAR.id]
       );
 
-      // 只读模式：body 类切静态 CSS；JS 兜底对含已知写按钮的 group，
-      // 除截图按钮（.screenshot-btn，group 直接子级）外子级全挂隐藏类——
-      // 纯结构判定，未来 X 新增操作按钮自动被藏；不含写按钮的 group（如
-      // 轮播指示点）不误伤。关闭时全量摘类还原。
+      // 只读模式：body 类切静态 CSS；JS 兜底对操作栏 group（结构 group >
+      // 按钮 wrapper > 写按钮），除截图按钮（.screenshot-btn，group 直接子级）
+      // 外子级全挂隐藏类——未来 X 新增操作按钮自动被藏。⚠️ 必须用 > * > 收紧
+      // 到隔代：大图 modal 的最外层容器也是 role="group" 且深层含写按钮，
+      // 裸 :has 后代匹配会把整个 modal（mask/图片/对话区）当操作栏全藏。
+      // 关闭时全量摘类还原。
       document.body.classList.toggle(READ_ONLY.bodyClass, !!settings.readOnly);
       if (settings.readOnly) {
         const groups = document.querySelectorAll(
-          '[role="group"]:has([data-testid="reply"]), [role="group"]:has([data-testid="retweet"]), [role="group"]:has([data-testid="like"])'
+          '[role="group"]:has(> * > [data-testid="reply"]), [role="group"]:has(> * > [data-testid="retweet"]), [role="group"]:has(> * > [data-testid="like"])'
         );
         groups.forEach((g) => {
           for (const child of g.children) {
