@@ -18,21 +18,9 @@
         z-index: -1;
       }
 
-      /* ===== 渐变文字 ===== */
+      /* ===== 章节标题（对齐动画页语言：纯色墨字，去渐变流动） ===== */
       .gradient-text {
-        background: linear-gradient(90deg, #3b82f6, #6366f1, #ec4899);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        animation: shine 6s linear infinite;
-        background-size: 200% auto;
-      }
-      @keyframes shine {
-        0% {
-          background-position: 0% center;
-        }
-        100% {
-          background-position: 200% center;
-        }
+        color: #1e293b;
       }
 
       /* ===== 打字机效果 ===== */
@@ -70,55 +58,23 @@
         transform: translateY(0);
       }
 
-      /* ===== 卡片玻璃化 & 渐变边框 ===== */
+      /* ===== 卡片（对齐动画页 #frame 语言：1px 细线框 + 极淡阴影） ===== */
       .glass-card {
-        backdrop-filter: blur(10px);
-        border: 2px solid transparent;
-        background: rgba(255, 255, 255, 0.7);
-        border-image: linear-gradient(45deg, #3b82f6, #ec4899) 1;
+        background: rgba(255, 255, 255, 0.85);
+        border: 1px solid #d8dce1;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      }
+      .glass-card:hover {
+        border-color: #009de5;
+        box-shadow: 0 2px 14px rgba(23, 19, 12, 0.08);
       }
 
-      /* ===== 发光按钮 + 波纹点击 ===== */
+      /* ===== 按钮（对齐动画页控件语言：实底 + 8px 圆角 + 无装饰） ===== */
       .glow-btn {
-        position: relative;
-        overflow: hidden;
+        background: #1d9bf0;
       }
-      .glow-btn::before {
-        content: "";
-        position: absolute;
-        inset: -2px;
-        background: linear-gradient(90deg, #3b82f6, #6366f1, #ec4899, #3b82f6);
-        border-radius: 1.25rem;
-        z-index: -1;
-        background-size: 300% 300%;
-        animation: borderMove 6s linear infinite;
-      }
-      @keyframes borderMove {
-        0% {
-          background-position: 0% 50%;
-        }
-        100% {
-          background-position: 200% 50%;
-        }
-      }
-      .glow-btn:active::after {
-        content: "";
-        position: absolute;
-        width: 200%;
-        height: 200%;
-        top: 50%;
-        left: 50%;
-        background: rgba(255, 255, 255, 0.4);
-        border-radius: 50%;
-        transform: translate(-50%, -50%) scale(0);
-        animation: ripple 0.6s ease;
-        pointer-events: none;
-      }
-      @keyframes ripple {
-        to {
-          transform: translate(-50%, -50%) scale(1);
-          opacity: 0;
-        }
+      .glow-btn:hover {
+        background: #0078b4;
       }
 
       /* ===== 签名动画 ===== */
@@ -175,11 +131,40 @@
       <!-- 语言切换按钮 -->
       <button
         id="lang-toggle"
-        class="absolute top-4 right-6 bg-slate-200 px-3 py-1 rounded-xl text-sm hover:bg-slate-300 transition"
+        class="absolute top-4 right-6 bg-slate-200 px-3 py-1 rounded-lg text-sm hover:bg-slate-300 transition"
       >
         English
       </button>
     </header>
+
+    <!-- 概念演示（iframe 懒加载嵌入自包含宣传片页 demo.html） -->
+    <section class="max-w-6xl mx-auto px-6 py-8">
+      <h2
+        id="demo-title"
+        class="text-2xl font-semibold mb-6 text-center gradient-text"
+      >
+        🎬 概念演示
+      </h2>
+      <div
+        id="demo-wrap"
+        class="relative rounded-xl overflow-hidden shadow-sm reveal"
+        style="aspect-ratio: 16/9"
+      >
+        <iframe
+          src="demo.html"
+          title="XMark 概念演示"
+          loading="lazy"
+          allowfullscreen
+          class="w-full h-full block border-0"
+        ></iframe>
+        <button
+          id="demo-fullscreen"
+          class="absolute top-3 right-3 bg-slate-200/90 px-3 py-1 rounded-lg text-sm hover:bg-slate-300 transition shadow"
+        >
+          ⛶
+        </button>
+      </div>
+    </section>
 
     <!-- 功能介绍 -->
     <section class="max-w-4xl mx-auto px-6 py-12">
@@ -191,7 +176,7 @@
       </h2>
       <div class="grid md:grid-cols-2 gap-8">
         <div
-          class="glass-card rounded-2xl shadow p-6 hover:shadow-lg transition card-hover reveal"
+          class="glass-card rounded-xl p-6 transition card-hover reveal"
         >
           <h3 id="feature1-title" class="text-xl font-bold mb-3">
             📝 自定义备注
@@ -199,7 +184,7 @@
           <p id="feature1-desc" class="text-slate-600"></p>
         </div>
         <div
-          class="glass-card rounded-2xl shadow p-6 hover:shadow-lg transition card-hover reveal"
+          class="glass-card rounded-xl p-6 transition card-hover reveal"
         >
           <h3 id="feature2-title" class="text-xl font-bold mb-3">
             📸 推文截图
@@ -207,7 +192,7 @@
           <p id="feature2-desc" class="text-slate-600"></p>
         </div>
         <div
-          class="glass-card rounded-2xl shadow p-6 hover:shadow-lg transition card-hover reveal"
+          class="glass-card rounded-xl p-6 transition card-hover reveal"
         >
           <h3 id="feature3-title" class="text-xl font-bold mb-3">
             📊 数据可视化
@@ -215,7 +200,7 @@
           <p id="feature3-desc" class="text-slate-600"></p>
         </div>
         <div
-          class="glass-card rounded-2xl shadow p-6 hover:shadow-lg transition card-hover reveal"
+          class="glass-card rounded-xl p-6 transition card-hover reveal"
         >
           <h3 id="feature4-title" class="text-xl font-bold mb-3">
             🔍 智能筛选
@@ -223,7 +208,7 @@
           <p id="feature4-desc" class="text-slate-600"></p>
         </div>
         <div
-          class="glass-card rounded-2xl shadow p-6 hover:shadow-lg transition card-hover reveal"
+          class="glass-card rounded-xl p-6 transition card-hover reveal"
         >
           <h3 id="feature5-title" class="text-xl font-bold mb-3">
             🚫 广告过滤
@@ -404,6 +389,8 @@
             "自动识别并隐藏时间线中的广告推文，中英文界面均支持，让你的信息流更清爽。",
           versionTitle: "📦 当前版本",
           releaseLink: "查看更新日志",
+          demoTitle: "🎬 概念演示",
+          demoFsTitle: "全屏观看（Esc 退出）",
           footerText:
             "项目开源于 <a href='https://github.com/jaxo4life/XMark' target='_blank' class='underline hover:text-blue-600'>GitHub</a>",
           button: "English",
@@ -430,6 +417,8 @@
             "Automatically detects and hides promoted tweets in your timeline. Works in both Chinese and English for a cleaner feed.",
           versionTitle: "📦 Current Version",
           releaseLink: "View Changelog",
+          demoTitle: "🎬 Concept Demo",
+          demoFsTitle: "Fullscreen (Esc to exit)",
           footerText:
             "Open-sourced on <a href='https://github.com/jaxo4life/XMark' target='_blank' class='underline hover:text-blue-600'>GitHub</a>",
           button: "中文",
@@ -458,6 +447,9 @@
           map.feature5Title;
         document.getElementById("feature5-desc").textContent = map.feature5Desc;
         document.getElementById("version-title").textContent = map.versionTitle;
+        document.getElementById("demo-title").textContent = map.demoTitle;
+        const demoFs = document.getElementById("demo-fullscreen");
+        if (demoFs) demoFs.title = map.demoFsTitle;
         document.getElementById("release-link").textContent = map.releaseLink;
         document.getElementById("footer-text").innerHTML = map.footerText;
         langToggle.textContent = map.button;
@@ -471,6 +463,15 @@
       });
 
       switchLang(currentLang);
+
+      // ========== 概念演示全屏 ==========
+      // 小窗是 1920×1080 位图缩小显示，小字模糊；全屏后舞台按设计尺寸铺满
+      const demoWrap = document.getElementById("demo-wrap");
+      const demoFsBtn = document.getElementById("demo-fullscreen");
+      demoFsBtn?.addEventListener("click", () => {
+        if (document.fullscreenElement) document.exitFullscreen();
+        else demoWrap.requestFullscreen?.();
+      });
 
       // ========== 版本号读取 ==========
       fetch("manifest.json")
