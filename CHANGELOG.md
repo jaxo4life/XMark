@@ -1,5 +1,11 @@
 # 更新日志 / Changelog
 
+## v6.7.2
+
+| 中文 | English |
+|------|----------|
+| 修复：只读模式下首页顶部发推区不再隐藏——2026-11 X 改版把发推区从时间线格子中拆出为独立块（无原有结构标识可依）。改为 JS 定位：输入框与发帖按钮的最小公共祖先再上溯至含头像的容器，整块隐藏（头像/输入框/工具条/发帖按钮一起）；推文详情页主推文不受影响。刷新页面时发推区短暂闪现为已知边界（防闪方案实测更差已否决） | Fix: with read-only mode on, the Home compose box at the top of the timeline is hidden again — the Nov 2026 X update split it out of the timeline cell into a standalone block with no structural id to hook. Now located via JS: the smallest common ancestor of the text box and the post button, further up to the avatar-bearing container, hidden as a whole (avatar / input / toolbar / post button together); detail-page main tweets unaffected. A brief flash on refresh is a known trade-off (the anti-flash attempt performed worse and was reverted) |
+
 ## v6.7.1
 
 | 中文 | English |
