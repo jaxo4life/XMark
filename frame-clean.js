@@ -161,6 +161,37 @@ body.xmark-readonly .xmark-ro-hidden{display:none!important}
               child.classList.add("xmark-ro-hidden");
           }
         });
+      // 发帖入口 JS 兜底（2026-11 X 改版 home composer 挪出 cellInnerDiv 成独立
+      // 块；textarea 与 tweetButtonInline 的最小公共祖先 = composer 骨架），
+      // 逻辑与 ui-clean.js 同款，见其注释
+      document
+        .querySelectorAll('[data-testid="tweetTextarea_0"]')
+        .forEach((ta) => {
+          if (ta.closest('[data-testid="cellInnerDiv"]')) return;
+          let root = ta.parentElement;
+          while (
+            root &&
+            !root.querySelector('[data-testid="tweetButtonInline"]')
+          ) {
+            root = root.parentElement;
+          }
+          // 头像在平行头像列时（2026-11 结构）继续向上到含头像祖先 =
+          // composer 整体，逻辑与 ui-clean.js 同款
+          if (
+            root &&
+            !root.querySelector('[data-testid^="UserAvatar-Container-"]')
+          ) {
+            let up = root.parentElement;
+            while (
+              up &&
+              !up.querySelector('[data-testid^="UserAvatar-Container-"]')
+            ) {
+              up = up.parentElement;
+            }
+            if (up) root = up;
+          }
+          root?.classList.add("xmark-ro-hidden");
+        });
     } else {
       document.querySelectorAll(".xmark-ro-hidden").forEach((el) =>
         el.classList.remove("xmark-ro-hidden")

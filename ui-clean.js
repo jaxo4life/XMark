@@ -172,6 +172,40 @@
               child.classList.add(READ_ONLY.hiddenClass);
           }
         });
+
+        // 发帖入口 JS 兜底：静态 CSS 只管旧 cellInnerDiv 结构；2026-11 X 改版
+        // 把 home composer 挪出虚拟列表成独立块（无 cellInnerDiv 可依）。从输入框
+        // 向上爬，与「发帖」按钮（tweetButtonInline）的最小公共祖先 = composer
+        // 骨架（头像+输入框+工具条），挂类整块隐藏。详情页主推文格（textarea 在
+        // cellInnerDiv 内）不走此路径，由 :not(:has(article)) + offscreen 规则管。
+        document
+          .querySelectorAll('[data-testid="tweetTextarea_0"]')
+          .forEach((ta) => {
+            if (ta.closest('[data-testid="cellInnerDiv"]')) return; // 旧结构走 CSS
+            let root = ta.parentElement;
+            while (
+              root &&
+              !root.querySelector('[data-testid="tweetButtonInline"]')
+            ) {
+              root = root.parentElement;
+            }
+            // 与发帖按钮的最小公共祖先可能只是「内容列」——头像在平行头像列
+            // （2026-11 结构），不含头像则继续向上到含头像祖先 = composer 整体
+            if (
+              root &&
+              !root.querySelector('[data-testid^="UserAvatar-Container-"]')
+            ) {
+              let up = root.parentElement;
+              while (
+                up &&
+                !up.querySelector('[data-testid^="UserAvatar-Container-"]')
+              ) {
+                up = up.parentElement;
+              }
+              if (up) root = up;
+            }
+            root?.classList.add(READ_ONLY.hiddenClass);
+          });
       } else {
         document
           .querySelectorAll(`.${READ_ONLY.hiddenClass}`)
